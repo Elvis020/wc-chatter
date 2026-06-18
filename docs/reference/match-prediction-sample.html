@@ -1,0 +1,2505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Match Prediction Hub Sample</title>
+  <style>
+    :root {
+      --bg: #f4efe3;
+      --panel: #fff9ec;
+      --panel-2: #eadfc9;
+      --card: #fff9ec;
+      --card-soft: #efe5d1;
+      --line: rgba(78, 68, 54, 0.18);
+      --line-strong: rgba(78, 68, 54, 0.34);
+      --text: #2a2520;
+      --muted: #766e61;
+      --soft: #4f463a;
+      --accent: #b45309;
+      --accent-2: #2f6f5e;
+      --accent-text: #ffffff;
+      --danger: #b91c1c;
+      --ok: #2f6f5e;
+      --chip-bg: rgba(255, 249, 236, 0.78);
+      --card-shadow: 0 18px 44px rgba(78, 68, 54, 0.1);
+      --body-spot: rgba(180, 83, 9, 0.1);
+      --body-wash: rgba(47, 111, 94, 0.08);
+      --nav-active: var(--text);
+      --nav-active-text: #ffffff;
+      --control-bg: color-mix(in srgb, var(--panel) 92%, var(--bg));
+      --control-border: color-mix(in srgb, var(--line-strong) 70%, transparent);
+      --control-placeholder: color-mix(in srgb, var(--muted) 82%, var(--text));
+      --control-focus: color-mix(in srgb, var(--accent) 42%, var(--line));
+      --reply-composer-bg: color-mix(in srgb, var(--panel) 62%, var(--card-soft));
+      --layer-dropdown: 1000;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --right-rail: minmax(320px, 30%);
+      color-scheme: light;
+    }
+
+    body[data-theme="desk"] {
+      --bg: #f6f5f1;
+      --panel: #ffffff;
+      --panel-2: #e6e3da;
+      --card: #ffffff;
+      --card-soft: #eceae3;
+      --line: rgba(31, 35, 32, 0.14);
+      --line-strong: rgba(31, 35, 32, 0.28);
+      --text: #20231f;
+      --muted: #6f746b;
+      --soft: #41483e;
+      --accent: #315c4c;
+      --accent-2: #b86e2e;
+      --accent-text: #ffffff;
+      --ok: #315c4c;
+      --chip-bg: rgba(255, 255, 255, 0.76);
+      --card-shadow: 0 18px 44px rgba(31, 35, 32, 0.08);
+      --body-spot: rgba(49, 92, 76, 0.1);
+      --body-wash: rgba(184, 110, 46, 0.08);
+      --control-bg: #fbfbf8;
+      --control-border: rgba(31, 35, 32, 0.2);
+      --control-placeholder: #71766d;
+      --control-focus: color-mix(in srgb, #315c4c 58%, rgba(31, 35, 32, 0.14));
+      --reply-composer-bg: #f1efe8;
+    }
+
+    body[data-theme="pub"] {
+      --bg: #1c1c1c;
+      --panel: #23211d;
+      --panel-2: #2d2a24;
+      --card: #24221e;
+      --card-soft: #2d2a24;
+      --line: rgba(229, 229, 229, 0.12);
+      --line-strong: rgba(229, 229, 229, 0.24);
+      --text: #e5e5e5;
+      --muted: #a1a1a1;
+      --soft: #d0ccc3;
+      --accent: #d6a43a;
+      --accent-2: #7a9e7e;
+      --accent-text: #1a1712;
+      --ok: #7a9e7e;
+      --chip-bg: rgba(255, 255, 255, 0.055);
+      --card-shadow: 0 18px 46px rgba(0, 0, 0, 0.25);
+      --body-spot: rgba(214, 164, 58, 0.12);
+      --body-wash: rgba(122, 158, 126, 0.07);
+      --control-bg: #1b1a17;
+      --control-border: rgba(229, 229, 229, 0.18);
+      --control-placeholder: #8f8b82;
+      --control-focus: color-mix(in srgb, #d6a43a 58%, rgba(229, 229, 229, 0.12));
+      --reply-composer-bg: rgba(255, 255, 255, 0.055);
+      color-scheme: dark;
+    }
+
+    body[data-theme="press"] {
+      --bg: #f2f0e8;
+      --panel: #fbfaf4;
+      --panel-2: #ddd9ca;
+      --card: #fbfaf4;
+      --card-soft: #ebe6d8;
+      --line: rgba(28, 25, 23, 0.18);
+      --line-strong: rgba(28, 25, 23, 0.34);
+      --text: #1c1917;
+      --muted: #6d665c;
+      --soft: #3f3a33;
+      --accent: #9a3412;
+      --accent-2: #1f4d5a;
+      --accent-text: #ffffff;
+      --ok: #1f4d5a;
+      --chip-bg: rgba(251, 250, 244, 0.72);
+      --card-shadow: 0 16px 38px rgba(28, 25, 23, 0.08);
+      --body-spot: rgba(154, 52, 18, 0.1);
+      --body-wash: rgba(31, 77, 90, 0.08);
+      --control-bg: #fffdf7;
+      --control-border: rgba(28, 25, 23, 0.22);
+      --control-placeholder: #746d63;
+      --control-focus: color-mix(in srgb, #9a3412 58%, rgba(28, 25, 23, 0.18));
+      --reply-composer-bg: #f0eadc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100svh;
+      background:
+        radial-gradient(circle at 18% 10%, var(--body-spot), transparent 30rem),
+        linear-gradient(135deg, var(--body-wash), transparent 42%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 42px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 34px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+      color: var(--accent);
+      font-size: clamp(22px, 2.2vw, 30px);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .brand-mark span {
+      color: var(--text);
+      font-weight: 750;
+    }
+
+    .ui-select {
+      position: relative;
+      width: 46px;
+      z-index: var(--layer-dropdown);
+    }
+
+    .ui-select__trigger {
+      display: inline-grid;
+      align-items: center;
+      justify-content: center;
+      width: 46px;
+      min-height: 46px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--chip-bg);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 160ms var(--ease), background 160ms var(--ease), box-shadow 160ms var(--ease);
+    }
+
+    .ph-icon {
+      display: block;
+      flex: 0 0 auto;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .theme-icon {
+      width: 24px;
+      height: 24px;
+      color: var(--text);
+    }
+
+    .theme-icon__paint {
+      fill: var(--accent);
+      stroke: var(--accent);
+    }
+
+    .ui-select__text,
+    .ui-select__text *,
+    .ui-select__chevron {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .ui-select__trigger:hover,
+    .ui-select__trigger:focus-visible,
+    .ui-select.open .ui-select__trigger {
+      border-color: var(--line-strong);
+      box-shadow: 0 0 0 3px var(--body-spot);
+    }
+
+    .ui-select__menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: var(--layer-dropdown);
+      display: grid;
+      width: 220px;
+      max-height: min(360px, calc(100dvh - 92px));
+      gap: 2px;
+      padding: 6px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: 0 16px 38px rgba(15, 23, 42, 0.12);
+      overflow: auto;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px) scale(0.98);
+      transform-origin: top center;
+      transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+    }
+
+    .ui-select.open .ui-select__menu {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    .ui-select__option {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      height: 44px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .ui-select__option:hover,
+    .ui-select__option:focus-visible {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--text);
+      outline: none;
+    }
+
+    .ui-select__option[aria-selected="true"] {
+      background: color-mix(in srgb, var(--accent) 15%, transparent);
+      color: var(--text);
+    }
+
+    .ui-select__check {
+      opacity: 0;
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .ui-select__option[aria-selected="true"] .ui-select__check {
+      opacity: 1;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--right-rail);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .left-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .match-stage {
+      min-height: 330px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08)),
+        repeating-linear-gradient(90deg, transparent 0 88px, color-mix(in srgb, var(--text) 2.5%, transparent) 88px 89px),
+        var(--panel);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .match-stage::after {
+      content: "";
+      position: absolute;
+      inset: auto -15% -55% 28%;
+      height: 250px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px 999px 0 0;
+      transform: rotate(-4deg);
+    }
+
+    .status-row,
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--chip-bg);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--ok);
+      box-shadow: 0 0 0 6px rgba(94, 224, 160, 0.12);
+    }
+
+    .hero-summary {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 18px;
+      margin: 28px 0 20px;
+    }
+
+    .match-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(8px, 1.3vw, 16px);
+      flex: 1 1 auto;
+      max-width: 100%;
+      margin: 0;
+      font-size: clamp(32px, 4.6vw, 66px);
+      line-height: 0.96;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .title-flag {
+      flex: 0 0 auto;
+      width: clamp(34px, 4.4vw, 52px);
+      border-radius: 6px;
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .versus {
+      color: var(--accent);
+      font-family: Georgia, "Times New Roman", serif;
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    .hero-copy {
+      max-width: calc(100% - 170px);
+      margin: 0;
+      color: var(--soft);
+      font-size: 17px;
+      line-height: 1.6;
+      white-space: nowrap;
+    }
+
+    .primary-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 14px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: none;
+      transition: background 140ms var(--ease), filter 140ms var(--ease), transform 100ms var(--ease);
+    }
+
+    .primary-action:hover {
+      filter: brightness(0.96);
+      box-shadow: none;
+    }
+
+    .primary-action:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .scoreboard .primary-action {
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    .side-panel {
+      display: grid;
+      gap: 12px;
+      align-self: start;
+    }
+
+    .scoreboard {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      backdrop-filter: blur(18px);
+    }
+
+    .scoreboard {
+      position: relative;
+      overflow: hidden;
+      padding: 18px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .score-card-body {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      padding-top: 10px;
+    }
+
+    .most-backed-score {
+      display: grid;
+      grid-template-columns: auto auto auto;
+      justify-items: center;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(14px, 3vw, 28px);
+      padding: 12px 0 10px;
+    }
+
+    .backed-kicker {
+      display: inline-flex;
+      align-items: center;
+      justify-self: start;
+      padding: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .top-pick-badge {
+      position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--chip-bg);
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1;
+      text-transform: uppercase;
+      box-shadow: none;
+    }
+
+    .backing-rail {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .score-lockup {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .score-side {
+      display: grid;
+      align-items: center;
+      gap: 7px;
+      justify-items: center;
+      min-width: 0;
+    }
+
+    .score-side:first-child {
+      justify-self: center;
+    }
+
+    .score-side:last-child {
+      justify-self: center;
+    }
+
+    .score-line {
+      color: var(--text);
+      font-size: clamp(58px, 8vw, 78px);
+      font-weight: 900;
+      line-height: 0.86;
+      letter-spacing: 0;
+    }
+
+    .score-divider {
+      color: var(--accent);
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1;
+      text-align: center;
+      transform: none;
+    }
+
+    .team-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 4px 0;
+      border-top: 1px solid rgba(229, 229, 229, 0.08);
+    }
+
+    .team-chip {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .team-chip:last-child {
+      text-align: right;
+    }
+
+    .team-versus {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .score-note {
+      display: none;
+      margin: 0;
+      text-align: center;
+    }
+
+    .score-card-body .primary-action {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .flag {
+      position: relative;
+      display: block;
+      width: 76px;
+      aspect-ratio: 3 / 2;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 14px 28px rgba(0, 0, 0, 0.24);
+      transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+    }
+
+    .flag:hover {
+      transform: translateY(-2px) rotate(-1deg);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.22), 0 18px 34px rgba(0, 0, 0, 0.32);
+    }
+
+    .match-title .title-flag {
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .flag-ghana {
+      background: linear-gradient(#ce1126 0 33.333%, #fcd116 33.333% 66.666%, #006b3f 66.666%);
+    }
+
+    .flag-ghana::after {
+      content: "★";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: #111;
+      font-size: 18px;
+      line-height: 1;
+      text-shadow: 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .flag-england {
+      background:
+        linear-gradient(90deg, transparent 0 42%, #cf142b 42% 58%, transparent 58%),
+        linear-gradient(transparent 0 36%, #cf142b 36% 64%, transparent 64%),
+      #fff;
+    }
+
+    .flag-brazil {
+      background: #009b3a;
+    }
+
+    .flag-brazil::before {
+      content: "";
+      position: absolute;
+      inset: 22% 16%;
+      background: #ffdf00;
+      transform: rotate(45deg);
+    }
+
+    .flag-brazil::after {
+      content: "";
+      position: absolute;
+      inset: 31% 35%;
+      border-radius: 999px;
+      background: #002776;
+    }
+
+    .flag-nigeria {
+      background: linear-gradient(90deg, #008751 0 33.333%, #fff 33.333% 66.666%, #008751 66.666%);
+    }
+
+    .flag-argentina {
+      background: linear-gradient(#74acdf 0 33.333%, #fff 33.333% 66.666%, #74acdf 66.666%);
+    }
+
+    .flag-argentina::after {
+      content: "";
+      position: absolute;
+      inset: 40% 45%;
+      border-radius: 999px;
+      background: #f6b40e;
+    }
+
+    .flag-spain {
+      background: linear-gradient(#aa151b 0 25%, #f1bf00 25% 75%, #aa151b 75%);
+    }
+
+    .flag-france {
+      background: linear-gradient(90deg, #0055a4 0 33.333%, #fff 33.333% 66.666%, #ef4135 66.666%);
+    }
+
+    .score-card-body .flag {
+      width: 34px;
+      border-radius: 6px;
+      box-shadow: none;
+    }
+
+    .score-card-body .flag-ghana::after {
+      font-size: 10px;
+    }
+
+    .flag-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .scoreboard p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+      width: 100%;
+      margin-top: 2px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .stat {
+      min-height: 58px;
+      padding: 0 20px;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .stat:first-child {
+      padding-left: 0;
+    }
+
+    .stat + .stat {
+      border-left: 1px solid var(--line);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: clamp(30px, 3vw, 44px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .ghost {
+      min-height: 44px;
+      padding: 0 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      transition: border-color 140ms var(--ease), transform 140ms var(--ease), background 140ms var(--ease);
+    }
+
+    .ghost:hover {
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.07);
+      transform: translateY(-1px);
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+      margin-top: 18px;
+      align-items: start;
+    }
+
+    .admin-view {
+      animation: enter 420ms var(--ease) both;
+    }
+
+    @keyframes enter {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 6px 0 14px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .prediction-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .prediction {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+    }
+
+    .prediction-avatar {
+      display: block;
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      overflow: visible;
+      filter: none;
+      transition: transform 180ms var(--ease);
+    }
+
+    .prediction:hover .prediction-avatar {
+      animation: avatarHello 480ms var(--ease);
+    }
+
+    .prediction-body {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .prediction-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .prediction h3 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .prediction .score {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--chip-bg);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .prediction .score small {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .comment {
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--soft);
+      font-size: 14px;
+      line-height: 1.45;
+      transition: background 160ms var(--ease), color 160ms var(--ease);
+    }
+
+    .prediction:hover .comment {
+      color: var(--text);
+    }
+
+    .comment-main {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .comment-copy {
+      margin: 0;
+    }
+
+    .reply-trigger {
+      flex: 0 0 auto;
+      min-height: 30px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      transition: color 140ms var(--ease), border-color 140ms var(--ease), transform 140ms var(--ease);
+    }
+
+    .reply-trigger:hover {
+      color: var(--accent);
+      transform: none;
+    }
+
+    .reply-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 7px;
+      padding-left: 10px;
+      border-left: 1px solid var(--line);
+    }
+
+    .reply {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      animation: commentIn 260ms var(--ease) both;
+    }
+
+    .reply strong {
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .reply-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      animation: replyFormIn 240ms var(--ease) both;
+    }
+
+    .reply-form input {
+      width: 100%;
+      min-height: 38px;
+      padding: 0 11px;
+      border: 1px solid var(--control-border);
+      border-radius: 8px;
+      background: var(--control-bg);
+      color: var(--text);
+      outline: none;
+      font-size: 13px;
+      font-weight: 650;
+      transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease), background 150ms var(--ease);
+    }
+
+    .reply-form input::placeholder {
+      color: var(--control-placeholder);
+      opacity: 1;
+    }
+
+    .reply-form input:focus {
+      border-color: var(--control-focus);
+      box-shadow: none;
+    }
+
+    .reply-submit {
+      min-height: 38px;
+      padding: 0 16px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-size: 13px;
+      font-weight: 850;
+      box-shadow: none;
+      transition: filter 140ms var(--ease);
+    }
+
+    .reply-submit:hover {
+      filter: brightness(0.96);
+    }
+
+    @keyframes commentIn {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes avatarHello {
+      0%,
+      100% {
+        transform: translateY(0) rotate(0deg) scale(1);
+      }
+
+      35% {
+        transform: translateY(-2px) rotate(-2deg) scale(1.03);
+      }
+
+      70% {
+        transform: translateY(0) rotate(1deg) scale(1.01);
+      }
+    }
+
+    @keyframes replyFormIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-width: 0;
+      min-height: 30px;
+      padding: 0 7px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      transition: transform 140ms var(--ease), border-color 140ms var(--ease), background 140ms var(--ease);
+    }
+
+    .icon-btn svg {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 auto;
+      stroke-width: 2.15;
+      transition: transform 140ms var(--ease), fill 140ms var(--ease), stroke 140ms var(--ease);
+    }
+
+    .icon-btn:hover svg {
+      transform: scale(1.08);
+    }
+
+    .icon-btn:hover {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+      transform: none;
+    }
+
+    .icon-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+    }
+
+    .icon-btn:disabled:hover {
+      border-color: var(--line);
+      background: var(--chip-bg);
+    }
+
+    .liked {
+      background: color-mix(in srgb, var(--accent) 11%, transparent);
+      color: var(--accent);
+      border-color: transparent;
+    }
+
+    .liked:hover {
+      background: color-mix(in srgb, var(--accent) 18%, var(--chip-bg));
+      color: var(--text);
+      border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+    }
+
+    .liked svg {
+      color: var(--accent);
+      fill: currentColor;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .reference-panel {
+      position: sticky;
+      top: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel) 84%, transparent);
+    }
+
+    .reference-panel h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    .room-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .ref-link {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 62px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: var(--card-soft);
+      color: var(--text);
+      text-align: left;
+      touch-action: manipulation;
+      transition: border-color 180ms var(--ease);
+    }
+
+    .ref-link:hover {
+      background: var(--card-soft);
+    }
+
+    .ref-link.active {
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    .ref-teams {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+    }
+
+    .ref-flag {
+      width: 24px;
+      border-radius: 5px;
+      box-shadow: none;
+    }
+
+    .ref-flag.flag-ghana::after {
+      font-size: 10px;
+    }
+
+    .ref-versus {
+      color: var(--accent);
+      font-family: Georgia, "Times New Roman", serif;
+      font-style: italic;
+      letter-spacing: 0;
+    }
+
+    .ref-status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .ref-status.live {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .ref-status svg {
+      width: 18px;
+      height: 18px;
+      stroke-width: 2;
+    }
+
+    .identity-card {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--card-soft);
+    }
+
+    .reference-panel .identity-card {
+      gap: 6px;
+      margin-top: 10px;
+      padding: 8px;
+      background: transparent;
+    }
+
+    .identity-card label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .reference-panel .identity-card label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .identity-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .identity-row input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 10px;
+      border: 1px solid var(--control-border);
+      border-radius: 8px;
+      background: var(--control-bg);
+      color: var(--text);
+      outline: none;
+    }
+
+    .reference-panel .identity-row input {
+      min-height: 44px;
+      font-size: 13px;
+    }
+
+    .identity-row input:focus {
+      border-color: var(--control-focus);
+      box-shadow: none;
+    }
+
+    .identity-row button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 38px;
+      padding: 0 11px;
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+      color: var(--accent);
+      font-weight: 850;
+      transition: transform 140ms var(--ease), border-color 140ms var(--ease), background 140ms var(--ease), color 140ms var(--ease);
+    }
+
+    .reference-panel .identity-row button {
+      min-height: 38px;
+      padding: 0 10px;
+      font-size: 13px;
+      min-width: 88px;
+      justify-content: center;
+    }
+
+    .identity-row button:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+      background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+    }
+
+    .identity-row button svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      stroke-width: 2;
+    }
+
+    .identity-row button .save-label {
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .identity-row button:not(:disabled):active {
+      transform: translateY(0);
+    }
+
+    .identity-row input:disabled,
+    .identity-row button:disabled {
+      cursor: not-allowed;
+      opacity: 0.62;
+    }
+
+    .identity-help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .identity-error {
+      margin: 0;
+      color: var(--danger);
+      font-size: 12px;
+      line-height: 1.4;
+      min-height: 17px;
+    }
+
+    .identity-error.is-success {
+      color: var(--muted);
+    }
+
+    .reference-panel .identity-error:empty {
+      display: none;
+    }
+
+    .reference-panel .identity-error {
+      font-size: 11px;
+      line-height: 1.25;
+      min-height: 0;
+    }
+
+    .admin-panel {
+      min-height: 180px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(36, 36, 36, 0.76);
+    }
+
+    .admin-panel p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .admin-panel label {
+      display: block;
+      margin: 12px 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .admin-panel input {
+      width: 100%;
+      min-height: 42px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--text);
+      outline: none;
+    }
+
+    .admin-panel input:focus,
+    .sheet input:focus,
+    .sheet textarea:focus {
+      border-color: color-mix(in srgb, var(--accent) 56%, var(--line));
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      align-items: end;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      background: rgba(0, 0, 0, 0);
+      pointer-events: none;
+      transition: background 260ms var(--ease);
+    }
+
+    .overlay.open {
+      background: rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+    }
+
+    .sheet {
+      width: min(760px, calc(100% - 20px));
+      margin: 0 auto max(10px, env(safe-area-inset-bottom));
+      max-height: min(86dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 18px));
+      padding: 18px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--card-shadow);
+      transform: translateY(110%);
+      transition: transform 360ms var(--ease);
+      overflow: auto;
+    }
+
+    .overlay.open .sheet {
+      transform: translateY(0);
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .sheet-head h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .close {
+      width: 44px;
+      min-width: 44px;
+      flex: 0 0 44px;
+      height: 44px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font-size: 20px;
+    }
+
+    .prediction-form {
+      display: grid;
+      grid-template-columns: 1fr 108px 108px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      min-height: 48px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--text);
+      outline: none;
+    }
+
+    .field textarea {
+      min-height: 88px;
+      padding-top: 12px;
+      resize: vertical;
+    }
+
+    .form-bottom {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+      margin-top: 10px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .celebrate {
+      position: fixed;
+      inset: 0;
+      z-index: 35;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(0.94);
+    }
+
+    .celebrate.show {
+      animation: celebrate 1200ms var(--ease);
+    }
+
+    .burst {
+      padding: 18px 24px;
+      border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--line));
+      border-radius: 12px;
+      background: rgba(28, 28, 28, 0.92);
+      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45);
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    @keyframes celebrate {
+      0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.94);
+      }
+      18%,
+      72% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-18px) scale(0.98);
+      }
+    }
+
+    @media (max-width: 920px) {
+      .hero,
+      .content,
+      .admin-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .side-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .reference-panel {
+        position: static;
+      }
+
+    }
+
+    @media (max-width: 620px) {
+      .shell {
+        width: min(100% - 20px, 1180px);
+        padding-top: 14px;
+      }
+
+      .topbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .topbar-actions {
+        align-items: center;
+        justify-content: flex-end;
+        width: 100%;
+      }
+
+      .ui-select {
+        width: 46px;
+      }
+
+      .match-stage {
+        padding: 20px 20px 76px;
+      }
+
+      .hero-copy {
+        max-width: none;
+        white-space: normal;
+      }
+
+      .left-stack {
+        display: contents;
+      }
+
+      .match-stage {
+        order: 1;
+      }
+
+      .side-panel {
+        order: 2;
+      }
+
+      .feed {
+        order: 3;
+      }
+
+      .match-title {
+        gap: 7px;
+        font-size: clamp(24px, 7.4vw, 30px);
+      }
+
+      .title-flag {
+        width: 28px;
+      }
+
+      .prediction-form,
+      .form-bottom {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .match-title {
+        gap: 5px;
+        font-size: 21px;
+      }
+
+      .title-flag {
+        width: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-label="turntabl score room">turntabl <span>score room</span></div>
+      </div>
+      <div class="topbar-actions">
+        <div class="ui-select" id="theme-picker">
+          <button class="ui-select__trigger" id="theme-picker-trigger" type="button" aria-label="Choose theme" aria-haspopup="listbox" aria-expanded="false" aria-controls="theme-picker-menu">
+            <svg class="ph-icon theme-icon" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke-width="16">
+              <path d="M128 24a104 104 0 0 0 0 208h16a24 24 0 0 0 0-48h-8a16 16 0 0 1 0-32h22a74 74 0 0 0 74-74c0-29.8-41.2-54-104-54Z"></path>
+              <circle cx="76" cy="108" r="12"></circle>
+              <circle cx="108" cy="72" r="12"></circle>
+              <circle cx="156" cy="72" r="12"></circle>
+              <circle cx="188" cy="108" r="12"></circle>
+              <path class="theme-icon__paint" d="M88 168c16-18 39-27 67-27-6 23-24 41-51 53-10 4-23-15-16-26Z"></path>
+            </svg>
+            <span class="ui-select__text">
+              <span class="ui-select__label">Theme</span>
+              <span class="ui-select__value" id="theme-picker-value">Paper Notes</span>
+            </span>
+            <svg class="ui-select__chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div class="ui-select__menu" id="theme-picker-menu" role="listbox" aria-label="Theme picker" tabindex="-1">
+            <button class="ui-select__option" type="button" role="option" data-value="paper" aria-selected="true"><span class="ui-select__check">✓</span><span>Paper Notes</span></button>
+            <button class="ui-select__option" type="button" role="option" data-value="desk" aria-selected="false"><span class="ui-select__check">✓</span><span>Match Desk</span></button>
+            <button class="ui-select__option" type="button" role="option" data-value="pub" aria-selected="false"><span class="ui-select__check">✓</span><span>Pub Board</span></button>
+            <button class="ui-select__option" type="button" role="option" data-value="press" aria-selected="false"><span class="ui-select__check">✓</span><span>Press Sheet</span></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+	    <section id="home-view">
+	      <div class="hero">
+	        <div class="left-stack">
+	          <div class="match-stage">
+	            <div class="hero-summary">
+	              <h1 class="match-title">
+	                <span id="home-title-flag" class="title-flag flag flag-ghana" aria-label="Ghana flag"></span>
+	                <span id="home-title-name">Ghana</span>
+	                <span class="versus">vs</span>
+	                <span id="away-title-name">England</span>
+	                <span id="away-title-flag" class="title-flag flag flag-england" aria-label="England flag"></span>
+	              </h1>
+	              <div class="stat-grid" aria-label="Event stats">
+	                <div class="stat"><strong id="stat-predictions">18</strong><span>Predictions</span></div>
+	                <div class="stat"><strong id="stat-likes">96</strong><span>Likes</span></div>
+	                <div class="stat"><strong>4</strong><span>Hot takes</span></div>
+	              </div>
+	            </div>
+	            <p class="hero-copy">Drop the score you are willing to defend in public. The best banter climbs as the room reacts.</p>
+	          </div>
+
+	          <section class="feed" aria-label="Prediction feed">
+	            <div class="section-head">
+	              <div>
+	                <h2>Prediction feed</h2>
+	                <p>Sorted by room energy</p>
+	              </div>
+	              <button class="ghost" id="sort-button">Most liked first</button>
+	            </div>
+	            <div class="prediction-list" id="prediction-list"></div>
+	          </section>
+	        </div>
+
+	        <aside class="side-panel">
+	          <div class="scoreboard">
+	            <div id="score-card-body" class="score-card-body" aria-label="Most backed score: Ghana 2, England 1">
+	              <span class="top-pick-badge">Top pick</span>
+	              <div class="backed-kicker">Most-backed score</div>
+	              <div class="most-backed-score">
+	                <div class="score-side">
+	                  <span id="score-home-flag" class="flag flag-ghana" aria-hidden="true"></span>
+	                  <span id="score-home-code" class="flag-label">GHA</span>
+	                </div>
+	                <div class="score-lockup">
+	                  <div id="score-home-value" class="score-line">2</div>
+	                  <div class="score-divider">-</div>
+	                  <div id="score-away-value" class="score-line">1</div>
+	                </div>
+	                <div class="score-side">
+	                  <span id="score-away-flag" class="flag flag-england" aria-hidden="true"></span>
+	                  <span id="score-away-code" class="flag-label">ENG</span>
+	                </div>
+	                <div id="score-margin" class="backing-rail">Ghana by one</div>
+	              </div>
+	              <div class="team-row">
+	                <span id="score-home-name" class="team-chip">Ghana</span>
+	                <span class="team-versus">vs</span>
+	                <span id="score-away-name" class="team-chip">England</span>
+	              </div>
+	              <p class="score-note">Ghana by one</p>
+	              <button class="primary-action" id="open-prediction">Drop your score</button>
+	            </div>
+	          </div>
+	          <div class="reference-panel">
+	            <h2>Room switcher</h2>
+	            <div class="room-list" id="room-list" aria-label="Match rooms for today"></div>
+	            <form class="identity-card" id="identity-form">
+	              <label for="username">Username</label>
+	              <div class="identity-row">
+	                <input id="username" autocomplete="nickname" maxlength="24" placeholder="Your name" required aria-describedby="identity-error">
+	                <button type="submit" aria-label="Save username">
+	                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+	                    <path d="M5.5 5.5h10l3 3v10h-13z" />
+	                    <path d="M8 5.5V11h8V5.5" />
+	                    <path d="M8 18.5v-4h8v4" />
+	                  </svg>
+	                  <span class="save-label">Save</span>
+	                </button>
+	              </div>
+	              <p class="identity-error" id="identity-error" role="status" aria-live="polite"></p>
+	            </form>
+	          </div>
+	        </aside>
+	      </div>
+	    </section>
+
+    <section id="admin-view" class="admin-view hidden">
+      <div class="section-head">
+        <div>
+          <h2>Admin settings</h2>
+          <p>Set the active match, update dates, and handle messy moments.</p>
+        </div>
+        <button class="primary-action" data-view-jump="home">Return to match</button>
+      </div>
+      <div class="admin-grid">
+        <article class="admin-panel">
+          <span class="pill">Next event</span>
+          <label for="event-name">Match title</label>
+          <input id="event-name" value="Nigeria vs Argentina">
+          <label for="event-date">Event date</label>
+          <input id="event-date" value="July 02, 2026">
+          <p>The new event starts with a fresh feed while older links remain readable.</p>
+          <button class="ghost">Create draft</button>
+        </article>
+        <article class="admin-panel">
+          <span class="pill">Safety</span>
+          <p>Recent comments can be hidden without deleting the whole event record.</p>
+          <div class="comment">Kwesi: England fans should start rehearsing excuses early.</div>
+          <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+            <button class="ghost">Hide comment</button>
+            <button class="ghost">Close event</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div class="overlay" id="prediction-overlay" aria-hidden="true">
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="sheet-head">
+        <h2 id="sheet-title">Your Ghana vs England score</h2>
+        <button class="close" id="close-prediction" aria-label="Close">x</button>
+      </div>
+      <form id="prediction-form">
+        <div class="prediction-form">
+          <div class="field">
+            <label for="ghana">Ghana</label>
+            <input id="ghana" required type="number" min="0" max="20" value="2">
+          </div>
+          <div class="field">
+            <label for="england">England</label>
+            <input id="england" required type="number" min="0" max="20" value="1">
+          </div>
+        </div>
+        <div class="form-bottom">
+          <div class="field">
+            <label for="take">Comment</label>
+            <textarea id="take" placeholder="Add a little confidence..."></textarea>
+          </div>
+          <button class="primary-action" type="submit">Post prediction</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="celebrate" id="celebrate">
+    <div class="burst">Prediction posted</div>
+  </div>
+
+  <div class="overlay" id="identity-overlay" aria-hidden="true">
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="identity-title">
+      <div class="sheet-head">
+        <div>
+          <h2 id="identity-title">Pick your room name</h2>
+          <p class="identity-help">Set once for this browser. Used for comments and likes.</p>
+        </div>
+        <button class="close" id="close-identity" aria-label="Set username later">x</button>
+      </div>
+      <form id="identity-modal-form" class="identity-card">
+	        <label for="modal-username">Username</label>
+	        <div class="identity-row">
+	          <input id="modal-username" autocomplete="nickname" maxlength="24" required aria-describedby="modal-identity-help modal-identity-error">
+	          <button type="submit" aria-label="Save username">
+	            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+	              <path d="M5.5 5.5h10l3 3v10h-13z" />
+	              <path d="M8 5.5V11h8V5.5" />
+	              <path d="M8 18.5v-4h8v4" />
+	            </svg>
+	            <span class="save-label">Save</span>
+	          </button>
+	        </div>
+        <p class="identity-help" id="modal-identity-help">2-24 chars: letters, numbers, space, . ' -</p>
+        <p class="identity-error" id="modal-identity-error" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    let activeReplyTarget = null;
+    const STORAGE_KEYS = {
+      userId: "score-room-user-id",
+      username: "score-room-username",
+      likes: "score-room-liked-predictions",
+      rooms: "score-room-local-rooms"
+    };
+    const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/;
+    const likedPredictions = new Set(readStorage(STORAGE_KEYS.likes, []));
+    const storedUsername = validateUsername(localStorage.getItem(STORAGE_KEYS.username) || "");
+    const currentUser = {
+      id: getOrCreateUserId(),
+      name: storedUsername.ok ? storedUsername.username : ""
+    };
+
+    const predictions = [
+      {
+        id: "prediction-kojo",
+        name: "Kojo",
+        ghana: 2,
+        england: 1,
+        likes: 32,
+        comments: [
+          {
+            id: "comment-kojo-1",
+            text: "This is not patriotism. This is analysis.",
+            replies: [{ name: "Ella", text: "Framing this for when VAR gets involved." }]
+          }
+        ]
+      },
+      {
+        id: "prediction-nadia",
+        name: "Nadia",
+        ghana: 1,
+        england: 1,
+        likes: 24,
+        comments: [{ id: "comment-nadia-1", text: "Safe prediction, dangerous confidence.", replies: [] }]
+      },
+      {
+        id: "prediction-ebo",
+        name: "Ebo",
+        ghana: 3,
+        england: 2,
+        likes: 18,
+        comments: [{ id: "comment-ebo-1", text: "Chaos has a scoreline.", replies: [] }]
+      },
+      {
+        id: "prediction-ama",
+        name: "Ama",
+        ghana: 0,
+        england: 2,
+        likes: 13,
+        comments: [{ id: "comment-ama-1", text: "Someone had to say it.", replies: [] }]
+      }
+    ];
+
+    const rooms = [
+      {
+        id: "ghana-england",
+        home: { name: "Ghana", code: "GHA", flag: "flag-ghana" },
+        away: { name: "England", code: "ENG", flag: "flag-england" },
+        mostBacked: { home: 2, away: 1, margin: "Ghana by one" },
+        predictions
+      },
+      {
+        id: "ghana-brazil",
+        home: { name: "Ghana", code: "GHA", flag: "flag-ghana" },
+        away: { name: "Brazil", code: "BRA", flag: "flag-brazil" },
+        mostBacked: { home: 1, away: 2, margin: "Brazil by one" },
+        predictions: [
+          { id: "prediction-kwame-bra", name: "Kwame", ghana: 1, england: 2, likes: 21, comments: [{ id: "comment-kwame-bra-1", text: "Brazil will make us suffer first.", replies: [] }] },
+          { id: "prediction-akua-bra", name: "Akua", ghana: 2, england: 2, likes: 17, comments: [{ id: "comment-akua-bra-1", text: "This room is allergic to calm.", replies: [] }] }
+        ]
+      },
+      {
+        id: "nigeria-argentina",
+        home: { name: "Nigeria", code: "NGA", flag: "flag-nigeria" },
+        away: { name: "Argentina", code: "ARG", flag: "flag-argentina" },
+        mostBacked: { home: 1, away: 1, margin: "Draw backed most" },
+        predictions: [
+          { id: "prediction-ife-arg", name: "Ife", ghana: 1, england: 1, likes: 28, comments: [{ id: "comment-ife-arg-1", text: "A draw that feels like a win.", replies: [] }] },
+          { id: "prediction-tayo-arg", name: "Tayo", ghana: 2, england: 1, likes: 14, comments: [{ id: "comment-tayo-arg-1", text: "Super Eagles, no apology.", replies: [] }] }
+        ]
+      },
+      {
+        id: "spain-france",
+        home: { name: "Spain", code: "ESP", flag: "flag-spain" },
+        away: { name: "France", code: "FRA", flag: "flag-france" },
+        mostBacked: { home: 1, away: 2, margin: "France by one" },
+        predictions: [
+          { id: "prediction-luis-fra", name: "Luis", ghana: 1, england: 2, likes: 19, comments: [{ id: "comment-luis-fra-1", text: "France will steal this late.", replies: [] }] },
+          { id: "prediction-claire-fra", name: "Claire", ghana: 0, england: 2, likes: 16, comments: [{ id: "comment-claire-fra-1", text: "Control, then cold finish.", replies: [] }] }
+        ]
+      }
+    ];
+
+    let activeRoomId = rooms[0].id;
+
+    const list = document.querySelector("#prediction-list");
+    const roomList = document.querySelector("#room-list");
+    const identityForm = document.querySelector("#identity-form");
+    const usernameInput = document.querySelector("#username");
+    const identityError = document.querySelector("#identity-error");
+    const identityOverlay = document.querySelector("#identity-overlay");
+    const identityModalForm = document.querySelector("#identity-modal-form");
+    const modalUsernameInput = document.querySelector("#modal-username");
+    const modalIdentityError = document.querySelector("#modal-identity-error");
+    const overlay = document.querySelector("#prediction-overlay");
+    const celebration = document.querySelector("#celebrate");
+    const statPredictions = document.querySelector("#stat-predictions");
+    const statLikes = document.querySelector("#stat-likes");
+    const themePicker = document.querySelector("#theme-picker");
+    const themePickerTrigger = document.querySelector("#theme-picker-trigger");
+    const themePickerMenu = document.querySelector("#theme-picker-menu");
+    const themePickerValue = document.querySelector("#theme-picker-value");
+    const themePickerOptions = [...document.querySelectorAll(".ui-select__option")];
+    const allowedThemes = new Set(themePickerOptions.map(option => option.dataset.value));
+
+    function readStorage(key, fallback) {
+      try {
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeStorage(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function getOrCreateUserId() {
+      const storedId = localStorage.getItem(STORAGE_KEYS.userId);
+      if (storedId) return storedId;
+      const nextId = `user-${crypto?.randomUUID?.() || Date.now().toString(36)}`;
+      localStorage.setItem(STORAGE_KEYS.userId, nextId);
+      return nextId;
+    }
+
+    function normalizeUsername(value) {
+      return String(value || "")
+        .normalize("NFKC")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 24);
+    }
+
+    function validateUsername(value) {
+      const username = normalizeUsername(value);
+      if (!USERNAME_PATTERN.test(username)) {
+        return {
+          ok: false,
+          username,
+          message: "Use 2-24 chars: letters, numbers, spaces, . ' -"
+        };
+      }
+      return { ok: true, username, message: "" };
+    }
+
+    function syncIdentityForm(message = "") {
+      const hasUsername = Boolean(currentUser.name);
+      const identityButton = identityForm.querySelector("button");
+      const modalButton = identityModalForm.querySelector("button");
+      usernameInput.value = currentUser.name;
+      usernameInput.disabled = hasUsername;
+      identityButton.disabled = hasUsername;
+      identityButton.querySelector(".save-label").textContent = hasUsername ? "Saved" : "Save";
+      identityError.classList.toggle("is-success", Boolean(message && hasUsername));
+      identityError.textContent = message;
+      modalUsernameInput.value = currentUser.name;
+      modalUsernameInput.disabled = hasUsername;
+      modalButton.disabled = hasUsername;
+      modalButton.querySelector(".save-label").textContent = hasUsername ? "Saved" : "Save";
+      modalIdentityError.classList.toggle("is-success", hasUsername);
+      modalIdentityError.textContent = hasUsername ? "Username saved for this browser." : "";
+    }
+
+    function saveUsernameFrom(input, errorTarget) {
+      if (currentUser.name) {
+        errorTarget.classList.remove("is-success");
+        errorTarget.textContent = "Username is already set for this browser.";
+        return true;
+      }
+      const result = validateUsername(input.value);
+      if (!result.ok) {
+        errorTarget.classList.remove("is-success");
+        errorTarget.textContent = result.message;
+        input.focus();
+        return false;
+      }
+      currentUser.name = result.username;
+      localStorage.setItem(STORAGE_KEYS.username, currentUser.name);
+      syncIdentityForm("Username saved for this browser.");
+      closeIdentityPrompt();
+      return true;
+    }
+
+    function openIdentityPrompt(message = "") {
+      if (currentUser.name) return true;
+      modalIdentityError.classList.remove("is-success");
+      modalIdentityError.textContent = message;
+      identityOverlay.classList.add("open");
+      identityOverlay.setAttribute("aria-hidden", "false");
+      setTimeout(() => modalUsernameInput.focus(), 180);
+      return false;
+    }
+
+    function closeIdentityPrompt() {
+      identityOverlay.classList.remove("open");
+      identityOverlay.setAttribute("aria-hidden", "true");
+    }
+
+    function saveLocalRooms() {
+      writeStorage(
+        STORAGE_KEYS.rooms,
+        rooms.map(room => ({
+          id: room.id,
+          predictions: room.predictions
+        }))
+      );
+    }
+
+    function restoreLocalRooms() {
+      const storedRooms = readStorage(STORAGE_KEYS.rooms, []);
+      storedRooms.forEach(storedRoom => {
+        const room = rooms.find(item => item.id === storedRoom.id);
+        if (room && Array.isArray(storedRoom.predictions)) {
+          room.predictions = storedRoom.predictions;
+        }
+      });
+    }
+
+    function applyTheme(theme) {
+      const resolvedTheme = allowedThemes.has(theme) ? theme : "paper";
+      document.body.dataset.theme = resolvedTheme === "paper" ? "" : resolvedTheme;
+      const selectedOption = themePickerOptions.find(option => option.dataset.value === resolvedTheme) || themePickerOptions[0];
+      themePickerValue.textContent = selectedOption.textContent.replace("✓", "").trim();
+      themePickerOptions.forEach(option => {
+        option.setAttribute("aria-selected", String(option === selectedOption));
+      });
+      localStorage.setItem("score-room-theme", resolvedTheme);
+    }
+
+    function positionThemePickerMenu() {
+      const triggerRect = themePickerTrigger.getBoundingClientRect();
+      const menuWidth = Math.max(triggerRect.width, 220);
+      const viewportPadding = 12;
+      const left = Math.min(
+        Math.max(viewportPadding, triggerRect.right - menuWidth),
+        window.innerWidth - menuWidth - viewportPadding
+      );
+
+      themePickerMenu.style.width = `${menuWidth}px`;
+      themePickerMenu.style.left = `${left}px`;
+      themePickerMenu.style.top = `${triggerRect.bottom + 8}px`;
+      themePickerMenu.style.maxHeight = `${Math.max(160, window.innerHeight - triggerRect.bottom - 20)}px`;
+    }
+
+    function setThemePickerOpen(isOpen) {
+      themePicker.classList.toggle("open", isOpen);
+      themePickerTrigger.setAttribute("aria-expanded", String(isOpen));
+      if (isOpen) positionThemePickerMenu();
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function hashSeed(seed) {
+      return Array.from(seed).reduce((hash, char) => {
+        return (hash << 5) - hash + char.charCodeAt(0) | 0;
+      }, 0);
+    }
+
+    function createNaviiIcon(seed, title) {
+      const palettes = [
+        ["#f4c84a", "#b7791f", "#fff7c2"],
+        ["#38bdf8", "#075985", "#e0f2fe"],
+        ["#5ee0a0", "#047857", "#dcfce7"],
+        ["#fb7185", "#9f1239", "#ffe4e6"],
+        ["#c084fc", "#6b21a8", "#f3e8ff"]
+      ];
+      const hash = Math.abs(hashSeed(seed));
+      const [start, end, shine] = palettes[hash % palettes.length];
+      const tilt = (hash % 17) - 8;
+      const eyeOffset = hash % 3;
+      const smileDepth = 60 + (hash % 8);
+      const safeTitle = escapeHtml(title);
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="${safeTitle}">
+          <title>${safeTitle}</title>
+          <defs>
+            <radialGradient id="navii-grad-${hash}" cx="38%" cy="28%" r="70%">
+              <stop offset="0%" stop-color="${start}" />
+              <stop offset="100%" stop-color="${end}" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="50" r="39" fill="url(#navii-grad-${hash})" transform="rotate(${tilt} 50 50)" />
+          <ellipse cx="38" cy="35" rx="12" ry="7" fill="${shine}" opacity="0.28" transform="rotate(-22 38 35)" />
+          <circle cx="${38 - eyeOffset}" cy="48" r="4.6" fill="#111" />
+          <circle cx="${62 + eyeOffset}" cy="48" r="4.6" fill="#111" />
+          <path d="M36 ${smileDepth} Q50 ${smileDepth + 10} 64 ${smileDepth}" fill="none" stroke="#111" stroke-width="5" stroke-linecap="round" />
+          <path d="M26 31 C32 18 45 13 58 17 C73 22 82 36 79 54 C76 72 61 84 43 80 C25 76 16 62 20 45 C21 39 23 35 26 31 Z" fill="none" stroke="${shine}" stroke-width="1.2" opacity="0.34" />
+        </svg>
+      `;
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    }
+
+    function countThreadItems(comments) {
+      return comments.reduce((total, comment) => total + 1 + comment.replies.length, 0);
+    }
+
+    function activeRoom() {
+      return rooms.find(room => room.id === activeRoomId) || rooms[0];
+    }
+
+    function setFlag(element, baseClass, team) {
+      element.className = `${baseClass} flag ${team.flag}`;
+      element.setAttribute("aria-label", `${team.name} flag`);
+    }
+
+    function renderRoomSwitcher() {
+      roomList.innerHTML = rooms.map(room => {
+        const isActive = room.id === activeRoomId;
+        const statusIcon = isActive ? `
+          <span class="ref-status live" aria-label="Current live room">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"></circle>
+              <circle cx="12" cy="12" r="7"></circle>
+            </svg>
+          </span>
+        ` : `
+          <span class="ref-status" aria-label="Switch to this room">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 7h10"></path>
+              <path d="m15 4 3 3-3 3"></path>
+              <path d="M16 17H6"></path>
+              <path d="m9 14-3 3 3 3"></path>
+            </svg>
+          </span>
+        `;
+        return `
+          <button class="ref-link ${isActive ? "active" : ""}" type="button" data-room-id="${room.id}" aria-current="${isActive ? "true" : "false"}">
+            <span class="ref-teams">
+              <span class="ref-flag flag ${room.home.flag}" aria-label="${escapeHtml(room.home.name)} flag"></span>
+              <span>${escapeHtml(room.home.code)}</span>
+              <span class="ref-versus">v</span>
+              <span>${escapeHtml(room.away.code)}</span>
+              <span class="ref-flag flag ${room.away.flag}" aria-label="${escapeHtml(room.away.name)} flag"></span>
+            </span>
+            ${statusIcon}
+          </button>
+        `;
+      }).join("");
+    }
+
+    function setActiveRoom(roomId) {
+      activeRoomId = roomId;
+      activeReplyTarget = null;
+      const room = activeRoom();
+
+      setFlag(document.querySelector("#home-title-flag"), "title-flag", room.home);
+      setFlag(document.querySelector("#away-title-flag"), "title-flag", room.away);
+      setFlag(document.querySelector("#score-home-flag"), "", room.home);
+      setFlag(document.querySelector("#score-away-flag"), "", room.away);
+
+      document.querySelector("#home-title-name").textContent = room.home.name;
+      document.querySelector("#away-title-name").textContent = room.away.name;
+      document.querySelector("#score-home-code").textContent = room.home.code;
+      document.querySelector("#score-away-code").textContent = room.away.code;
+      document.querySelector("#score-home-value").textContent = String(room.mostBacked.home);
+      document.querySelector("#score-away-value").textContent = String(room.mostBacked.away);
+      document.querySelector("#score-margin").textContent = room.mostBacked.margin;
+      document.querySelector("#score-home-name").textContent = room.home.name;
+      document.querySelector("#score-away-name").textContent = room.away.name;
+      document.querySelector("#score-card-body").setAttribute(
+        "aria-label",
+        `Most backed score: ${room.home.name} ${room.mostBacked.home}, ${room.away.name} ${room.mostBacked.away}`
+      );
+      document.querySelector("#sheet-title").textContent = `Your ${room.home.name} vs ${room.away.name} score`;
+      document.querySelector('label[for="ghana"]').textContent = room.home.name;
+      document.querySelector('label[for="england"]').textContent = room.away.name;
+      document.querySelector("#ghana").value = String(room.mostBacked.home);
+      document.querySelector("#england").value = String(room.mostBacked.away);
+
+      renderRoomSwitcher();
+      renderPredictions();
+    }
+
+    function renderComments(prediction) {
+      return prediction.comments.slice(0, 2).map(comment => {
+        const isReplying = activeReplyTarget &&
+          activeReplyTarget.predictionId === prediction.id &&
+          activeReplyTarget.commentId === comment.id;
+        const replies = comment.replies.map(reply => `
+          <div class="reply"><strong>${escapeHtml(reply.name)}:</strong> ${escapeHtml(reply.text)}</div>
+        `).join("");
+        const replyForm = isReplying ? `
+          <form class="reply-form" data-prediction-id="${prediction.id}" data-comment-id="${comment.id}">
+            <input name="replyText" aria-label="Reply" placeholder="Keep it light..." required>
+            <button class="reply-submit" type="submit">Reply</button>
+          </form>
+        ` : "";
+
+        return `
+          <div class="comment">
+            <div class="comment-main">
+              <p class="comment-copy">${escapeHtml(comment.text)}</p>
+              <button class="reply-trigger" data-prediction-id="${prediction.id}" data-comment-id="${comment.id}">Reply</button>
+            </div>
+            ${replies ? `<div class="reply-list">${replies}</div>` : ""}
+            ${replyForm}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderPredictions() {
+      const room = activeRoom();
+      const sorted = [...room.predictions].sort((a, b) => b.likes - a.likes);
+      list.innerHTML = sorted.map((item, index) => `
+        <article class="prediction">
+          <img class="prediction-avatar" src="${createNaviiIcon(item.name, `${item.name} avatar`)}" alt="${escapeHtml(item.name)} avatar" loading="lazy" decoding="async">
+          <div class="prediction-body">
+            <div class="prediction-head">
+              <h3>${escapeHtml(item.name)}</h3>
+              <div class="score">${item.ghana}-${item.england} <small>${room.home.code}-${room.away.code}</small></div>
+            </div>
+            ${renderComments(item)}
+            <div class="actions">
+              <button class="icon-btn like-button ${likedPredictions.has(item.id) ? "liked" : ""}" data-id="${item.id}" ${item.authorId === currentUser.id ? "disabled" : ""} aria-label="${item.authorId === currentUser.id ? "You cannot like your own prediction" : `Like ${escapeHtml(item.name)}'s prediction`}">
+                <svg class="ph-icon" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                  <path d="M128 216S28 160 28 92a52 52 0 0 1 92-33.2L128 68l8-9.2A52 52 0 0 1 228 92c0 68-100 124-100 124Z"></path>
+                </svg>
+                <span>${item.likes}</span>
+                <span class="sr-only">likes</span>
+              </button>
+              <button class="icon-btn comment-button" aria-label="View ${countThreadItems(item.comments)} comments and replies on ${escapeHtml(item.name)}'s prediction">
+                <svg class="ph-icon" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                  <path d="M45.2 188.7A88 88 0 1 1 76 219.5L36 228Z"></path>
+                </svg>
+                <span>${countThreadItems(item.comments)}</span>
+                <span class="sr-only">comments</span>
+              </button>
+            </div>
+          </div>
+        </article>
+      `).join("");
+
+      statPredictions.textContent = String(14 + room.predictions.length);
+      statLikes.textContent = String(room.predictions.reduce((sum, item) => sum + item.likes, 9));
+    }
+
+    function setView(view) {
+      document.querySelector("#home-view").classList.toggle("hidden", view !== "home");
+      document.querySelector("#admin-view").classList.toggle("hidden", view !== "admin");
+    }
+
+    function syncRoute() {
+      setView(window.location.hash === "#admin" ? "admin" : "home");
+    }
+
+    function openSheet() {
+      if (!openIdentityPrompt("Set your username before posting.")) return;
+      overlay.classList.add("open");
+      overlay.setAttribute("aria-hidden", "false");
+      setTimeout(() => document.querySelector("#ghana").focus(), 180);
+    }
+
+    function closeSheet() {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+
+    document.querySelector("#open-prediction").addEventListener("click", openSheet);
+    document.querySelector("#close-prediction").addEventListener("click", closeSheet);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) closeSheet();
+    });
+    document.querySelector("#close-identity").addEventListener("click", closeIdentityPrompt);
+    identityOverlay.addEventListener("click", event => {
+      if (event.target === identityOverlay) closeIdentityPrompt();
+    });
+
+    themePickerTrigger.addEventListener("click", () => {
+      setThemePickerOpen(!themePicker.classList.contains("open"));
+    });
+
+    themePicker.addEventListener("click", event => {
+      const option = event.target.closest(".ui-select__option");
+      if (!option) return;
+      applyTheme(option.dataset.value);
+      setThemePickerOpen(false);
+      themePickerTrigger.focus();
+    });
+
+    themePicker.addEventListener("keydown", event => {
+      const activeIndex = themePickerOptions.indexOf(document.activeElement);
+      if (event.key === "Escape") {
+        setThemePickerOpen(false);
+        themePickerTrigger.focus();
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setThemePickerOpen(true);
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex = activeIndex < 0 ? 0 : (activeIndex + direction + themePickerOptions.length) % themePickerOptions.length;
+        themePickerOptions[nextIndex].focus();
+      }
+      if ((event.key === "Enter" || event.key === " ") && document.activeElement?.classList.contains("ui-select__option")) {
+        event.preventDefault();
+        document.activeElement.click();
+      }
+    });
+
+    document.addEventListener("click", event => {
+      if (!themePicker.contains(event.target)) setThemePickerOpen(false);
+    });
+
+    window.addEventListener("resize", () => {
+      if (themePicker.classList.contains("open")) positionThemePickerMenu();
+    });
+
+    window.addEventListener("scroll", () => {
+      if (themePicker.classList.contains("open")) positionThemePickerMenu();
+    }, { passive: true });
+
+    document.querySelectorAll("[data-view-jump]").forEach(button => {
+      button.addEventListener("click", () => {
+        if (button.dataset.viewJump === "admin") {
+          window.location.hash = "admin";
+          return;
+        }
+        history.pushState("", document.title, window.location.pathname + window.location.search);
+        syncRoute();
+      });
+    });
+
+    roomList.addEventListener("click", event => {
+      const roomButton = event.target.closest("[data-room-id]");
+      if (!roomButton) return;
+      setActiveRoom(roomButton.dataset.roomId);
+      history.pushState("", document.title, window.location.pathname + window.location.search);
+      syncRoute();
+    });
+
+    identityForm.addEventListener("submit", event => {
+      event.preventDefault();
+      saveUsernameFrom(usernameInput, identityError);
+    });
+
+    identityModalForm.addEventListener("submit", event => {
+      event.preventDefault();
+      saveUsernameFrom(modalUsernameInput, modalIdentityError);
+    });
+
+    document.querySelector("#prediction-form").addEventListener("submit", event => {
+      event.preventDefault();
+      if (!openIdentityPrompt("Set your username before posting.")) return;
+      const room = activeRoom();
+      const ghana = Number(document.querySelector("#ghana").value || 0);
+      const england = Number(document.querySelector("#england").value || 0);
+      const take = document.querySelector("#take").value.trim();
+      const predictionId = `prediction-${room.id}-${Date.now()}`;
+      room.predictions.push({
+        id: predictionId,
+        authorId: currentUser.id,
+        name: currentUser.name,
+        ghana,
+        england,
+        likes: 0,
+        comments: [{
+          id: `${predictionId}-comment-1`,
+          text: take || "Fresh from the confidence department.",
+          replies: []
+        }]
+      });
+      saveLocalRooms();
+      renderPredictions();
+      closeSheet();
+      celebration.classList.remove("show");
+      void celebration.offsetWidth;
+      celebration.classList.add("show");
+      event.target.reset();
+      document.querySelector("#ghana").value = String(room.mostBacked.home);
+      document.querySelector("#england").value = String(room.mostBacked.away);
+    });
+
+    list.addEventListener("click", event => {
+      const likeButton = event.target.closest(".like-button");
+      if (likeButton) {
+        if (!openIdentityPrompt("Set your username before liking.")) return;
+        const item = activeRoom().predictions.find(prediction => prediction.id === likeButton.dataset.id);
+        if (!item || likedPredictions.has(item.id) || item.authorId === currentUser.id) return;
+        item.likes += 1;
+        likedPredictions.add(item.id);
+        writeStorage(STORAGE_KEYS.likes, [...likedPredictions]);
+        saveLocalRooms();
+        renderPredictions();
+        return;
+      }
+
+      const replyButton = event.target.closest(".reply-trigger");
+      if (replyButton) {
+        if (!openIdentityPrompt("Set your username before replying.")) return;
+        activeReplyTarget = {
+          predictionId: replyButton.dataset.predictionId,
+          commentId: replyButton.dataset.commentId
+        };
+        renderPredictions();
+        setTimeout(() => {
+          const form = document.querySelector(
+            `.reply-form[data-prediction-id="${activeReplyTarget.predictionId}"][data-comment-id="${activeReplyTarget.commentId}"]`
+          );
+          form?.querySelector("input")?.focus();
+        }, 80);
+      }
+    });
+
+    list.addEventListener("submit", event => {
+      const replyForm = event.target.closest(".reply-form");
+      if (!replyForm) return;
+      event.preventDefault();
+      if (!openIdentityPrompt("Set your username before replying.")) return;
+
+      const prediction = activeRoom().predictions.find(item => item.id === replyForm.dataset.predictionId);
+      const comment = prediction?.comments.find(item => item.id === replyForm.dataset.commentId);
+      if (!comment) return;
+
+      const formData = new FormData(replyForm);
+      const text = String(formData.get("replyText") || "").trim();
+      if (!text) return;
+
+      comment.replies.push({ authorId: currentUser.id, name: currentUser.name, text });
+      activeReplyTarget = null;
+      saveLocalRooms();
+      renderPredictions();
+    });
+
+    restoreLocalRooms();
+    syncIdentityForm();
+    applyTheme(localStorage.getItem("score-room-theme") || "paper");
+    setActiveRoom(activeRoomId);
+    window.addEventListener("hashchange", syncRoute);
+    syncRoute();
+    if (!currentUser.name) {
+      window.setTimeout(() => openIdentityPrompt("Choose a username when you are ready."), 650);
+    }
+  </script>
+</body>
+</html>
