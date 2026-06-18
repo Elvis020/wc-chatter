@@ -7,6 +7,8 @@ import {
   type Reply,
   type ReplyInput,
   type Room,
+  type MatchStatus,
+  type RoomInteractionStatus,
   type RoomStatus,
   type Team,
   type ThemeOption,
@@ -31,6 +33,9 @@ type RoomRow = {
   away_iso2: string | null
   away_flag: string | null
   status: 'draft' | 'live' | 'closed' | 'archived'
+  match_status?: MatchStatus | null
+  room_status?: RoomInteractionStatus | null
+  is_featured?: boolean | null
   event_date: string | null
   created_at: string
 }
@@ -80,13 +85,17 @@ export type SupabaseEnv = {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const ROOM_WRITE_STATUSES = new Set<RoomRow['status']>(['draft', 'live'])
+const ROOM_WRITE_STATUSES = new Set<RoomInteractionStatus>(['open'])
 const ROOM_STATUS_ORDER: Record<RoomRow['status'], number> = {
   live: 0,
   draft: 1,
   closed: 2,
   archived: 3,
 }
+const ROOM_SELECT =
+  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, event_date, created_at'
+const LEGACY_ROOM_SELECT =
+  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at'
 
 function toTeam(name: string, code: string, iso2?: string | null, flag?: string | null): Team {
   return {
@@ -101,6 +110,17 @@ function toRoomStatus(status: RoomRow['status']): RoomStatus {
   if (status === 'live') return 'live'
   if (status === 'closed' || status === 'archived') return 'archived'
   return 'upcoming'
+}
+
+function legacyMatchStatus(status: RoomRow['status']): MatchStatus {
+  if (status === 'live') return 'live'
+  if (status === 'closed' || status === 'archived') return 'finished'
+  return 'upcoming'
+}
+
+function legacyRoomStatus(status: RoomRow['status']): RoomInteractionStatus {
+  if (status === 'closed' || status === 'archived') return 'closed'
+  return 'open'
 }
 
 function formatMargin(homeName: string, awayName: string, homeScore: number, awayScore: number) {
@@ -159,6 +179,9 @@ function mapRoom(
   return {
     id: room.id,
     status: toRoomStatus(room.status),
+    matchStatus: room.match_status ?? legacyMatchStatus(room.status),
+    roomStatus: room.room_status ?? legacyRoomStatus(room.status),
+    isFeatured: room.is_featured ?? room.status === 'live',
     home: toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag),
     away: toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag),
     mostBacked: mostBackedFor(room, predictions),
@@ -260,36 +283,57 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
   const clients = new Map<string, WebSocketLike>()
 
   async function getRoomRows() {
-    const { data, error } = await supabase
+    let response: any = await supabase
       .from('rooms')
-      .select('id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at')
+      .select(ROOM_SELECT)
       .order('event_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
 
-    if (error) {
-      logSupabaseError('getRoomRows', error)
+    if (response.error?.code === 'PGRST204') {
+      response = await supabase
+        .from('rooms')
+        .select(LEGACY_ROOM_SELECT)
+        .order('event_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+    }
+
+    if (response.error) {
+      logSupabaseError('getRoomRows', response.error)
       throw new ApiError('INTERNAL_ERROR', 'Unable to load rooms.', 500)
     }
-    return ((data ?? []) as RoomRow[]).sort((left, right) => {
-      const statusDelta = ROOM_STATUS_ORDER[left.status] - ROOM_STATUS_ORDER[right.status]
-      if (statusDelta !== 0) return statusDelta
-      return Date.parse(right.created_at) - Date.parse(left.created_at)
-    })
+    return ((response.data ?? []) as RoomRow[])
+      .filter((room) => (room.room_status ?? legacyRoomStatus(room.status)) !== 'hidden')
+      .sort((left, right) => {
+        if ((left.is_featured ? 0 : 1) !== (right.is_featured ? 0 : 1)) {
+          return left.is_featured ? -1 : 1
+        }
+        const statusDelta = ROOM_STATUS_ORDER[left.status] - ROOM_STATUS_ORDER[right.status]
+        if (statusDelta !== 0) return statusDelta
+        return Date.parse(right.created_at) - Date.parse(left.created_at)
+      })
   }
 
   async function getRoomRow(roomRef: string) {
     const column = UUID_PATTERN.test(roomRef) ? 'id' : 'slug'
-    const { data, error } = await supabase
+    let response: any = await supabase
       .from('rooms')
-      .select('id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at')
+      .select(ROOM_SELECT)
       .eq(column, roomRef)
       .maybeSingle()
 
-    if (error) {
-      logSupabaseError('getRoomRow', error)
+    if (response.error?.code === 'PGRST204') {
+      response = await supabase
+        .from('rooms')
+        .select(LEGACY_ROOM_SELECT)
+        .eq(column, roomRef)
+        .maybeSingle()
+    }
+
+    if (response.error) {
+      logSupabaseError('getRoomRow', response.error)
       throw new ApiError('INTERNAL_ERROR', 'Unable to load room.', 500)
     }
-    return data as RoomRow | null
+    return response.data as RoomRow | null
   }
 
   async function getPredictions(roomIds: string[]) {
@@ -409,7 +453,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     async addPrediction(roomRef: string, payload: CreatePredictionInput) {
       const room = await getRoomRow(roomRef)
       if (!room) return null
-      if (!ROOM_WRITE_STATUSES.has(room.status)) {
+      if (!ROOM_WRITE_STATUSES.has(room.room_status ?? legacyRoomStatus(room.status))) {
         throw new ApiError('FORBIDDEN', 'This room is closed for new predictions.', 403)
       }
 

@@ -13,6 +13,8 @@ export interface Team {
 }
 
 export type RoomStatus = 'upcoming' | 'live' | 'archived'
+export type MatchStatus = 'upcoming' | 'live' | 'finished'
+export type RoomInteractionStatus = 'open' | 'closed' | 'hidden'
 
 export interface Reply {
   id: string
@@ -49,6 +51,9 @@ export interface RoomSummary {
 export interface Room {
   id: string
   status: RoomStatus
+  matchStatus: MatchStatus
+  roomStatus: RoomInteractionStatus
+  isFeatured: boolean
   home: Team
   away: Team
   mostBacked: RoomSummary

@@ -5,6 +5,8 @@ import {
   matchKickoffUtc,
   matchKickoffUtcMs,
   type FixtureMatch,
+  type MatchStatus,
+  type RoomInteractionStatus,
 } from '@wc-chatter/shared'
 import { ApiError } from './errors.js'
 
@@ -13,6 +15,9 @@ type DbRoomStatus = 'draft' | 'live' | 'closed' | 'archived'
 type ExistingRoom = {
   slug: string
   status: DbRoomStatus
+  match_status?: MatchStatus | null
+  room_status?: RoomInteractionStatus | null
+  is_featured?: boolean | null
 }
 
 type RoomUpsert = {
@@ -32,11 +37,14 @@ type RoomUpsert = {
   group_name: string
   venue: string
   status: DbRoomStatus
+  match_status: MatchStatus
+  room_status: RoomInteractionStatus
+  is_featured: boolean
   source: 'fixture'
   source_match_id: string
 }
 
-type BaseRoomUpsert = Omit<RoomUpsert, 'kickoff_at' | 'round' | 'group_name' | 'venue' | 'source' | 'source_match_id'>
+type BaseRoomUpsert = Omit<RoomUpsert, 'kickoff_at' | 'round' | 'group_name' | 'venue' | 'match_status' | 'room_status' | 'is_featured' | 'source' | 'source_match_id'>
 
 export type SyncedRoom = {
   id: string
@@ -52,16 +60,30 @@ export type RoomSyncResult = {
   rooms: Array<SyncedRoom | RoomUpsert>
 }
 
-const LOCKED_STATUSES = new Set<DbRoomStatus>(['closed', 'archived'])
+const LOCKED_ROOM_STATUSES = new Set<RoomInteractionStatus>(['closed', 'hidden'])
 
-function roomStatusForMatch(match: FixtureMatch, now: Date): DbRoomStatus {
-  if (match.result?.status === 'FT') return 'archived'
-  return matchKickoffUtcMs(match) <= now.getTime() ? 'live' : 'draft'
+function matchStatusForMatch(match: FixtureMatch, now: Date): MatchStatus {
+  if (match.result?.status === 'FT') return 'finished'
+  return matchKickoffUtcMs(match) <= now.getTime() ? 'live' : 'upcoming'
 }
 
-function roomFromMatch(match: FixtureMatch, now: Date, existing?: ExistingRoom): RoomUpsert {
-  const computedStatus = roomStatusForMatch(match, now)
-  const status = existing && LOCKED_STATUSES.has(existing.status) ? existing.status : computedStatus
+function legacyStatusFor(matchStatus: MatchStatus, roomStatus: RoomInteractionStatus): DbRoomStatus {
+  if (roomStatus !== 'open') return roomStatus === 'hidden' ? 'archived' : 'closed'
+  if (matchStatus === 'live') return 'live'
+  if (matchStatus === 'finished') return 'archived'
+  return 'draft'
+}
+
+function legacyRoomStatus(status: DbRoomStatus): RoomInteractionStatus {
+  if (status === 'closed' || status === 'archived') return 'closed'
+  return 'open'
+}
+
+function roomFromMatch(match: FixtureMatch, now: Date, isFeatured: boolean, existing?: ExistingRoom): RoomUpsert {
+  const matchStatus = matchStatusForMatch(match, now)
+  const existingRoomStatus = existing?.room_status ?? (existing ? legacyRoomStatus(existing.status) : undefined)
+  const roomStatus = existingRoomStatus && LOCKED_ROOM_STATUSES.has(existingRoomStatus) ? existingRoomStatus : 'open'
+  const status = legacyStatusFor(matchStatus, roomStatus)
 
   return {
     slug: match.id,
@@ -80,6 +102,9 @@ function roomFromMatch(match: FixtureMatch, now: Date, existing?: ExistingRoom):
     group_name: match.group,
     venue: match.venue,
     status,
+    match_status: matchStatus,
+    room_status: roomStatus,
+    is_featured: isFeatured,
     source: 'fixture',
     source_match_id: match.id,
   }
@@ -107,7 +132,7 @@ async function getExistingRooms(supabase: SupabaseClient, slugs: string[]) {
 
   const { data, error } = await supabase
     .from('rooms')
-    .select('slug, status')
+    .select('slug, status, match_status, room_status, is_featured')
     .in('slug', slugs)
 
   if (error) {
@@ -124,7 +149,8 @@ export async function syncCurrentCycleRooms(
   const now = options.now ?? new Date()
   const matches = currentOrNextCycleMatches(loadFixtures(), now)
   const existingRooms = await getExistingRooms(supabase, matches.map((match) => match.id))
-  const rows = matches.map((match) => roomFromMatch(match, now, existingRooms.get(match.id)))
+  const featuredMatchId = matches.find((match) => matchStatusForMatch(match, now) === 'live')?.id ?? matches[0]?.id
+  const rows = matches.map((match) => roomFromMatch(match, now, match.id === featuredMatchId, existingRooms.get(match.id)))
 
   if (options.dryRun) {
     return {
@@ -135,12 +161,15 @@ export async function syncCurrentCycleRooms(
     }
   }
 
+  await supabase.from('rooms').update({ is_featured: false }).eq('is_featured', true)
+
   let response = await supabase
     .from('rooms')
     .upsert(rows, { onConflict: 'slug' })
     .select('id, slug, title, status')
 
   if (response.error?.code === 'PGRST204') {
+    console.warn('Room sync is using legacy room columns. Reload Supabase/PostgREST schema after applying the room visibility migration.')
     response = await supabase
       .from('rooms')
       .upsert(rows.map(baseRoom), { onConflict: 'slug' })

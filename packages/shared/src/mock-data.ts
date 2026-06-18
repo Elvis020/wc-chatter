@@ -74,6 +74,9 @@ function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
   return {
     id: match.id,
     status: roomStatus(match, now),
+    matchStatus: match.result?.status === 'FT' ? 'finished' : matchKickoffUtcMs(match) <= now.getTime() ? 'live' : 'upcoming',
+    roomStatus: 'open',
+    isFeatured: matchKickoffUtcMs(match) <= now.getTime(),
     home: match.home,
     away: match.away,
     mostBacked: {

@@ -18,6 +18,7 @@ const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const COMMENT_PREVIEW_LIMIT = 3
 const ROOM_PAGE_SIZE = 4
 type FeedSortMode = 'likes' | 'comments'
+type RealtimeStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline'
 type PendingIdentityAction =
   | { type: 'like'; predictionId: string; authorId?: string }
   | { type: 'reply'; predictionId: string; commentId: string }
@@ -42,7 +43,10 @@ const usernameError = ref('')
 const rooms = ref<Room[]>([])
 const activeRoomId = ref('')
 const loading = ref(true)
+const refreshingRooms = ref(false)
 const errorMessage = ref('')
+const mutationError = ref('')
+const realtimeStatus = ref<RealtimeStatus>('idle')
 const routePath = ref(window.location.pathname)
 const predictionModalOpen = ref(false)
 const submittingPrediction = ref(false)
@@ -63,7 +67,10 @@ const ws = ref<WebSocket | null>(null)
 const submittingReplies = ref(new Set<string>())
 const replyErrors = reactive<Record<string, string>>({})
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
-let reconnectingRoomId = ''
+let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
+let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
+let reconnectAttempt = 0
+let socketToken = 0
 
 const predictionForm = reactive({
   homeScore: 2,
@@ -73,7 +80,7 @@ const predictionForm = reactive({
 
 const replyDrafts = reactive<Record<string, string>>({})
 
-const activeRoom = computed(() => rooms.value.find((room) => room.id === activeRoomId.value) ?? rooms.value[0] ?? null)
+const activeRoom = computed(() => rooms.value.find((room) => room.id === activeRoomId.value) ?? rooms.value.find((room) => room.isFeatured) ?? rooms.value[0] ?? null)
 const sortedPredictions = computed(() => {
   const score = (prediction: Prediction) =>
     feedSortMode.value === 'likes' ? prediction.likes : predictionCommentTotal(prediction)
@@ -109,6 +116,14 @@ const visibleRooms = computed(() => {
   return rooms.value.slice(start, start + ROOM_PAGE_SIZE)
 })
 const roomPageLabel = computed(() => `${roomPage.value + 1}/${roomPageCount.value}`)
+const statusNotice = computed(() => {
+  if (mutationError.value) return mutationError.value
+  if (refreshingRooms.value) return 'Refreshing rooms...'
+  if (realtimeStatus.value === 'connecting') return 'Connecting to live room...'
+  if (realtimeStatus.value === 'reconnecting') return 'Live updates paused. Reconnecting...'
+  if (realtimeStatus.value === 'offline') return 'Live updates are offline. Retrying...'
+  return ''
+})
 
 watch(selectedTheme, (value) => {
   document.body.dataset.theme = value === 'paper' ? '' : value
@@ -207,14 +222,24 @@ function closePredictionModal() {
   predictionModalOpen.value = false
 }
 
+function errorText(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
+function showMutationError(message: string) {
+  mutationError.value = message
+  if (mutationErrorTimer) window.clearTimeout(mutationErrorTimer)
+  mutationErrorTimer = window.setTimeout(() => {
+    mutationError.value = ''
+  }, 4200)
+}
+
 async function showHome() {
   window.history.pushState(null, '', '/')
   routePath.value = '/'
 
   if (!rooms.value.length) {
-    loading.value = true
     await bootstrap()
-    connectActiveRoomEvents(activeRoomId.value)
   }
 }
 
@@ -273,7 +298,14 @@ function shouldFadeCommentPreview(prediction: Prediction) {
 }
 
 function showsLiveRoomIcon(room: Room) {
-  return room.status === 'live' || room.id === activeRoomId.value
+  return room.matchStatus === 'live'
+}
+
+function roomStatusLabel(room: Room) {
+  if (room.matchStatus === 'live') return 'Live match'
+  if (room.roomStatus === 'closed') return 'Closed room'
+  if (room.matchStatus === 'finished') return 'Finished match'
+  return 'Upcoming match'
 }
 
 function isReplying(predictionId: string, commentId: string) {
@@ -329,6 +361,8 @@ async function submitPrediction() {
     patchRoom(response.room)
     predictionForm.comment = ''
     closePredictionModal()
+  } catch (error) {
+    showMutationError(errorText(error, 'Prediction did not post. Try again.'))
   } finally {
     submittingPrediction.value = false
   }
@@ -356,7 +390,7 @@ async function submitLike(predictionId: string, authorId?: string) {
   } catch (error) {
     likedPredictions.value = previousLikes
     setStoredLikes(previousLikes)
-    throw error
+    showMutationError(errorText(error, 'Like did not update. Try again.'))
   }
 }
 
@@ -421,8 +455,8 @@ async function submitReply(commentId: string) {
     replyDrafts[commentId] = ''
     activeReplyTarget.value = null
   } catch (error) {
-    replyErrors[commentId] = 'Reply did not send. Try again.'
-    throw error
+    replyErrors[commentId] = errorText(error, 'Reply did not send. Try again.')
+    showMutationError(replyErrors[commentId])
   } finally {
     const nextSubmitting = new Set(submittingReplies.value)
     nextSubmitting.delete(commentId)
@@ -526,23 +560,96 @@ function handleSocketEvent(event: MessageEvent<string>) {
 }
 
 function connectActiveRoomEvents(roomId: string) {
-  if (!roomId || reconnectingRoomId === roomId) return
+  if (!roomId || isNotFound.value) return
 
-  reconnectingRoomId = roomId
-  ws.value?.close()
-  ws.value = connectRoomEvents(roomId, handleSocketEvent)
+  socketToken += 1
+  const token = socketToken
+  if (reconnectTimer) window.clearTimeout(reconnectTimer)
+
+  ws.value?.close(1000, 'Switching rooms')
+  realtimeStatus.value = 'connecting'
+
+  const socket = connectRoomEvents(roomId, handleSocketEvent)
+  ws.value = socket
+
+  socket.addEventListener('open', () => {
+    if (token !== socketToken) return
+    reconnectAttempt = 0
+    realtimeStatus.value = 'live'
+  })
+
+  socket.addEventListener('close', () => {
+    if (token !== socketToken || isNotFound.value) return
+    ws.value = null
+    scheduleReconnect(roomId)
+  })
+
+  socket.addEventListener('error', () => {
+    if (token !== socketToken) return
+    realtimeStatus.value = 'reconnecting'
+  })
 }
 
-async function bootstrap() {
+function scheduleReconnect(roomId: string) {
+  realtimeStatus.value = 'reconnecting'
+  reconnectAttempt += 1
+
+  void refreshRooms({ preserveActiveRoom: true, silent: true }).then((loaded) => {
+    if (isNotFound.value) {
+      return
+    }
+
+    if (!loaded) {
+      realtimeStatus.value = 'offline'
+      const delay = Math.min(8000, 900 * reconnectAttempt)
+      reconnectTimer = window.setTimeout(() => {
+        scheduleReconnect(roomId)
+      }, delay)
+      return
+    }
+
+    if (activeRoomId.value !== roomId) return
+
+    const delay = Math.min(6000, 700 * reconnectAttempt)
+    reconnectTimer = window.setTimeout(() => {
+      connectActiveRoomEvents(roomId)
+    }, delay)
+  })
+}
+
+async function refreshRooms(options: { preserveActiveRoom?: boolean; silent?: boolean } = {}) {
+  const hadRooms = rooms.value.length > 0
+  if (options.silent || hadRooms) {
+    refreshingRooms.value = true
+  } else {
+    loading.value = true
+  }
+
   try {
     const response = await fetchBootstrap()
     rooms.value = response.rooms
-    activeRoomId.value = response.rooms[0]?.id ?? ''
+    const currentRoomExists = response.rooms.some((room) => room.id === activeRoomId.value)
+    if (!options.preserveActiveRoom || !currentRoomExists) {
+      activeRoomId.value = response.rooms.find((room) => room.isFeatured)?.id ?? response.rooms[0]?.id ?? ''
+    }
+    errorMessage.value = ''
+    return true
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Unable to load rooms'
+    const message = errorText(error, 'Unable to load rooms')
+    if (hadRooms || options.silent) {
+      showMutationError(message)
+    } else {
+      errorMessage.value = message
+    }
+    return false
   } finally {
     loading.value = false
+    refreshingRooms.value = false
   }
+}
+
+async function bootstrap() {
+  return refreshRooms()
 }
 
 onMounted(async () => {
@@ -551,7 +658,6 @@ onMounted(async () => {
     loading.value = false
   } else {
     await bootstrap()
-    connectActiveRoomEvents(activeRoomId.value)
   }
   document.addEventListener('click', handleGlobalClick)
   window.addEventListener('popstate', handleRouteChange)
@@ -568,6 +674,13 @@ onBeforeUnmount(() => {
   if (identityPromptTimer) {
     window.clearTimeout(identityPromptTimer)
   }
+  if (mutationErrorTimer) {
+    window.clearTimeout(mutationErrorTimer)
+  }
+  if (reconnectTimer) {
+    window.clearTimeout(reconnectTimer)
+  }
+  socketToken += 1
   ws.value?.close()
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('popstate', handleRouteChange)
@@ -622,6 +735,18 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </header>
+
+    <Transition name="status-toast">
+      <div
+        v-if="statusNotice"
+        class="fixed right-4 top-4 z-[900] inline-flex min-h-10 max-w-[min(420px,calc(100%-32px))] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_94%,var(--accent)_6%)] px-3.5 py-2 text-xs font-[720] text-[var(--text)] shadow-[0_12px_28px_rgba(0,0,0,0.14)] backdrop-blur-md max-md:left-3 max-md:right-3 max-md:top-3"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_12%,transparent)]" :class="refreshingRooms || realtimeStatus === 'connecting' || realtimeStatus === 'reconnecting' ? 'animate-pulse' : ''"></span>
+        <span>{{ statusNotice }}</span>
+      </div>
+    </Transition>
 
     <section
       v-if="isNotFound"
@@ -782,7 +907,58 @@ onBeforeUnmount(() => {
       </aside>
     </section>
 
-    <div v-else-if="errorMessage" class="py-14 text-center text-[var(--muted)]">{{ errorMessage }}</div>
+    <section v-else-if="errorMessage" class="grid min-h-[420px] place-items-center rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-8 text-center shadow-[var(--card-shadow)]">
+      <div class="grid max-w-[440px] justify-items-center gap-3">
+        <div class="inline-grid h-14 w-14 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] text-[var(--accent)]">
+          <svg class="ph-icon h-7 w-7" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+            <path d="M128 84v52"></path>
+            <path d="M128 176h.01"></path>
+            <path d="M24 128a104 104 0 1 0 208 0 104 104 0 0 0-208 0Z"></path>
+          </svg>
+        </div>
+        <h1 class="m-0 text-3xl font-black leading-tight text-[var(--text)]">Rooms did not load</h1>
+        <p class="m-0 text-sm leading-[1.55] text-[var(--muted)]">{{ errorMessage }}</p>
+        <button
+          class="mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-75 disabled:active:translate-y-0"
+          type="button"
+          :disabled="loading || refreshingRooms"
+          @click="bootstrap"
+        >
+          <svg v-if="loading || refreshingRooms" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+            <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path>
+          </svg>
+          <span>{{ loading || refreshingRooms ? 'Retrying...' : 'Try again' }}</span>
+        </button>
+      </div>
+    </section>
+    <section v-else-if="!rooms.length" class="grid min-h-[420px] place-items-center rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-8 text-center shadow-[var(--card-shadow)]">
+      <div class="grid max-w-[480px] justify-items-center gap-3">
+        <div class="inline-grid h-14 w-14 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] text-[var(--accent)]">
+          <svg class="ph-icon h-7 w-7" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+            <path d="M40 84h176"></path>
+            <path d="M64 132h128"></path>
+            <path d="M92 180h72"></path>
+          </svg>
+        </div>
+        <h1 class="m-0 text-3xl font-black leading-tight text-[var(--text)]">No rooms yet</h1>
+        <p class="m-0 text-sm leading-[1.55] text-[var(--muted)]">There are no fixtures in this cycle right now. Refresh when the next room slate is ready.</p>
+        <button
+          class="mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-4 text-sm font-extrabold text-[var(--accent)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] active:translate-y-px disabled:cursor-wait disabled:opacity-70 disabled:active:translate-y-0"
+          type="button"
+          :disabled="refreshingRooms"
+          @click="bootstrap"
+        >
+          <svg class="ph-icon h-4 w-4" :class="refreshingRooms ? 'animate-spin' : ''" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+            <path d="M200 72v48h-48"></path>
+            <path d="M56 184v-48h48"></path>
+            <path d="M185.8 112A64 64 0 0 0 77 82.2L56 104"></path>
+            <path d="M70.2 144A64 64 0 0 0 179 173.8L200 152"></path>
+          </svg>
+          <span>{{ refreshingRooms ? 'Checking...' : 'Refresh rooms' }}</span>
+        </button>
+      </div>
+    </section>
     <section v-else-if="activeRoom" class="grid items-start gap-[18px] min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
       <div class="grid gap-[18px] max-md:gap-3">
         <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:rounded-[10px]">
@@ -1059,31 +1235,48 @@ onBeforeUnmount(() => {
               </span>
 
               <span class="inline-flex min-h-8 min-w-11 items-center justify-center gap-2.5 text-[var(--muted)]">
-                <svg
+                <span
                   v-if="showsLiveRoomIcon(room)"
-                  class="ph-icon h-[17px] w-[17px] text-[var(--accent)]"
-                  viewBox="0 0 256 256"
-                  :aria-label="room.status === 'live' ? 'Live room' : 'Current room'"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  stroke-width="12"
+                  class="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.04em] text-[var(--accent)]"
+                  :aria-label="roomStatusLabel(room)"
                 >
-                  <path d="M136 224c40 0 72-27.5 72-67.8 0-24.8-13.3-45.8-29.7-62.8-3.9-4.1-10.7-1.5-10.9 4.2-.4 10.1-3.6 18.9-9.6 26.1-2.2-31.5-17.7-60-45.4-84.9-4.3-3.9-11.2-.7-10.8 5.1 1.2 20.5-3.6 37-14.2 49.5-5.4 6.3-12 11.5-18.5 16.9C56 121.1 48 135.6 48 156.2 48 196.5 96 224 136 224Z"></path>
-                  <path d="M137.5 204c19.6 0 35.5-13.7 35.5-34.6 0-13.1-6.3-23.9-15.6-34.4-1.9-2.1-5.5-.9-5.7 2-.5 8.5-4.1 15.9-10.7 22-1.6-15.9-9.5-29.8-23.5-41.4-2.3-1.9-5.7-.1-5.4 2.9 1.1 13-2.2 23.8-9.8 32.4-5.9 6.7-10.3 14.2-10.3 25.2 0 15.6 16.8 25.9 45.5 25.9Z" fill="var(--panel)" stroke="none"></path>
+                  <span class="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_14%,transparent)]"></span>
+                  <span>live</span>
+                </span>
+                <svg
+                  v-else-if="room.roomStatus === 'closed'"
+                  class="ph-icon h-4 w-4 text-[color:color-mix(in_srgb,var(--text)_78%,var(--accent))]"
+                  viewBox="0 0 256 256"
+                  :aria-label="roomStatusLabel(room)"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="18"
+                >
+                  <rect x="48" y="108" width="160" height="104" rx="16"></rect>
+                  <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
+                </svg>
+                <svg
+                  v-else-if="room.matchStatus === 'finished'"
+                  class="ph-icon h-4 w-4 text-[color:color-mix(in_srgb,var(--text)_78%,var(--accent))]"
+                  viewBox="0 0 256 256"
+                  :aria-label="roomStatusLabel(room)"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="20"
+                >
+                  <path d="m48 132 52 52L208 72"></path>
                 </svg>
                 <svg
                   v-else
                   class="ph-icon h-4 w-4 text-[color:color-mix(in_srgb,var(--text)_78%,var(--accent))]"
                   viewBox="0 0 256 256"
-                  aria-hidden="true"
+                  :aria-label="roomStatusLabel(room)"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="18"
                 >
-                  <path d="M80 80h116"></path>
-                  <path d="m164 44 36 36-36 36"></path>
-                  <path d="M176 176H60"></path>
-                  <path d="m92 140-36 36 36 36"></path>
+                  <circle cx="128" cy="128" r="84"></circle>
+                  <path d="M128 76v56l38 22"></path>
                 </svg>
               </span>
             </button>

@@ -352,6 +352,19 @@ textarea:focus {
   transform: translateY(-3px);
 }
 
+.status-toast-enter-active,
+.status-toast-leave-active {
+  transition:
+    opacity 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+
+.status-toast-enter-from,
+.status-toast-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
 .sheet-flow-enter-active,
 .sheet-flow-leave-active {
   transition: opacity 220ms var(--ease);

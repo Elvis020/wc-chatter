@@ -5,7 +5,16 @@ const wsBaseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8787/ws'
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`)
+    let message = `Request failed with ${response.status}`
+
+    try {
+      const body = (await response.json()) as { error?: { message?: string } }
+      message = body.error?.message || message
+    } catch {
+      // Keep the status-based fallback when the response is not JSON.
+    }
+
+    throw new Error(message)
   }
 
   return (await response.json()) as T
