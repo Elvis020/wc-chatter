@@ -1,0 +1,43 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "wc-chatter-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "APP_ORIGIN": "http://localhost:5173"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM_HUB",
+        "class_name": "RoomHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RoomHub"]
+    }
+  ],
+  "env": {
+    "production": {
+      "vars": {
+        "APP_ORIGIN": "https://your-frontend-domain.example"
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ROOM_HUB",
+            "class_name": "RoomHub"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,200 @@
+import { Hono, type Context } from 'hono'
+import type { ApiEvent, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput } from '@wc-chatter/shared'
+import { ApiError, errorResponse } from './errors.js'
+import type { RoomHub } from './room-hub.js'
+import { createStore } from './store.js'
+import { createSupabaseStore, hasSupabaseConfig, supabaseConfigFromEnv, type SupabaseEnv } from './supabase-store.js'
+import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } from './validation.js'
+
+type RuntimeEnv = Env & SupabaseEnv
+type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabaseStore>
+
+const app = new Hono<{ Bindings: RuntimeEnv }>()
+const fallbackStore = createStore()
+
+function storeFor(env: SupabaseEnv): ApiStore {
+  return hasSupabaseConfig(env) ? createSupabaseStore(supabaseConfigFromEnv(env)) : fallbackStore
+}
+
+async function readJson(c: Context) {
+  try {
+    return await c.req.json()
+  } catch {
+    throw new ApiError('BAD_REQUEST', 'Request body must be valid JSON.', 400)
+  }
+}
+
+function getRooms(store: ApiStore) {
+  return Promise.resolve(store.getRooms())
+}
+
+function appOrigin(env: RuntimeEnv) {
+  return env.APP_ORIGIN || (typeof process === 'undefined' ? '' : process.env.APP_ORIGIN) || '*'
+}
+
+async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: ApiEvent) {
+  if (!env.ROOM_HUB) {
+    store.broadcast(event)
+    return
+  }
+
+  const stub = env.ROOM_HUB.getByName(event.room.id) as DurableObjectStub<RoomHub>
+  await stub.broadcast(event)
+}
+
+function parsePredictionInput(input: unknown): CreatePredictionInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  return {
+    authorId: normalizeUserId(body.authorId),
+    name: normalizeUsername(body.name),
+    homeScore: normalizeScore(body.homeScore, 'Home score'),
+    awayScore: normalizeScore(body.awayScore, 'Away score'),
+    comment: normalizeText(body.comment, 'Comment'),
+  }
+}
+
+function parseLikeInput(input: unknown): ToggleLikeInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  if (typeof body.liked !== 'boolean') {
+    throw new ApiError('VALIDATION_ERROR', 'Liked must be true or false.', 400)
+  }
+
+  return {
+    userId: normalizeUserId(body.userId),
+    liked: body.liked,
+  }
+}
+
+function parseReplyInput(input: unknown): ReplyInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  const text = normalizeText(body.text, 'Reply')
+  if (!text) {
+    throw new ApiError('VALIDATION_ERROR', 'Reply is required.', 400)
+  }
+
+  return {
+    authorId: normalizeUserId(body.authorId),
+    name: normalizeUsername(body.name),
+    text,
+  }
+}
+
+app.use(
+  '*',
+  async (c, next) => {
+    const origin = c.req.header('Origin') || appOrigin(c.env)
+    c.header('Access-Control-Allow-Origin', origin)
+    c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    c.header('Access-Control-Allow-Headers', 'Content-Type')
+
+    if (c.req.method === 'OPTIONS') {
+      return c.body(null, 204)
+    }
+
+    await next()
+  },
+)
+
+app.get('/health', (c) => c.json({ ok: true as const }))
+
+app.get('/api/bootstrap', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    return c.json({
+      rooms: await getRooms(store),
+      themes: store.getThemes(),
+      generatedAt: new Date().toISOString(),
+    })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.post('/api/rooms/:roomId/predictions', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const roomId = c.req.param('roomId')
+    const payload = parsePredictionInput(await readJson(c))
+    const room = await store.addPrediction(roomId, payload)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Room not found.', 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.post('/api/predictions/:predictionId/likes', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const predictionId = c.req.param('predictionId')
+    const payload = parseLikeInput(await readJson(c))
+    const room = await store.setPredictionLike(predictionId, payload.userId, payload.liked)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.post('/api/comments/:commentId/replies', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const commentId = c.req.param('commentId')
+    const payload = parseReplyInput(await readJson(c))
+    const room = await store.addReply(commentId, payload)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Comment not found.', 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.get('/ws/:roomId', async (c) => {
+  const roomId = c.req.param('roomId')
+  if (!envHasRoomHub(c.env)) {
+    return c.json({ error: { code: 'NOT_AVAILABLE', message: 'Realtime requires the Cloudflare Worker runtime.' } }, 501)
+  }
+
+  const stub = c.env.ROOM_HUB.getByName(roomId)
+  return stub.fetch(c.req.raw)
+})
+
+function envHasRoomHub(env: RuntimeEnv): env is RuntimeEnv & { ROOM_HUB: DurableObjectNamespace } {
+  return !!env.ROOM_HUB
+}
+
+export { app }
