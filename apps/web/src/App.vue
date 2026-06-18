@@ -17,6 +17,7 @@ import {
 const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const COMMENT_PREVIEW_LIMIT = 3
 const ROOM_PAGE_SIZE = 4
+const ROOM_REFRESH_MS = 60_000
 type FeedSortMode = 'likes' | 'comments'
 type RealtimeStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline'
 type PendingIdentityAction =
@@ -69,8 +70,10 @@ const replyErrors = reactive<Record<string, string>>({})
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
+let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 let reconnectAttempt = 0
 let socketToken = 0
+let roomsRefreshInFlight = false
 
 const predictionForm = reactive({
   homeScore: 2,
@@ -226,6 +229,14 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+function roomLoadReason() {
+  return 'We could not load the room board just now. Give it a moment and try again.'
+}
+
+function roomLoadRecoveryHint() {
+  return 'The match rooms are still here. We are just having trouble bringing the latest board onto the screen.'
+}
+
 function showMutationError(message: string) {
   mutationError.value = message
   if (mutationErrorTimer) window.clearTimeout(mutationErrorTimer)
@@ -298,14 +309,40 @@ function shouldFadeCommentPreview(prediction: Prediction) {
 }
 
 function showsLiveRoomIcon(room: Room) {
-  return room.matchStatus === 'live'
+  return room.currentScore?.status === 'live' || room.matchStatus === 'live'
 }
 
 function roomStatusLabel(room: Room) {
+  if (room.currentScore) {
+    return `${room.currentScore.status === 'finished' ? 'Finished match' : room.currentScore.status === 'live' ? 'Live match' : 'Score'}: ${room.home.name} ${room.currentScore.home}, ${room.away.name} ${room.currentScore.away}`
+  }
   if (room.matchStatus === 'live') return 'Live match'
   if (room.roomStatus === 'closed') return 'Closed room'
   if (room.matchStatus === 'finished') return 'Finished match'
   return 'Upcoming match'
+}
+
+function roomStatusText(room: Room) {
+  if (room.currentScore) {
+    const prefix = room.currentScore.status === 'finished' ? 'FT' : room.currentScore.status === 'live' ? 'Live' : 'Score'
+    return `${prefix} ${room.currentScore.home}-${room.currentScore.away}`
+  }
+  if (room.matchStatus === 'live') return 'Live'
+  if (room.matchStatus === 'finished') return 'Played'
+  if (room.roomStatus === 'closed') return 'Closed'
+  return 'Upcoming'
+}
+
+function roomStatusClass(room: Room) {
+  if (room.currentScore?.status === 'live' || room.matchStatus === 'live') {
+    return 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]'
+  }
+
+  if (room.currentScore?.status === 'finished' || room.matchStatus === 'finished') {
+    return 'border-[color:color-mix(in_srgb,var(--muted)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--muted)_8%,transparent)] text-[var(--muted)]'
+  }
+
+  return 'border-[color:color-mix(in_srgb,var(--line)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_52%,transparent)] text-[var(--soft)]'
 }
 
 function isReplying(predictionId: string, commentId: string) {
@@ -618,10 +655,12 @@ function scheduleReconnect(roomId: string) {
 }
 
 async function refreshRooms(options: { preserveActiveRoom?: boolean; silent?: boolean } = {}) {
+  if (roomsRefreshInFlight) return false
+  roomsRefreshInFlight = true
   const hadRooms = rooms.value.length > 0
-  if (options.silent || hadRooms) {
+  if (!options.silent && hadRooms) {
     refreshingRooms.value = true
-  } else {
+  } else if (!options.silent) {
     loading.value = true
   }
 
@@ -636,15 +675,20 @@ async function refreshRooms(options: { preserveActiveRoom?: boolean; silent?: bo
     return true
   } catch (error) {
     const message = errorText(error, 'Unable to load rooms')
-    if (hadRooms || options.silent) {
+    if (options.silent) {
+      console.warn(message)
+    } else if (hadRooms) {
       showMutationError(message)
     } else {
       errorMessage.value = message
     }
     return false
   } finally {
-    loading.value = false
-    refreshingRooms.value = false
+    if (!options.silent) {
+      loading.value = false
+      refreshingRooms.value = false
+    }
+    roomsRefreshInFlight = false
   }
 }
 
@@ -663,11 +707,16 @@ onMounted(async () => {
   window.addEventListener('popstate', handleRouteChange)
   window.addEventListener('resize', positionThemeMenu)
   window.addEventListener('scroll', positionThemeMenu, { passive: true })
-  if (!isNotFound.value && !username.value) {
+  const shouldAutoPromptUsername = !window.matchMedia('(max-width: 767px)').matches
+  if (!isNotFound.value && !username.value && shouldAutoPromptUsername) {
     identityPromptTimer = window.setTimeout(() => {
       openIdentityPrompt('Choose a username when you are ready.')
     }, 650)
   }
+  roomRefreshTimer = window.setInterval(() => {
+    if (isNotFound.value || document.hidden) return
+    void refreshRooms({ preserveActiveRoom: true, silent: true })
+  }, ROOM_REFRESH_MS)
 })
 
 onBeforeUnmount(() => {
@@ -680,6 +729,9 @@ onBeforeUnmount(() => {
   if (reconnectTimer) {
     window.clearTimeout(reconnectTimer)
   }
+  if (roomRefreshTimer) {
+    window.clearInterval(roomRefreshTimer)
+  }
   socketToken += 1
   ws.value?.close()
   document.removeEventListener('click', handleGlobalClick)
@@ -690,7 +742,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="mx-auto w-[min(1180px,calc(100%-32px))] px-0 pt-6 pb-[42px] max-md:w-[min(100%,calc(100%-24px))] max-md:pt-[18px] max-md:pb-7">
+  <main class="mx-auto w-[min(1180px,calc(100%-32px))] px-0 pt-6 pb-[42px] max-md:w-[min(100%,calc(100%-24px))] max-md:pt-[18px] max-md:pb-[calc(96px+env(safe-area-inset-bottom))]">
     <header class="mb-[34px] flex items-center justify-between gap-4">
       <div class="flex items-center">
         <div class="inline-flex items-baseline gap-2 whitespace-nowrap text-[clamp(22px,2.2vw,30px)] leading-none font-black text-[var(--accent)]" aria-label="turntabl score room">turntabl <span class="font-[750] text-[var(--text)]">score room</span></div>
@@ -907,29 +959,82 @@ onBeforeUnmount(() => {
       </aside>
     </section>
 
-    <section v-else-if="errorMessage" class="grid min-h-[420px] place-items-center rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-8 text-center shadow-[var(--card-shadow)]">
-      <div class="grid max-w-[440px] justify-items-center gap-3">
-        <div class="inline-grid h-14 w-14 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] text-[var(--accent)]">
-          <svg class="ph-icon h-7 w-7" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
-            <path d="M128 84v52"></path>
-            <path d="M128 176h.01"></path>
-            <path d="M24 128a104 104 0 1 0 208 0 104 104 0 0 0-208 0Z"></path>
-          </svg>
+    <section v-else-if="errorMessage" class="relative grid min-h-[calc(100svh-126px)] overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_76%,transparent)] p-[clamp(22px,5vw,64px)] max-md:min-h-[calc(100svh-100px)] max-md:rounded-[10px] max-md:p-4">
+      <div class="pointer-events-none absolute inset-0 opacity-60" aria-hidden="true">
+        <div class="absolute left-1/2 top-0 h-full w-px bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]"></div>
+        <div class="absolute left-1/2 top-1/2 h-[min(42vw,480px)] w-[min(42vw,480px)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]"></div>
+        <div class="absolute inset-x-[clamp(24px,8vw,120px)] top-1/2 h-px bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)]"></div>
+      </div>
+
+      <div class="relative mx-auto grid h-full w-full max-w-[1040px] content-center justify-items-center gap-[clamp(22px,4vw,42px)]">
+        <div class="relative overflow-hidden rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] p-[clamp(20px,3vw,34px)] shadow-[0_24px_58px_color-mix(in_srgb,var(--accent)_11%,transparent)]">
+          <div class="absolute inset-0 opacity-[0.42]" aria-hidden="true">
+            <div class="absolute left-1/2 top-[-40%] h-[180%] w-px bg-[color:color-mix(in_srgb,var(--accent)_20%,transparent)]"></div>
+            <div class="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,transparent)]"></div>
+            <div class="absolute inset-x-8 top-1/2 h-px bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)]"></div>
+          </div>
+
+          <div class="relative grid gap-5">
+            <div class="flex items-center justify-between gap-3">
+              <span class="inline-flex h-8 items-center rounded-md border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] px-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[var(--muted)]">Board check</span>
+              <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-black text-[var(--accent-text)]">!</span>
+            </div>
+
+            <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center justify-center gap-4 text-center">
+              <div class="grid justify-items-center gap-2">
+                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_10%,transparent)]">?</div>
+                <span class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Rooms</span>
+              </div>
+              <div class="inline-flex items-center gap-[clamp(8px,1.6vw,18px)] [font-variant-numeric:tabular-nums]">
+                <span class="text-[clamp(76px,10vw,148px)] font-black leading-none text-[var(--text)]">0</span>
+                <span class="versus text-[clamp(22px,3vw,34px)] font-semibold leading-none">v</span>
+                <span class="text-[clamp(76px,10vw,148px)] font-black leading-none text-[var(--text)]">0</span>
+              </div>
+              <div class="grid justify-items-center gap-2">
+                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_10%,transparent)]">?</div>
+                <span class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Board</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-t border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] pt-4">
+              <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-extrabold uppercase text-[var(--muted)]">Loading</span>
+              <span class="text-xs font-extrabold uppercase text-[var(--accent)]">vs</span>
+              <span class="min-w-0 overflow-hidden text-right text-ellipsis whitespace-nowrap text-xs font-extrabold uppercase text-[var(--muted)]">Latest rooms</span>
+            </div>
+          </div>
         </div>
-        <h1 class="m-0 text-3xl font-black leading-tight text-[var(--text)]">Rooms did not load</h1>
-        <p class="m-0 text-sm leading-[1.55] text-[var(--muted)]">{{ errorMessage }}</p>
-        <button
-          class="mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-75 disabled:active:translate-y-0"
-          type="button"
-          :disabled="loading || refreshingRooms"
-          @click="bootstrap"
-        >
-          <svg v-if="loading || refreshingRooms" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">
-            <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
-            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path>
-          </svg>
-          <span>{{ loading || refreshingRooms ? 'Retrying...' : 'Try again' }}</span>
-        </button>
+
+        <div class="grid max-w-[760px] justify-items-center gap-5 text-center">
+          <div class="grid gap-2">
+            <p class="m-0 text-xs font-extrabold uppercase tracking-[0.12em] text-[var(--accent)]">Board check</p>
+            <h1 class="m-0 text-[clamp(48px,7vw,96px)] font-black leading-[0.92] text-[var(--text)]">Room board needs a refresh</h1>
+            <p class="m-0 mx-auto max-w-[52ch] text-[clamp(15px,1.35vw,18px)] leading-[1.55] text-[var(--soft)]">{{ roomLoadReason() }}</p>
+          </div>
+
+          <div class="grid max-w-[560px] gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_48%,transparent)] p-4 text-center">
+            <div class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Current status</div>
+            <p class="m-0 text-sm leading-[1.55] text-[var(--soft)]">{{ roomLoadRecoveryHint() }}</p>
+          </div>
+
+          <button
+            class="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-75 disabled:active:translate-y-0"
+            type="button"
+            :disabled="loading || refreshingRooms"
+            @click="bootstrap"
+          >
+            <svg v-if="loading || refreshingRooms" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+              <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
+              <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path>
+            </svg>
+            <svg v-else class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+              <path d="M200 72v48h-48"></path>
+              <path d="M56 184v-48h48"></path>
+              <path d="M185.8 112A64 64 0 0 0 77 82.2L56 104"></path>
+              <path d="M70.2 144A64 64 0 0 0 179 173.8L200 152"></path>
+            </svg>
+            <span>{{ loading || refreshingRooms ? 'Retrying...' : 'Refresh room board' }}</span>
+          </button>
+        </div>
       </div>
     </section>
     <section v-else-if="!rooms.length" class="grid min-h-[420px] place-items-center rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-8 text-center shadow-[var(--card-shadow)]">
@@ -961,61 +1066,119 @@ onBeforeUnmount(() => {
     </section>
     <section v-else-if="activeRoom" class="grid items-start gap-[18px] min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
       <div class="grid gap-[18px] max-md:gap-3">
-        <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:rounded-[10px]">
-          <div class="relative z-[1] my-7 grid gap-[18px]">
-            <h1 class="grid max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 text-center md:gap-10">
-              <span class="grid min-w-0 justify-self-end justify-items-center gap-3 max-md:justify-self-center">
+        <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:p-4">
+          <div class="relative z-[1] my-7 grid gap-[18px] max-md:my-3 max-md:gap-3">
+            <h1 class="grid max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 text-center max-md:gap-2 md:gap-10">
+              <span class="grid min-w-0 justify-self-end justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
                 <span
                   v-if="hasSpriteFlag(activeRoom.home)"
-                  class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(110px,33.6vw,160px)]"
+                  class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
                   :class="flagClass(activeRoom.home)"
                   :aria-label="`${activeRoom.home.name} flag`"
                 ></span>
                 <span
                   v-else
-                  class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(110px,33.6vw,160px)]"
+                  class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
                   :aria-label="`${activeRoom.home.name} flag`"
                 >{{ activeRoom.home.flag || activeRoom.home.code }}</span>
-                <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[13ch] max-md:text-[clamp(12px,3vw,15px)]" :title="activeRoom.home.name">{{ activeRoom.home.name }}</span>
+                <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[12ch] max-md:overflow-hidden max-md:text-ellipsis max-md:whitespace-nowrap max-md:text-xs" :title="activeRoom.home.name">{{ activeRoom.home.name }}</span>
               </span>
               <span class="versus self-center text-[clamp(20px,2.6vw,32px)] font-semibold leading-none text-[var(--accent)] max-md:text-[clamp(18px,5vw,24px)]">vs</span>
-              <span class="grid min-w-0 justify-self-start justify-items-center gap-3 max-md:justify-self-center">
+              <span class="grid min-w-0 justify-self-start justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
                 <span
                   v-if="hasSpriteFlag(activeRoom.away)"
-                  class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(110px,33.6vw,160px)]"
+                  class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
                   :class="flagClass(activeRoom.away)"
                   :aria-label="`${activeRoom.away.name} flag`"
                 ></span>
                 <span
                   v-else
-                  class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(110px,33.6vw,160px)]"
+                  class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
                   :aria-label="`${activeRoom.away.name} flag`"
                 >{{ activeRoom.away.flag || activeRoom.away.code }}</span>
-                <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[13ch] max-md:text-[clamp(12px,3vw,15px)]" :title="activeRoom.away.name">{{ activeRoom.away.name }}</span>
+                <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[12ch] max-md:overflow-hidden max-md:text-ellipsis max-md:whitespace-nowrap max-md:text-xs" :title="activeRoom.away.name">{{ activeRoom.away.name }}</span>
               </span>
             </h1>
 
-            <div class="mt-0.5 grid w-full grid-cols-3 gap-0 border-t border-[var(--line)] pt-4" aria-label="Event stats">
-              <div class="min-h-[58px] px-5">
-                <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95]">{{ activeRoom.predictions.length }}</strong>
-                <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)]">Predictions</span>
+            <div class="mt-0.5 grid w-full grid-cols-3 gap-0 border-t border-[var(--line)] pt-4 max-md:pt-3" aria-label="Event stats">
+              <div class="min-h-[58px] px-5 max-md:min-h-[46px] max-md:px-2">
+                <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] max-md:text-[26px]">{{ activeRoom.predictions.length }}</strong>
+                <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Predictions</span>
               </div>
-              <div class="min-h-[58px] border-l border-[var(--line)] px-5">
-                <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95]">{{ totalLikes }}</strong>
-                <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)]">Likes</span>
+              <div class="min-h-[58px] border-l border-[var(--line)] px-5 max-md:min-h-[46px] max-md:px-2">
+                <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] max-md:text-[26px]">{{ totalLikes }}</strong>
+                <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Likes</span>
               </div>
-              <div class="min-h-[58px] border-l border-[var(--line)] px-5">
-                <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95]">{{ totalComments }}</strong>
-                <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)]">Replies</span>
+              <div class="min-h-[58px] border-l border-[var(--line)] px-5 max-md:min-h-[46px] max-md:px-2">
+                <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] max-md:text-[26px]">{{ totalComments }}</strong>
+                <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Replies</span>
               </div>
             </div>
           </div>
 
           <p
-            class="mt-1 text-center text-[15px] leading-[1.45] font-medium text-[var(--muted)] max-md:text-[14px]"
+            class="mt-1 text-center text-[15px] leading-[1.45] font-medium text-[var(--muted)] max-md:hidden"
           >
             Drop your score and let the room react.
           </p>
+        </section>
+
+        <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 shadow-[var(--card-shadow)] md:hidden" aria-label="Mobile chat rooms">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <svg class="ph-icon h-4 w-4 text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                <path d="M84 176H48a16 16 0 0 1-16-16V64a16 16 0 0 1 16-16h160a16 16 0 0 1 16 16v96a16 16 0 0 1-16 16h-72l-40 32Z"></path>
+                <path d="M84 96h88"></path>
+                <path d="M84 128h56"></path>
+              </svg>
+              <h2 class="m-0 text-base font-[760] leading-tight text-[var(--text)]">Chat rooms</h2>
+            </div>
+            <span class="text-[11px] font-bold text-[var(--muted)]">{{ rooms.length }} rooms</span>
+          </div>
+
+          <div class="-mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-1" aria-label="Match rooms for the current cycle">
+            <button
+              v-for="room in rooms"
+              :key="room.id"
+              class="grid min-h-[84px] min-w-[154px] snap-start content-between rounded-lg border p-2.5 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
+              :class="[
+                room.id === activeRoomId ? 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))]' : 'border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_46%,transparent)]',
+                room.matchStatus === 'finished' ? 'opacity-80' : '',
+              ]"
+              type="button"
+              @click="setActiveRoom(room.id)"
+            >
+              <span class="grid gap-1.5">
+                <span class="flex items-center gap-1.5 text-[15px] font-[850] leading-none text-[var(--text)]">
+                  <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
+                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
+                  <span>{{ room.home.code }}</span>
+                  <span class="ref-versus">v</span>
+                  <span>{{ room.away.code }}</span>
+                  <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
+                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
+                </span>
+              </span>
+
+              <span
+                class="inline-flex min-h-7 w-fit min-w-8 items-center justify-center rounded-md text-[color:color-mix(in_srgb,var(--accent)_62%,var(--text))]"
+                :aria-label="roomStatusLabel(room)"
+              >
+                <span v-if="showsLiveRoomIcon(room)" class="inline-flex items-center gap-1.5 text-[11px] font-black uppercase leading-none text-[var(--accent)]">
+                  <span class="h-2.5 w-2.5 rounded-full bg-current shadow-[0_0_0_5px_color-mix(in_srgb,var(--accent)_12%,transparent)]" aria-hidden="true"></span>
+                  <span>Live</span>
+                </span>
+                <svg v-else-if="room.currentScore?.status === 'finished' || room.matchStatus === 'finished' || room.roomStatus === 'closed'" class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                  <rect x="48" y="108" width="160" height="104" rx="16"></rect>
+                  <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
+                </svg>
+                <svg v-else class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                  <circle cx="128" cy="128" r="84"></circle>
+                  <path d="M128 76v56l38 22"></path>
+                </svg>
+              </span>
+            </button>
+          </div>
         </section>
 
         <section class="grid gap-[18px] max-md:gap-3" aria-label="Prediction feed">
@@ -1026,7 +1189,7 @@ onBeforeUnmount(() => {
               <span class="text-[15px] font-medium text-[var(--muted)]">Sorted by room energy</span>
             </h2>
             <button
-              class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_84%,transparent)] px-3 text-[13px] font-[760] text-[var(--soft)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent)] transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--text)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:text-[var(--muted)] disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:active:translate-y-0"
+              class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_84%,transparent)] px-3 text-[13px] font-[760] text-[var(--soft)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent)] transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--text)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:text-[var(--muted)] disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:active:translate-y-0 md:min-h-9"
               type="button"
               :aria-label="nextFeedSortLabel"
               :aria-pressed="feedSortMode === 'comments'"
@@ -1050,7 +1213,31 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <Transition name="room-feed" mode="out-in">
+          <div
+            v-if="!sortedPredictions.length"
+            class="grid justify-items-center gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-5 text-center shadow-[var(--card-shadow)] max-md:rounded-[10px] max-md:p-4"
+          >
+            <div class="inline-grid h-12 w-12 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] text-[var(--accent)]">
+              <svg class="ph-icon h-6 w-6" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                <path d="M56 184h144"></path>
+                <path d="M72 136h112"></path>
+                <path d="M96 88h64"></path>
+              </svg>
+            </div>
+            <div class="grid gap-1">
+              <h3 class="m-0 text-lg font-black leading-tight text-[var(--text)]">No predictions yet</h3>
+              <p class="m-0 max-w-[38ch] text-sm leading-[1.5] text-[var(--muted)]">Be first in the room with a score people can argue with.</p>
+            </div>
+            <button
+              class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px"
+              type="button"
+              @click="openPredictionModal"
+            >
+              Drop your score
+            </button>
+          </div>
+
+          <Transition v-else name="room-feed" mode="out-in">
             <TransitionGroup :key="activeRoom.id" name="prediction-list" tag="div" class="grid gap-2.5 max-md:gap-3">
               <article
                 v-for="item in sortedPredictions"
@@ -1136,7 +1323,7 @@ onBeforeUnmount(() => {
 
               <div class="grid w-[54px] flex-none content-start gap-1.5 justify-self-end max-md:w-auto max-md:gap-1">
                 <button
-                  class="group inline-flex min-h-8 min-w-[54px] items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_70%,var(--muted))] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-[0.55] disabled:active:translate-y-0"
+                  class="group inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_70%,var(--muted))] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-[0.55] disabled:active:translate-y-0 md:min-h-8 md:min-w-[54px]"
                   :class="likedPredictions.has(item.id) ? 'text-[var(--accent)]' : ''"
                   type="button"
                   :aria-label="`Like prediction from ${item.name}`"
@@ -1149,7 +1336,7 @@ onBeforeUnmount(() => {
                 </button>
 
                 <button
-                  class="inline-flex min-h-8 min-w-[54px] items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] active:translate-y-px"
+                  class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] active:translate-y-px md:min-h-8 md:min-w-[54px]"
                   :class="leadComment(item) && isReplying(item.id, leadComment(item)!.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
                   type="button"
                   :aria-expanded="leadComment(item) ? String(isReplying(item.id, leadComment(item)!.id)) : 'false'"
@@ -1168,7 +1355,16 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
-      <aside class="grid gap-3 min-[981px]:sticky min-[981px]:top-4">
+      <button
+        v-if="sortedPredictions.length"
+        class="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-[850] hidden min-h-12 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)] shadow-[0_16px_34px_color-mix(in_srgb,var(--accent)_22%,transparent)] transition-[background-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px max-md:inline-flex"
+        type="button"
+        @click="openPredictionModal"
+      >
+        Drop your score
+      </button>
+
+      <aside class="grid gap-3 min-[981px]:sticky min-[981px]:top-4 max-md:hidden">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] shadow-[var(--card-shadow)] max-md:rounded-[10px]">
           <div class="relative grid gap-[14px] pt-[22px] max-md:pt-[18px]" :aria-label="`Most backed score: ${activeRoom.home.name} ${activeRoom.mostBacked.home}, ${activeRoom.away.name} ${activeRoom.mostBacked.away}`">
             <span class="absolute right-[-54px] top-[22px] z-20 inline-flex h-7 w-[184px] origin-center rotate-45 items-center justify-center border-y border-y-[color:color-mix(in_srgb,var(--accent)_42%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--panel))] px-3 text-center text-[10px] font-extrabold uppercase leading-none tracking-[0.08em] text-[color:color-mix(in_srgb,var(--accent)_88%,var(--text))] max-md:right-[-52px] max-md:top-[19px] max-md:h-6 max-md:w-[164px] max-md:text-[9px]">Top pick</span>
@@ -1220,34 +1416,40 @@ onBeforeUnmount(() => {
               v-for="room in visibleRooms"
               :key="room.id"
               class="grid min-h-[62px] w-full items-center gap-3 rounded-lg border-0 border-t border-t-[color:color-mix(in_srgb,var(--line)_86%,transparent)] bg-transparent p-3 text-left text-[var(--text)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] first:border-t-0 first:pt-0.5 hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] active:translate-y-px max-md:grid-cols-1 max-md:items-start"
-              :class="room.id === activeRoomId ? 'grid-cols-[minmax(0,1fr)_auto] border-t-transparent bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)] outline outline-1 outline-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,black)]' : 'grid-cols-[minmax(0,1fr)_auto]'"
+              :class="[
+                room.id === activeRoomId ? 'grid-cols-[minmax(0,1fr)_auto] border-t-transparent bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)] outline outline-1 outline-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,black)]' : 'grid-cols-[minmax(0,1fr)_auto]',
+                room.matchStatus === 'finished' ? 'text-[var(--muted)]' : '',
+              ]"
               type="button"
               @click="setActiveRoom(room.id)"
             >
-              <span class="inline-flex min-w-0 items-center gap-2 whitespace-nowrap font-[850]">
-                <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
-                <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
-                <span>{{ room.home.code }}</span>
+              <span class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap font-[850]">
+                <span class="grid min-w-0 grid-cols-[18px_auto] items-center gap-2">
+                  <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
+                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
+                  <span>{{ room.home.code }}</span>
+                </span>
                 <span class="ref-versus">v</span>
-                <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
-                <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
-                <span>{{ room.away.code }}</span>
+                <span class="grid min-w-0 grid-cols-[18px_auto] items-center gap-2">
+                  <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
+                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
+                  <span>{{ room.away.code }}</span>
+                </span>
               </span>
 
-              <span class="inline-flex min-h-8 min-w-11 items-center justify-center gap-2.5 text-[var(--muted)]">
-                <span
-                  v-if="showsLiveRoomIcon(room)"
-                  class="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.04em] text-[var(--accent)]"
-                  :aria-label="roomStatusLabel(room)"
-                >
-                  <span class="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_14%,transparent)]"></span>
-                  <span>live</span>
+              <span class="inline-flex min-h-8 min-w-11 items-center justify-center gap-2.5 text-[color:color-mix(in_srgb,var(--accent)_62%,var(--text))]" :aria-label="roomStatusLabel(room)">
+                <span v-if="showsLiveRoomIcon(room)" class="inline-flex items-center gap-1.5 text-[13px] font-black uppercase leading-none text-[var(--accent)]">
+                  <span
+                    class="h-2.5 w-2.5 rounded-full bg-current shadow-[0_0_0_5px_color-mix(in_srgb,var(--accent)_12%,transparent)]"
+                    aria-hidden="true"
+                  ></span>
+                  <span>Live</span>
                 </span>
                 <svg
-                  v-else-if="room.roomStatus === 'closed'"
-                  class="ph-icon h-4 w-4 text-[color:color-mix(in_srgb,var(--text)_78%,var(--accent))]"
+                  v-else-if="room.currentScore?.status === 'finished' || room.matchStatus === 'finished' || room.roomStatus === 'closed'"
+                  class="ph-icon h-4 w-4"
                   viewBox="0 0 256 256"
-                  :aria-label="roomStatusLabel(room)"
+                  aria-hidden="true"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="18"
@@ -1256,21 +1458,10 @@ onBeforeUnmount(() => {
                   <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
                 </svg>
                 <svg
-                  v-else-if="room.matchStatus === 'finished'"
-                  class="ph-icon h-4 w-4 text-[color:color-mix(in_srgb,var(--text)_78%,var(--accent))]"
-                  viewBox="0 0 256 256"
-                  :aria-label="roomStatusLabel(room)"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="20"
-                >
-                  <path d="m48 132 52 52L208 72"></path>
-                </svg>
-                <svg
                   v-else
-                  class="ph-icon h-4 w-4 text-[color:color-mix(in_srgb,var(--text)_78%,var(--accent))]"
+                  class="ph-icon h-4 w-4"
                   viewBox="0 0 256 256"
-                  :aria-label="roomStatusLabel(room)"
+                  aria-hidden="true"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="18"
@@ -1411,7 +1602,7 @@ onBeforeUnmount(() => {
 
     <Transition name="sheet-flow">
       <div v-if="predictionModalOpen && activeRoom" class="sheet-overlay fixed inset-0 z-[1200] grid items-end bg-black/50 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]" aria-hidden="false" @click.self="submittingPrediction ? undefined : closePredictionModal()">
-      <section class="sheet-panel mx-auto mb-[max(10px,env(safe-area-inset-bottom))] flex min-h-[min(420px,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] max-h-[min(86dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] w-[min(760px,calc(100%-20px))] flex-col overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-[18px] shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" :aria-labelledby="`sheet-title-${activeRoom.id}`">
+      <section class="sheet-panel mx-auto mb-[max(10px,env(safe-area-inset-bottom))] flex max-h-[min(86dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] w-[min(760px,calc(100%-20px))] flex-col overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-[18px] shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" :aria-labelledby="`sheet-title-${activeRoom.id}`">
         <div class="sheet-stagger mb-3 flex items-center justify-between gap-3" style="--sheet-index: 0">
           <h2 class="m-0 text-xl font-extrabold leading-tight" :id="`sheet-title-${activeRoom.id}`">Your {{ activeRoom.home.name }} vs {{ activeRoom.away.name }} score</h2>
           <button class="inline-flex min-h-10 w-10 min-w-10 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] p-0 text-[var(--muted)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--line)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_88%,black)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0" type="button" aria-label="Close" :disabled="submittingPrediction" @click="closePredictionModal">
@@ -1437,7 +1628,7 @@ onBeforeUnmount(() => {
           <div class="mt-2.5 grid gap-2.5">
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="take">Comment</label>
-              <textarea id="take" v-model="predictionForm.comment" class="max-h-28 min-h-24 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60" rows="4" placeholder="Add a little confidence..." :disabled="submittingPrediction"></textarea>
+              <textarea id="take" v-model="predictionForm.comment" class="max-h-24 min-h-20 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60" rows="3" placeholder="Add a little confidence..." :disabled="submittingPrediction"></textarea>
             </div>
             <button class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,transform,opacity] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-80 disabled:active:translate-y-0" type="submit" :disabled="submittingPrediction">
               <svg v-if="submittingPrediction" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">

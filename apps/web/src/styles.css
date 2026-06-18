@@ -519,6 +519,10 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  .match-stage {
+    min-height: 0;
+  }
+
   .prediction-avatar {
     width: 44px;
     height: 44px;
