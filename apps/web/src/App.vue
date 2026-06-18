@@ -69,25 +69,19 @@ const roomPage = ref(0)
 const likedPredictions = ref(getStoredLikes())
 const activeReplyTarget = ref<{ predictionId: string; commentId: string } | null>(null)
 const expandedCommentCards = ref(new Set<string>())
+const fastCollapsingCommentCards = ref(new Set<string>())
 const pendingIdentityAction = ref<PendingIdentityAction | null>(null)
 const themeTrigger = ref<HTMLElement | null>(null)
 const identityPromptInput = ref<HTMLInputElement | null>(null)
-const activeRoomColumn = ref<HTMLElement | null>(null)
-const matchStageAnchor = ref<HTMLElement | null>(null)
-const predictionFeedAnchor = ref<HTMLElement | null>(null)
 const themeMenuStyle = ref<Record<string, string>>({})
-const scrollDockStyle = ref<Record<string, string>>({})
 const ws = ref<WebSocket | null>(null)
 const submittingReplies = ref(new Set<string>())
 const replyErrors = reactive<Record<string, string>>({})
-const scrollY = ref(window.scrollY)
-const viewportHeight = ref(window.innerHeight)
-const feedViewportTop = ref(Number.POSITIVE_INFINITY)
-const feedPageTop = ref(Number.POSITIVE_INFINITY)
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
+let fastCommentCollapseTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectAttempt = 0
 let socketToken = 0
 let roomsRefreshInFlight = false
@@ -137,13 +131,6 @@ const visibleRooms = computed(() => {
   return orderedRooms.value.slice(start, start + ROOM_PAGE_SIZE)
 })
 const roomPageLabel = computed(() => `${roomPage.value + 1}/${roomPageCount.value}`)
-const showScrollToTop = computed(() => !!activeRoom.value && scrollY.value > 420)
-const showScrollToFeed = computed(() => {
-  if (!activeRoom.value) return false
-  if (!sortedPredictions.value.length) return false
-  if (scrollY.value >= feedPageTop.value - 160) return false
-  return feedViewportTop.value > 180
-})
 const statusNotice = computed(() => {
   if (mutationError.value) return mutationError.value
   if (refreshingRooms.value) return 'Refreshing rooms...'
@@ -167,14 +154,6 @@ watch(activeRoom, (room) => {
 
 watch(activeRoomId, (roomId) => {
   connectActiveRoomEvents(roomId)
-})
-
-watch(activeRoomId, () => {
-  nextTick(() => updateScrollAffordances())
-})
-
-watch(loading, () => {
-  nextTick(() => updateScrollAffordances())
 })
 
 watch(rooms, () => {
@@ -278,30 +257,6 @@ function showMutationError(message: string) {
   }, 4200)
 }
 
-function updateScrollAffordances() {
-  scrollY.value = window.scrollY
-  viewportHeight.value = window.innerHeight
-  const feedBounds = predictionFeedAnchor.value?.getBoundingClientRect()
-  feedViewportTop.value = feedBounds?.top ?? Number.POSITIVE_INFINITY
-  feedPageTop.value = feedBounds ? window.scrollY + feedBounds.top : Number.POSITIVE_INFINITY
-  const columnBounds = activeRoomColumn.value?.getBoundingClientRect()
-  scrollDockStyle.value = columnBounds
-    ? { left: `${columnBounds.left + (columnBounds.width / 2)}px` }
-    : {}
-}
-
-function scrollToMatchStage() {
-  if (!matchStageAnchor.value) return
-  const top = window.scrollY + matchStageAnchor.value.getBoundingClientRect().top - 24
-  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
-}
-
-function scrollToPredictionFeed() {
-  if (!predictionFeedAnchor.value) return
-  const top = window.scrollY + predictionFeedAnchor.value.getBoundingClientRect().top - 20
-  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
-}
-
 async function showHome() {
   window.history.pushState(null, '', '/')
   routePath.value = '/'
@@ -333,6 +288,10 @@ function predictionCommentTotal(prediction: Prediction) {
 
 function isCommentsExpanded(predictionId: string) {
   return expandedCommentCards.value.has(predictionId)
+}
+
+function isFastCollapsingComments(predictionId: string) {
+  return fastCollapsingCommentCards.value.has(predictionId)
 }
 
 function sortedReplies(prediction: Prediction) {
@@ -494,6 +453,7 @@ function setActiveRoom(roomId: string) {
   activeRoomId.value = roomId
   activeReplyTarget.value = null
   expandedCommentCards.value = new Set()
+  fastCollapsingCommentCards.value = new Set()
 }
 
 function previousRoomPage() {
@@ -563,6 +523,7 @@ async function submitLike(predictionId: string, authorId?: string) {
 
 function openReplyComposer(predictionId: string, commentId: string) {
   expandedCommentCards.value = new Set()
+  fastCollapsingCommentCards.value = new Set()
   activeReplyTarget.value = { predictionId, commentId }
 }
 
@@ -596,8 +557,17 @@ async function runPendingIdentityAction(action: PendingIdentityAction) {
 
 function toggleComments(predictionId: string) {
   if (expandedCommentCards.value.has(predictionId)) {
+    if (fastCommentCollapseTimer) {
+      window.clearTimeout(fastCommentCollapseTimer)
+    }
+    fastCollapsingCommentCards.value = new Set([predictionId])
     expandedCommentCards.value = new Set()
+    fastCommentCollapseTimer = window.setTimeout(() => {
+      fastCollapsingCommentCards.value = new Set()
+      fastCommentCollapseTimer = null
+    }, 140)
   } else {
+    fastCollapsingCommentCards.value = new Set()
     expandedCommentCards.value = new Set([predictionId])
   }
 }
@@ -836,10 +806,7 @@ onMounted(async () => {
   document.addEventListener('click', handleGlobalClick)
   window.addEventListener('popstate', handleRouteChange)
   window.addEventListener('resize', positionThemeMenu)
-  window.addEventListener('resize', updateScrollAffordances)
   window.addEventListener('scroll', positionThemeMenu, { passive: true })
-  window.addEventListener('scroll', updateScrollAffordances, { passive: true })
-  nextTick(() => updateScrollAffordances())
   const shouldAutoPromptUsername = !window.matchMedia('(max-width: 767px)').matches
   if (!isNotFound.value && !username.value && shouldAutoPromptUsername) {
     identityPromptTimer = window.setTimeout(() => {
@@ -865,14 +832,15 @@ onBeforeUnmount(() => {
   if (roomRefreshTimer) {
     window.clearInterval(roomRefreshTimer)
   }
+  if (fastCommentCollapseTimer) {
+    window.clearTimeout(fastCommentCollapseTimer)
+  }
   socketToken += 1
   ws.value?.close()
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('popstate', handleRouteChange)
   window.removeEventListener('resize', positionThemeMenu)
-  window.removeEventListener('resize', updateScrollAffordances)
   window.removeEventListener('scroll', positionThemeMenu)
-  window.removeEventListener('scroll', updateScrollAffordances)
 })
 </script>
 
@@ -1011,8 +979,8 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-else-if="loading" class="grid max-h-[calc(100svh-118px)] items-start gap-[18px] overflow-hidden min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)] max-md:max-h-[calc(100svh-96px)]" aria-label="Loading score room">
-      <div ref="activeRoomColumn" class="grid gap-[18px] max-md:gap-3">
-        <div ref="matchStageAnchor" class="match-stage-sticky">
+      <div class="grid gap-[18px] max-md:gap-3">
+        <div class="match-stage-sticky">
           <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:rounded-[10px]">
           <div class="relative z-[1] my-7 grid gap-[18px]">
             <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 md:gap-10">
@@ -1320,7 +1288,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section ref="predictionFeedAnchor" class="grid gap-[18px] max-md:gap-3" aria-label="Prediction feed">
+        <section class="grid gap-[18px] max-md:gap-3" aria-label="Prediction feed">
           <div class="my-1 flex items-center justify-between gap-3 max-sm:flex-wrap">
             <h2 class="m-0 min-w-0 text-[18px] font-[760] leading-tight text-[var(--text)]">
               Prediction feed
@@ -1403,7 +1371,7 @@ onBeforeUnmount(() => {
 
                 <div v-if="leadComment(item)?.replies.length" data-reply-thread class="grid gap-2 pt-1 pl-3">
                   <TransitionGroup
-                    name="reply-row"
+                    :name="isFastCollapsingComments(item.id) ? 'reply-row-fast' : 'reply-row'"
                     tag="div"
                     class="relative grid gap-1.5 border-l border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] pl-3"
                     :class="shouldFadeCommentPreview(item) ? 'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-8 after:bg-gradient-to-b after:from-transparent after:to-[var(--panel)]' : ''"
@@ -1686,40 +1654,6 @@ onBeforeUnmount(() => {
         </section>
       </aside>
     </section>
-
-    <Transition name="scroll-dock">
-      <div
-        v-if="activeRoom && (showScrollToTop || showScrollToFeed)"
-        class="pointer-events-none fixed bottom-5 left-1/2 z-[850] hidden -translate-x-1/2 items-center gap-2 min-[981px]:flex"
-        :style="scrollDockStyle"
-        aria-label="Room scroll controls"
-      >
-        <button
-          v-if="showScrollToTop"
-          class="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--line-strong)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] text-[var(--text)] shadow-[0_14px_30px_color-mix(in_srgb,var(--text)_12%,transparent)] backdrop-blur-md transition-[transform,background-color,border-color,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line-strong))] hover:bg-[color:color-mix(in_srgb,var(--panel)_94%,var(--accent)_3%)] active:translate-y-px"
-          type="button"
-          aria-label="Scroll to top of room"
-          @click="scrollToMatchStage"
-        >
-          <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 19V5"></path>
-            <path d="m5 12 7-7 7 7"></path>
-          </svg>
-        </button>
-        <button
-          v-if="showScrollToFeed"
-          class="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--line-strong)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] text-[var(--text)] shadow-[0_14px_30px_color-mix(in_srgb,var(--text)_12%,transparent)] backdrop-blur-md transition-[transform,background-color,border-color,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line-strong))] hover:bg-[color:color-mix(in_srgb,var(--panel)_94%,var(--accent)_3%)] active:translate-y-px"
-          type="button"
-          aria-label="Scroll to prediction feed"
-          @click="scrollToPredictionFeed"
-        >
-          <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 5v14"></path>
-            <path d="m19 12-7 7-7-7"></path>
-          </svg>
-        </button>
-      </div>
-    </Transition>
 
     <Transition name="sheet-flow">
       <div v-if="identityPromptOpen" class="sheet-overlay fixed inset-0 z-[1300] grid items-end bg-black/50 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]" aria-hidden="false" @click.self="closeIdentityPrompt">

@@ -244,16 +244,6 @@ textarea:focus {
   transform: rotate(-4deg);
 }
 
-.scroll-dock-enter-active,
-.scroll-dock-leave-active {
-  transition: opacity 180ms var(--ease);
-}
-
-.scroll-dock-enter-from,
-.scroll-dock-leave-to {
-  opacity: 0;
-}
-
 .flag {
   position: relative;
   display: block;
@@ -367,6 +357,20 @@ textarea:focus {
 .reply-row-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+.reply-row-fast-enter-active,
+.reply-row-fast-leave-active {
+  transition:
+    opacity 90ms cubic-bezier(0.4, 0, 1, 1),
+    transform 90ms cubic-bezier(0.4, 0, 1, 1);
+  transition-delay: 0ms;
+}
+
+.reply-row-fast-enter-from,
+.reply-row-fast-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .prediction-list-move {
@@ -609,6 +613,8 @@ textarea:focus {
     animation: none;
   }
 
+  .reply-row-fast-enter-active,
+  .reply-row-fast-leave-active,
   .reply-composer-enter-active,
   .reply-composer-leave-active,
   .sheet-flow-enter-active,
