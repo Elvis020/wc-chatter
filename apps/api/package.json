@@ -10,6 +10,7 @@
     "sync:rooms": "bun src/scripts/sync-rooms.ts",
     "sync:live-scores": "bun src/scripts/sync-live-scores.ts",
     "load:test": "bun src/scripts/load-test.ts",
+    "load:cleanup": "bun src/scripts/cleanup-load-test.ts",
     "types": "wrangler types src/worker-configuration.d.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
