@@ -11,6 +11,9 @@ type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabas
 
 const app = new Hono<{ Bindings: RuntimeEnv }>()
 const fallbackStore = createStore()
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX_MUTATIONS = 40
+const mutationBuckets = new Map<string, { count: number; resetAt: number }>()
 
 function storeFor(env: SupabaseEnv): ApiStore {
   return hasSupabaseConfig(env) ? createSupabaseStore(supabaseConfigFromEnv(env)) : fallbackStore
@@ -26,6 +29,22 @@ async function readJson(c: Context) {
 
 function getRooms(store: ApiStore) {
   return Promise.resolve(store.getRooms())
+}
+
+function enforceMutationRateLimit(userId: string, action: string) {
+  const now = Date.now()
+  const key = `${action}:${userId}`
+  const bucket = mutationBuckets.get(key)
+
+  if (!bucket || bucket.resetAt <= now) {
+    mutationBuckets.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return
+  }
+
+  bucket.count += 1
+  if (bucket.count > RATE_LIMIT_MAX_MUTATIONS) {
+    throw new ApiError('RATE_LIMITED', 'Slow down for a moment before sending more.', 429)
+  }
 }
 
 function appOrigin(env: RuntimeEnv) {
@@ -128,6 +147,7 @@ app.post('/api/rooms/:roomId/predictions', async (c) => {
   try {
     const roomId = c.req.param('roomId')
     const payload = parsePredictionInput(await readJson(c))
+    enforceMutationRateLimit(payload.authorId, 'prediction')
     const room = await store.addPrediction(roomId, payload)
 
     if (!room) {
@@ -148,6 +168,7 @@ app.post('/api/predictions/:predictionId/likes', async (c) => {
   try {
     const predictionId = c.req.param('predictionId')
     const payload = parseLikeInput(await readJson(c))
+    enforceMutationRateLimit(payload.userId, 'like')
     const room = await store.setPredictionLike(predictionId, payload.userId, payload.liked)
 
     if (!room) {
@@ -168,6 +189,7 @@ app.post('/api/comments/:commentId/replies', async (c) => {
   try {
     const commentId = c.req.param('commentId')
     const payload = parseReplyInput(await readJson(c))
+    enforceMutationRateLimit(payload.authorId, 'reply')
     const room = await store.addReply(commentId, payload)
 
     if (!room) {

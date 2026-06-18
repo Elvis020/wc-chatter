@@ -553,7 +553,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     async addPrediction(roomRef: string, payload: CreatePredictionInput) {
       const room = await getRoomRow(roomRef)
       if (!room) return null
-      if (!ROOM_WRITE_STATUSES.has(room.room_status ?? legacyRoomStatus(room.status))) {
+      if (effectiveMatchStatus(room) === 'finished' || !ROOM_WRITE_STATUSES.has(room.room_status ?? legacyRoomStatus(room.status))) {
         throw new ApiError('FORBIDDEN', 'This room is closed for new predictions.', 403)
       }
 
@@ -589,6 +589,9 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     async setPredictionLike(predictionId: string, userId: string, liked: boolean) {
       const prediction = await getPredictionOwner(predictionId)
       if (!prediction) return null
+      if (prediction.author_id === userId) {
+        throw new ApiError('FORBIDDEN', 'You cannot like your own prediction.', 403)
+      }
 
       if (liked) {
         const { error } = await supabase

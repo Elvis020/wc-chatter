@@ -9,6 +9,7 @@ import {
   type ThemeOption,
 } from '@wc-chatter/shared'
 import { createMockRooms } from '@wc-chatter/shared/mock-data'
+import { ApiError } from './errors.js'
 
 type WebSocketLike = {
   send: (data: string) => void
@@ -32,6 +33,7 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
 export function createStore() {
   const rooms = createMockRooms()
   const clients = new Map<string, WebSocketLike>()
+  const likesByPrediction = new Map<string, Set<string>>()
 
   return {
     getRooms(): Room[] {
@@ -59,6 +61,9 @@ export function createStore() {
     addPrediction(roomId: string, payload: CreatePredictionInput) {
       const room = rooms.find((item) => item.id === roomId)
       if (!room) return null
+      if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
+        throw new ApiError('FORBIDDEN', 'This room is closed for new predictions.', 403)
+      }
 
       const prediction: Prediction = {
         id: `prediction-${roomId}-${Date.now()}`,
@@ -92,8 +97,21 @@ export function createStore() {
 
       const prediction = room.predictions.find((item) => item.id === predictionId)
       if (!prediction) return null
+      if (prediction.authorId === userId) {
+        throw new ApiError('FORBIDDEN', 'You cannot like your own prediction.', 403)
+      }
 
-      prediction.likes = Math.max(0, prediction.likes + (liked ? 1 : -1))
+      const likedBy = likesByPrediction.get(predictionId) ?? new Set<string>()
+      likesByPrediction.set(predictionId, likedBy)
+
+      if (liked && !likedBy.has(userId)) {
+        likedBy.add(userId)
+        prediction.likes += 1
+      } else if (!liked && likedBy.has(userId)) {
+        likedBy.delete(userId)
+        prediction.likes = Math.max(0, prediction.likes - 1)
+      }
+
       return cloneRoom(room)
     },
     addReply(commentId: string, payload: ReplyInput) {

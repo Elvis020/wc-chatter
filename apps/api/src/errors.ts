@@ -4,9 +4,10 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'FORBIDDEN'
+  | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
 
-export type ApiErrorStatus = 400 | 403 | 404 | 409 | 500
+export type ApiErrorStatus = 400 | 403 | 404 | 409 | 429 | 500
 
 export class ApiError extends Error {
   constructor(
