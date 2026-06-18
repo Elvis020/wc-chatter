@@ -31,6 +31,7 @@ const userCount = Number(process.env.LOAD_TEST_USERS ?? 100)
 const socketCount = Number(process.env.LOAD_TEST_SOCKETS ?? userCount)
 const scenario = process.env.LOAD_TEST_SCENARIO ?? 'balanced'
 const audienceMix = process.env.LOAD_TEST_AUDIENCE_MIX ?? 'GH:70,UK:10,US:10,IE:10'
+const requestTimeoutMs = Number(process.env.LOAD_TEST_REQUEST_TIMEOUT_MS ?? 30_000)
 const runId = randomUUID().slice(0, 8)
 
 function parseAudienceMix(value: string) {
@@ -90,8 +91,14 @@ function summarize(label: string, results: MutationResult<unknown>[]) {
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<MutationResult<T>> {
   const startedAt = Date.now()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+
   try {
-    const response = await fetch(`${apiBaseUrl}${path}`, init)
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      signal: controller.signal,
+    })
     const text = await response.text()
     let body: any
     try {
@@ -108,12 +115,15 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<Mutatio
       error: response.ok ? undefined : (body?.error?.message ?? (text || response.statusText)),
     }
   } catch (error) {
+    const aborted = error instanceof Error && error.name === 'AbortError'
     return {
       ok: false,
       status: 0,
       ms: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : 'Request failed',
+      error: aborted ? `Request timed out after ${requestTimeoutMs}ms` : error instanceof Error ? error.message : 'Request failed',
     }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -158,6 +168,7 @@ console.log(`Users: ${userCount}`)
 console.log(`WebSocket users: ${socketCount}`)
 console.log(`Scenario: ${scenario}`)
 console.log(`Audience mix: ${audienceMix}`)
+console.log(`HTTP request timeout: ${requestTimeoutMs}ms`)
 
 const sockets = await Promise.allSettled(Array.from({ length: socketCount }, () => openSocket(room.id)))
 const openSockets = sockets.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof openSocket>>> => result.status === 'fulfilled').map((result) => result.value)
@@ -202,6 +213,7 @@ if (scenario === 'reply-hotspot') {
     process.exit(1)
   }
 
+  console.log(`Sending ${users.length} hotspot replies...`)
   const hotspotReplyResults = await Promise.all(
     users.map((user, index) =>
       requestJson(`/api/comments/${hotspotComment.id}/replies`, {
@@ -228,6 +240,7 @@ if (scenario === 'reply-hotspot') {
   process.exit(0)
 }
 
+console.log(`Sending ${users.length} predictions...`)
 const predictionResults = await Promise.all(
   users.map((user, index) =>
     requestJson<{ room: Room }>(`/api/rooms/${room.id}/predictions`, {
@@ -257,6 +270,7 @@ if (createdPredictions.length === 0) {
   process.exit(1)
 }
 
+console.log(`Sending ${users.length} likes...`)
 const likeResults = await Promise.all(
   users.map((user, index) => {
     const target = createdPredictions[(index + 1) % createdPredictions.length]
@@ -285,6 +299,7 @@ if (replyTargets.length === 0) {
   process.exit(1)
 }
 
+console.log(`Sending ${users.length} replies...`)
 const replyResults = await Promise.all(
   users.map((user, index) => {
     const target = replyTargets[index % replyTargets.length]
