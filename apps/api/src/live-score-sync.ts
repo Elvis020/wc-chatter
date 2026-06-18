@@ -110,6 +110,30 @@ async function getExistingRooms(supabase: SupabaseClient, slugs: string[]) {
   return new Map(((response.data ?? []) as ScoreRoomRow[]).map((room) => [room.slug, room]))
 }
 
+async function updateExistingRooms(
+  supabase: SupabaseClient,
+  rows: Array<{ slug: string } & Record<string, unknown>>,
+) {
+  const updated: Array<{ slug: string }> = []
+
+  for (const row of rows) {
+    const { slug, ...values } = row
+    const { data, error } = await supabase
+      .from('rooms')
+      .update(values)
+      .eq('slug', slug)
+      .select('slug')
+
+    if (error) {
+      return { data: updated, error }
+    }
+
+    updated.push(...((data ?? []) as Array<{ slug: string }>))
+  }
+
+  return { data: updated, error: null }
+}
+
 export async function syncLiveRoomScores(
   supabase: SupabaseClient,
   options: { now?: Date; provider?: LiveScorelineProvider; dryRun?: boolean } = {},
@@ -196,24 +220,24 @@ export async function syncLiveRoomScores(
 
   if (isMissingColumnError(response.error)) {
     console.warn('Live score sync is using room-state columns without score columns. Apply the scoreline migration and reload Supabase/PostgREST schema.')
-    response = await supabase
-      .from('rooms')
-      .upsert(upserts.map(({ slug, status, match_status, room_status, is_featured }) => ({
+    response = await updateExistingRooms(
+      supabase,
+      upserts.map(({ slug, status, match_status, room_status, is_featured }) => ({
         slug,
         status,
         match_status,
         room_status,
         is_featured,
-      })), { onConflict: 'slug' })
-      .select('slug')
+      })),
+    )
   }
 
   if (isMissingColumnError(response.error)) {
     console.warn('Live score sync is using legacy room status only. Apply room visibility migrations and reload Supabase/PostgREST schema.')
-    response = await supabase
-      .from('rooms')
-      .upsert(upserts.map(({ slug, status }) => ({ slug, status })), { onConflict: 'slug' })
-      .select('slug')
+    response = await updateExistingRooms(
+      supabase,
+      upserts.map(({ slug, status }) => ({ slug, status })),
+    )
   }
 
   if (response.error) {
