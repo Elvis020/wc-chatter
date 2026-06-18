@@ -28,7 +28,34 @@ type MutationResult<T> = {
 const apiBaseUrl = process.env.LOAD_TEST_API_URL ?? 'http://localhost:8787'
 const wsBaseUrl = process.env.LOAD_TEST_WS_URL ?? apiBaseUrl.replace(/^http/, 'ws') + '/ws'
 const userCount = Number(process.env.LOAD_TEST_USERS ?? 100)
+const audienceMix = process.env.LOAD_TEST_AUDIENCE_MIX ?? 'GH:70,UK:10,US:10,IE:10'
 const runId = randomUUID().slice(0, 8)
+
+function parseAudienceMix(value: string) {
+  const entries = value
+    .split(',')
+    .map((entry) => {
+      const [region, weightText] = entry.split(':')
+      const weight = Number(weightText)
+      return { region: region?.trim().toUpperCase(), weight: Number.isFinite(weight) && weight > 0 ? weight : 0 }
+    })
+    .filter((entry) => entry.region && entry.weight > 0)
+
+  return entries.length > 0 ? entries : [{ region: 'GH', weight: 100 }]
+}
+
+function regionForIndex(index: number, mix: Array<{ region: string; weight: number }>) {
+  const total = mix.reduce((sum, entry) => sum + entry.weight, 0)
+  const cursor = ((index % total) + 1)
+  let running = 0
+
+  for (const entry of mix) {
+    running += entry.weight
+    if (cursor <= running) return entry.region
+  }
+
+  return mix[0].region
+}
 
 function percentile(values: number[], p: number) {
   if (values.length === 0) return 0
@@ -121,13 +148,16 @@ if (!room) {
 console.log(`Load test target: ${apiBaseUrl}`)
 console.log(`Room: ${room.home.code}-${room.away.code} (${room.id})`)
 console.log(`Users: ${userCount}`)
+console.log(`Audience mix: ${audienceMix}`)
 
 const sockets = await Promise.allSettled(Array.from({ length: Math.min(userCount, 100) }, () => openSocket(room.id)))
 const openSockets = sockets.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof openSocket>>> => result.status === 'fulfilled').map((result) => result.value)
 console.log(`WebSockets: ${openSockets.length}/${sockets.length} connected`)
 
+const parsedAudienceMix = parseAudienceMix(audienceMix)
 const users = Array.from({ length: userCount }, (_, index) => ({
   id: `user-${randomUUID()}`,
+  region: regionForIndex(index, parsedAudienceMix),
   name: `Load ${String(index + 1).padStart(3, '0')}`,
 }))
 
@@ -141,7 +171,7 @@ const predictionResults = await Promise.all(
         name: user.name,
         homeScore: index % 5,
         awayScore: (index + 2) % 4,
-        comment: `Load test ${runId} message ${index + 1}`,
+        comment: `[${user.region}] Load test ${runId} message ${index + 1}`,
       }),
     }),
   ),
@@ -177,7 +207,7 @@ const replyResults = await Promise.all(
       body: JSON.stringify({
         authorId: user.id,
         name: user.name,
-        text: `Load reply ${runId} ${index + 1}`,
+        text: `[${user.region}] Load reply ${runId} ${index + 1}`,
       }),
     })
   }),

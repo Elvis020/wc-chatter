@@ -45,3 +45,27 @@ bun --filter @wc-chatter/web dev
 bun --filter @wc-chatter/api dev
 bun --filter @wc-chatter/api sync:rooms
 ```
+
+## Load Testing
+
+Run the local 100-user chat load test:
+
+```bash
+bun --filter @wc-chatter/api load:test
+```
+
+Run it against a deployed API:
+
+```bash
+LOAD_TEST_API_URL=https://your-api.example.com \
+LOAD_TEST_WS_URL=wss://your-api.example.com/ws \
+bun --filter @wc-chatter/api load:test
+```
+
+The default audience mix tags simulated users as Ghana-heavy:
+
+```bash
+LOAD_TEST_AUDIENCE_MIX=GH:70,UK:10,US:10,IE:10 bun --filter @wc-chatter/api load:test
+```
+
+That mix is for scenario labeling only. Real regional latency must be measured by running the same deployed test from regional runners or machines near the audience, especially Ghana, UK, US, and Ireland.
