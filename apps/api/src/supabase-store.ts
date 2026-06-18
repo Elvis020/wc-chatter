@@ -110,6 +110,7 @@ const ROOM_STATE_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, event_date, kickoff_at, created_at'
 const LEGACY_ROOM_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at'
+const SUPABASE_IN_BATCH_SIZE = 100
 const fixtureKickoffs = new Map(
   loadFixtures().flatMap((match) => {
     const kickoff = matchKickoffUtc(match)
@@ -122,6 +123,14 @@ const fixtureKickoffs = new Map(
 
 function isMissingColumnError(error?: { code?: string } | null) {
   return error?.code === 'PGRST204' || error?.code === '42703'
+}
+
+function chunks<T>(items: T[], size: number) {
+  const result: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size))
+  }
+  return result
 }
 
 function toTeam(name: string, code: string, iso2?: string | null, flag?: string | null): Team {
@@ -453,48 +462,69 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
 
   async function getLikes(predictionIds: string[]) {
     if (predictionIds.length === 0) return []
-    const { data, error } = await supabase
-      .from('prediction_likes')
-      .select('prediction_id, user_id')
-      .in('prediction_id', predictionIds)
+    const rows: LikeRow[] = []
 
-    if (error) {
-      logSupabaseError('getLikes', error)
-      throw new ApiError('INTERNAL_ERROR', 'Unable to load likes.', 500)
+    for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
+      const { data, error } = await supabase
+        .from('prediction_likes')
+        .select('prediction_id, user_id')
+        .in('prediction_id', batch)
+
+      if (error) {
+        logSupabaseError('getLikes', error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load likes.', 500)
+      }
+
+      rows.push(...((data ?? []) as LikeRow[]))
     }
-    return (data ?? []) as LikeRow[]
+
+    return rows
   }
 
   async function getComments(predictionIds: string[]) {
     if (predictionIds.length === 0) return []
-    const { data, error } = await supabase
-      .from('comments')
-      .select('id, prediction_id, author_id, author_name, text, created_at')
-      .in('prediction_id', predictionIds)
-      .eq('hidden', false)
-      .order('created_at', { ascending: true })
+    const rows: CommentRow[] = []
 
-    if (error) {
-      logSupabaseError('getComments', error)
-      throw new ApiError('INTERNAL_ERROR', 'Unable to load comments.', 500)
+    for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('id, prediction_id, author_id, author_name, text, created_at')
+        .in('prediction_id', batch)
+        .eq('hidden', false)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        logSupabaseError('getComments', error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load comments.', 500)
+      }
+
+      rows.push(...((data ?? []) as CommentRow[]))
     }
-    return (data ?? []) as CommentRow[]
+
+    return rows
   }
 
   async function getReplies(commentIds: string[]) {
     if (commentIds.length === 0) return []
-    const { data, error } = await supabase
-      .from('comment_replies')
-      .select('id, comment_id, author_id, author_name, text, created_at')
-      .in('comment_id', commentIds)
-      .eq('hidden', false)
-      .order('created_at', { ascending: true })
+    const rows: ReplyRow[] = []
 
-    if (error) {
-      logSupabaseError('getReplies', error)
-      throw new ApiError('INTERNAL_ERROR', 'Unable to load replies.', 500)
+    for (const batch of chunks(commentIds, SUPABASE_IN_BATCH_SIZE)) {
+      const { data, error } = await supabase
+        .from('comment_replies')
+        .select('id, comment_id, author_id, author_name, text, created_at')
+        .in('comment_id', batch)
+        .eq('hidden', false)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        logSupabaseError('getReplies', error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load replies.', 500)
+      }
+
+      rows.push(...((data ?? []) as ReplyRow[]))
     }
-    return (data ?? []) as ReplyRow[]
+
+    return rows
   }
 
   async function hydrateRooms(roomRows: RoomRow[]) {

@@ -68,4 +68,14 @@ The default audience mix tags simulated users as Ghana-heavy:
 LOAD_TEST_AUDIENCE_MIX=GH:70,UK:10,US:10,IE:10 bun --filter @wc-chatter/api load:test
 ```
 
+Run a hotspot reply test, where many users reply under one prediction:
+
+```bash
+LOAD_TEST_USERS=300 \
+LOAD_TEST_SOCKETS=300 \
+LOAD_TEST_SCENARIO=reply-hotspot \
+LOAD_TEST_AUDIENCE_MIX=GH:70,UK:10,US:10,IE:10 \
+bun --filter @wc-chatter/api load:test
+```
+
 That mix is for scenario labeling only. Real regional latency must be measured by running the same deployed test from regional runners or machines near the audience, especially Ghana, UK, US, and Ireland.
