@@ -214,8 +214,20 @@ textarea:focus {
   stroke: var(--accent-2);
 }
 
+.match-stage-sticky {
+  position: sticky;
+  top: -10px;
+  z-index: 2;
+  align-self: start;
+}
+
 .match-stage {
+  position: relative;
+  z-index: 1;
   min-height: 330px;
+  box-shadow:
+    0 22px 54px -34px color-mix(in srgb, var(--text) 22%, transparent),
+    var(--card-shadow);
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08)),
     repeating-linear-gradient(90deg, transparent 0 88px, color-mix(in srgb, var(--text) 2.5%, transparent) 88px 89px),
@@ -230,6 +242,16 @@ textarea:focus {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px 999px 0 0;
   transform: rotate(-4deg);
+}
+
+.scroll-dock-enter-active,
+.scroll-dock-leave-active {
+  transition: opacity 180ms var(--ease);
+}
+
+.scroll-dock-enter-from,
+.scroll-dock-leave-to {
+  opacity: 0;
 }
 
 .flag {
@@ -294,6 +316,11 @@ textarea:focus {
 
 .reaction-count {
   animation: reaction-count-rise 180ms var(--ease);
+}
+
+.live-pulse-dot {
+  animation: live-pulse 1.45s ease-out infinite;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .reply-composer-enter-active {
@@ -490,6 +517,18 @@ textarea:focus {
   }
 }
 
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
 @keyframes skeleton-pulse {
   0% {
     background-position: 120% 0;
@@ -548,6 +587,10 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  .match-stage-sticky {
+    position: static;
+  }
+
   .match-stage {
     min-height: 0;
   }
@@ -561,6 +604,7 @@ textarea:focus {
 @media (prefers-reduced-motion: reduce) {
   .reaction-pop,
   .reaction-count,
+  .live-pulse-dot,
   .skeleton-pulse {
     animation: none;
   }
