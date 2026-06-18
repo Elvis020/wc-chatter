@@ -97,9 +97,6 @@ export function createStore() {
 
       const prediction = room.predictions.find((item) => item.id === predictionId)
       if (!prediction) return null
-      if (prediction.authorId === userId) {
-        throw new ApiError('FORBIDDEN', 'You cannot like your own prediction.', 403)
-      }
 
       const likedBy = likesByPrediction.get(predictionId) ?? new Set<string>()
       likesByPrediction.set(predictionId, likedBy)

@@ -263,6 +263,17 @@ textarea:focus {
   border-radius: 4px;
 }
 
+.mobile-room-flag {
+  display: block;
+  width: 42px !important;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 5px;
+  border: 0;
+  background-size: cover;
+  box-shadow: none;
+}
+
 .versus,
 .ref-versus {
   color: var(--accent);

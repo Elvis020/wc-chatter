@@ -619,9 +619,6 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     async setPredictionLike(predictionId: string, userId: string, liked: boolean) {
       const prediction = await getPredictionOwner(predictionId)
       if (!prediction) return null
-      if (prediction.author_id === userId) {
-        throw new ApiError('FORBIDDEN', 'You cannot like your own prediction.', 403)
-      }
 
       if (liked) {
         const { error } = await supabase

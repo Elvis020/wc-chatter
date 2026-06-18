@@ -421,6 +421,14 @@ function roomStatusText(room: Room) {
   return 'Upcoming'
 }
 
+function mobileRoomStatusText(room: Room) {
+  const matchStatus = effectiveRoomMatchStatus(room)
+  if (matchStatus === 'live') return 'Live'
+  if (matchStatus === 'finished') return 'Played'
+  if (room.roomStatus === 'closed') return 'Closed'
+  return 'Draft'
+}
+
 function roomStatusClass(room: Room) {
   const matchStatus = effectiveRoomMatchStatus(room)
   if (matchStatus === 'live') {
@@ -1171,6 +1179,15 @@ onBeforeUnmount(() => {
     </section>
     <section v-else-if="activeRoom" class="grid items-start gap-[18px] min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
       <div class="grid gap-[18px] max-md:gap-3">
+        <button
+          v-if="sortedPredictions.length"
+          class="hidden min-h-12 w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)] shadow-[0_12px_26px_color-mix(in_srgb,var(--accent)_18%,transparent)] transition-[background-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px max-md:inline-flex"
+          type="button"
+          @click="openPredictionModal"
+        >
+          Drop your score
+        </button>
+
         <div class="match-stage-sticky">
           <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:p-4">
             <div class="relative z-[1] my-7 grid gap-[18px] max-md:my-3 max-md:gap-3">
@@ -1247,7 +1264,7 @@ onBeforeUnmount(() => {
             <button
               v-for="room in orderedRooms"
               :key="room.id"
-              class="grid min-h-[84px] min-w-[230px] snap-start content-between rounded-lg border p-2.5 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
+              class="grid min-h-[76px] min-w-[250px] snap-start grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border p-2.5 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
               :class="[
                 room.id === activeRoomId ? 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))]' : 'border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_46%,transparent)]',
                 effectiveRoomMatchStatus(room) === 'finished' ? 'opacity-80' : '',
@@ -1255,34 +1272,28 @@ onBeforeUnmount(() => {
               type="button"
               @click="setActiveRoom(room.id)"
             >
-              <span class="grid gap-1.5">
-                <span class="grid grid-cols-[58px_3ch_auto_58px_3ch] items-center gap-1.5 text-[15px] font-[850] leading-none text-[var(--text)]">
-                  <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
-                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
+              <span class="grid min-w-0 gap-1.5">
+                <span class="grid min-w-0 grid-cols-[42px_3ch_auto_42px_3ch] items-center gap-1.5 text-[15px] font-[850] leading-none text-[var(--text)]">
+                  <span v-if="hasSpriteFlag(room.home)" :class="['mobile-room-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
+                  <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
                   <span>{{ room.home.code }}</span>
                   <span class="ref-versus justify-self-center">v</span>
-                  <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
-                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
+                  <span v-if="hasSpriteFlag(room.away)" :class="['mobile-room-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
+                  <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
                   <span>{{ room.away.code }}</span>
                 </span>
               </span>
 
               <span
-                class="inline-flex min-h-7 w-fit min-w-8 items-center justify-center rounded-md text-[color:color-mix(in_srgb,var(--accent)_62%,var(--text))]"
+                class="inline-flex min-h-8 min-w-[58px] items-center justify-center justify-self-end rounded-md border px-2 text-[10px] font-black uppercase leading-none"
+                :class="roomStatusClass(room)"
                 :aria-label="roomStatusLabel(room)"
               >
-                <span v-if="showsLiveRoomIcon(room)" class="grid justify-items-center gap-0.5 text-[10px] font-black uppercase leading-none text-[var(--accent)]">
-                  <span>Live</span>
-                  <span class="live-pulse-dot h-2.5 w-2.5 rounded-full bg-current" aria-hidden="true"></span>
+                <span v-if="showsLiveRoomIcon(room)" class="inline-flex items-center gap-1.5">
+                  <span class="live-pulse-dot h-2 w-2 rounded-full bg-current" aria-hidden="true"></span>
+                  <span>{{ mobileRoomStatusText(room) }}</span>
                 </span>
-                <svg v-else-if="effectiveRoomMatchStatus(room) === 'finished' || room.roomStatus === 'closed'" class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
-                  <rect x="48" y="108" width="160" height="104" rx="16"></rect>
-                  <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
-                </svg>
-                <svg v-else class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
-                  <circle cx="128" cy="128" r="84"></circle>
-                  <path d="M128 76v56l38 22"></path>
-                </svg>
+                <span v-else>{{ mobileRoomStatusText(room) }}</span>
               </span>
             </button>
           </div>
@@ -1461,15 +1472,6 @@ onBeforeUnmount(() => {
           </Transition>
         </section>
       </div>
-
-      <button
-        v-if="sortedPredictions.length"
-        class="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-[850] hidden min-h-12 items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)] shadow-[0_16px_34px_color-mix(in_srgb,var(--accent)_22%,transparent)] transition-[background-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px max-md:inline-flex"
-        type="button"
-        @click="openPredictionModal"
-      >
-        Drop your score
-      </button>
 
       <aside class="grid gap-3 min-[981px]:sticky min-[981px]:top-4 max-md:hidden">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] shadow-[var(--card-shadow)] max-md:rounded-[10px]">
