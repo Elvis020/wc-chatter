@@ -1,7 +1,9 @@
 import {
   currentOrNextCycleMatches,
   loadFixtures,
+  matchKickoffUtc,
   matchKickoffUtcMs,
+  matchStatusAt,
   type FixtureMatch,
   type Prediction,
   type Room,
@@ -63,20 +65,23 @@ function seedPredictions(match: FixtureMatch): Prediction[] {
 }
 
 function roomStatus(match: FixtureMatch, now = new Date()): RoomStatus {
-  if (match.result?.status === 'FT') return 'archived'
-  return matchKickoffUtcMs(match) <= now.getTime() ? 'live' : 'upcoming'
+  const matchStatus = matchStatusAt(match, now)
+  if (matchStatus === 'finished') return 'archived'
+  return matchStatus === 'live' ? 'live' : 'upcoming'
 }
 
 function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
   const predictions = seedPredictions(match)
   const [topPrediction] = predictions
+  const matchStatus = matchStatusAt(match, now)
 
   return {
     id: match.id,
     status: roomStatus(match, now),
-    matchStatus: match.result?.status === 'FT' ? 'finished' : matchKickoffUtcMs(match) <= now.getTime() ? 'live' : 'upcoming',
+    matchStatus,
     roomStatus: 'open',
-    isFeatured: matchKickoffUtcMs(match) <= now.getTime(),
+    kickoffAt: matchKickoffUtc(match),
+    isFeatured: matchStatus === 'live',
     home: match.home,
     away: match.away,
     mostBacked: {

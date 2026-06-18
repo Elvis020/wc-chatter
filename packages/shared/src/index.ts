@@ -48,12 +48,25 @@ export interface RoomSummary {
   margin: string
 }
 
+export type RoomScoreStatus = 'scheduled' | 'live' | 'finished' | 'unknown'
+
+export interface RoomCurrentScore {
+  home: number
+  away: number
+  status: RoomScoreStatus
+  clock: string
+  provider: string
+  updatedAt: string
+}
+
 export interface Room {
   id: string
   status: RoomStatus
   matchStatus: MatchStatus
   roomStatus: RoomInteractionStatus
+  kickoffAt?: string
   isFeatured: boolean
+  currentScore?: RoomCurrentScore
   home: Team
   away: Team
   mostBacked: RoomSummary
@@ -104,8 +117,10 @@ export {
   matchCycleWindowForKickoff,
   matchKickoffUtc,
   matchKickoffUtcMs,
+  matchStatusAt,
   nextCycleMatches,
   upcomingMatches,
+  MATCH_LIVE_DURATION_MS,
   type FixtureMatch,
   type MatchCycleWindow,
 } from './fixtures.js'

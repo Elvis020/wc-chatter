@@ -3,7 +3,7 @@ import {
   currentOrNextCycleMatches,
   loadFixtures,
   matchKickoffUtc,
-  matchKickoffUtcMs,
+  matchStatusAt,
   type FixtureMatch,
   type MatchStatus,
   type RoomInteractionStatus,
@@ -62,9 +62,12 @@ export type RoomSyncResult = {
 
 const LOCKED_ROOM_STATUSES = new Set<RoomInteractionStatus>(['closed', 'hidden'])
 
+function isMissingColumnError(error?: { code?: string } | null) {
+  return error?.code === 'PGRST204' || error?.code === '42703'
+}
+
 function matchStatusForMatch(match: FixtureMatch, now: Date): MatchStatus {
-  if (match.result?.status === 'FT') return 'finished'
-  return matchKickoffUtcMs(match) <= now.getTime() ? 'live' : 'upcoming'
+  return matchStatusAt(match, now)
 }
 
 function legacyStatusFor(matchStatus: MatchStatus, roomStatus: RoomInteractionStatus): DbRoomStatus {
@@ -130,16 +133,23 @@ function baseRoom(row: RoomUpsert): BaseRoomUpsert {
 async function getExistingRooms(supabase: SupabaseClient, slugs: string[]) {
   if (slugs.length === 0) return new Map<string, ExistingRoom>()
 
-  const { data, error } = await supabase
+  let response: any = await supabase
     .from('rooms')
     .select('slug, status, match_status, room_status, is_featured')
     .in('slug', slugs)
 
-  if (error) {
+  if (isMissingColumnError(response.error)) {
+    response = await supabase
+      .from('rooms')
+      .select('slug, status')
+      .in('slug', slugs)
+  }
+
+  if (response.error) {
     throw new ApiError('INTERNAL_ERROR', 'Unable to read existing rooms before sync.', 500)
   }
 
-  return new Map(((data ?? []) as ExistingRoom[]).map((room) => [room.slug, room]))
+  return new Map(((response.data ?? []) as ExistingRoom[]).map((room) => [room.slug, room]))
 }
 
 export async function syncCurrentCycleRooms(
@@ -168,7 +178,7 @@ export async function syncCurrentCycleRooms(
     .upsert(rows, { onConflict: 'slug' })
     .select('id, slug, title, status')
 
-  if (response.error?.code === 'PGRST204') {
+  if (isMissingColumnError(response.error)) {
     console.warn('Room sync is using legacy room columns. Reload Supabase/PostgREST schema after applying the room visibility migration.')
     response = await supabase
       .from('rooms')

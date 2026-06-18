@@ -1,6 +1,6 @@
 import fixtureJson from './data/worldcup.json' with { type: 'json' }
 import teamJson from './data/worldcup.teams.json' with { type: 'json' }
-import type { Team } from './index.js'
+import type { MatchStatus, Team } from './index.js'
 
 type RawFixture = {
   round: string
@@ -45,6 +45,7 @@ export type MatchCycleWindow = {
 }
 
 export const DEFAULT_MATCH_CYCLE_START_HOUR_UTC = 4
+export const MATCH_LIVE_DURATION_MS = 2 * 60 * 60 * 1000
 
 function slugify(value: string): string {
   return value
@@ -181,6 +182,16 @@ export function matchKickoffUtcMs(match: Pick<FixtureMatch, 'date' | 'time'>): n
   return Date.parse(matchKickoffUtc(match))
 }
 
+export function matchStatusAt(match: FixtureMatch, now = new Date()): MatchStatus {
+  if (match.result?.status === 'FT') return 'finished'
+
+  const kickoffMs = matchKickoffUtcMs(match)
+  const nowMs = now.getTime()
+  if (nowMs < kickoffMs) return 'upcoming'
+  if (nowMs <= kickoffMs + MATCH_LIVE_DURATION_MS) return 'live'
+  return 'finished'
+}
+
 export function matchCycleDateForKickoff(
   kickoff: Date | string | number,
   startHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC,
@@ -245,7 +256,6 @@ export function currentOrNextCycleMatches(
   const activeEndMs = Date.parse(activeWindow.endUtc)
   const activeMatches = matches
     .filter((match) => {
-      if (match.result?.status === 'FT') return false
       const kickoffMs = matchKickoffUtcMs(match)
       return kickoffMs >= activeStartMs && kickoffMs <= activeEndMs
     })

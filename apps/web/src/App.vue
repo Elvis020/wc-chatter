@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { mockThemes, type ApiEvent, type CreatePredictionInput, type Prediction, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
+import { loadFixtures, MATCH_LIVE_DURATION_MS, matchKickoffUtc, mockThemes, type ApiEvent, type CreatePredictionInput, type MatchStatus, type Prediction, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike } from './lib/api'
 import { createNaviiIcon } from './lib/navii'
@@ -18,6 +18,15 @@ const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const COMMENT_PREVIEW_LIMIT = 3
 const ROOM_PAGE_SIZE = 4
 const ROOM_REFRESH_MS = 60_000
+const fixtureKickoffs = new Map(
+  loadFixtures().flatMap((match) => {
+    const kickoff = matchKickoffUtc(match)
+    return [
+      [match.id, kickoff],
+      [`${match.home.code}-${match.away.code}`, kickoff],
+    ]
+  }),
+)
 type FeedSortMode = 'likes' | 'comments'
 type RealtimeStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline'
 type PendingIdentityAction =
@@ -113,10 +122,11 @@ const totalComments = computed(
 const canSaveUsername = computed(() => !username.value && usernameDraft.value.trim().length > 0)
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
 const isNotFound = computed(() => routePath.value !== '/')
-const roomPageCount = computed(() => Math.max(1, Math.ceil(rooms.value.length / ROOM_PAGE_SIZE)))
+const orderedRooms = computed(() => [...rooms.value].sort(compareRoomsForSwitcher))
+const roomPageCount = computed(() => Math.max(1, Math.ceil(orderedRooms.value.length / ROOM_PAGE_SIZE)))
 const visibleRooms = computed(() => {
   const start = roomPage.value * ROOM_PAGE_SIZE
-  return rooms.value.slice(start, start + ROOM_PAGE_SIZE)
+  return orderedRooms.value.slice(start, start + ROOM_PAGE_SIZE)
 })
 const roomPageLabel = computed(() => `${roomPage.value + 1}/${roomPageCount.value}`)
 const statusNotice = computed(() => {
@@ -308,37 +318,110 @@ function shouldFadeCommentPreview(prediction: Prediction) {
   return shouldShowCommentToggle(prediction) && !isCommentsExpanded(prediction.id)
 }
 
+function roomKickoffIso(room: Room) {
+  return room.kickoffAt ?? fixtureKickoffs.get(room.id) ?? fixtureKickoffs.get(`${room.home.code}-${room.away.code}`) ?? ''
+}
+
+function roomKickoffMs(room: Room) {
+  const kickoffIso = roomKickoffIso(room)
+  if (!kickoffIso) return Number.POSITIVE_INFINITY
+
+  const kickoffMs = Date.parse(kickoffIso)
+  return Number.isFinite(kickoffMs) ? kickoffMs : Number.POSITIVE_INFINITY
+}
+
+function effectiveRoomMatchStatus(room: Room): MatchStatus {
+  if (room.currentScore?.status === 'finished') return 'finished'
+  if (room.currentScore?.status === 'live') return 'live'
+
+  const kickoffIso = roomKickoffIso(room)
+  if (kickoffIso) {
+    const kickoffMs = Date.parse(kickoffIso)
+    if (Number.isFinite(kickoffMs)) {
+      const nowMs = Date.now()
+      if (nowMs < kickoffMs) return 'upcoming'
+      if (nowMs <= kickoffMs + MATCH_LIVE_DURATION_MS) return 'live'
+      return 'finished'
+    }
+  }
+
+  return room.matchStatus
+}
+
 function showsLiveRoomIcon(room: Room) {
-  return room.currentScore?.status === 'live' || room.matchStatus === 'live'
+  return effectiveRoomMatchStatus(room) === 'live'
+}
+
+function isLockedRoom(room: Room) {
+  return effectiveRoomMatchStatus(room) === 'finished' || room.roomStatus === 'closed'
+}
+
+function roomLockedAtMs(room: Room) {
+  const scoreUpdatedAt = room.currentScore?.status === 'finished' ? Date.parse(room.currentScore.updatedAt) : NaN
+  if (Number.isFinite(scoreUpdatedAt)) return scoreUpdatedAt
+
+  const kickoffMs = roomKickoffMs(room)
+  if (Number.isFinite(kickoffMs)) return kickoffMs + MATCH_LIVE_DURATION_MS
+
+  return Number.NEGATIVE_INFINITY
+}
+
+function compareRoomsForSwitcher(left: Room, right: Room) {
+  const leftLocked = isLockedRoom(left)
+  const rightLocked = isLockedRoom(right)
+  if (leftLocked !== rightLocked) return leftLocked ? 1 : -1
+
+  if (leftLocked && rightLocked) {
+    return roomLockedAtMs(right) - roomLockedAtMs(left)
+  }
+
+  const leftLive = effectiveRoomMatchStatus(left) === 'live'
+  const rightLive = effectiveRoomMatchStatus(right) === 'live'
+  if (leftLive !== rightLive) return leftLive ? -1 : 1
+
+  return roomKickoffMs(left) - roomKickoffMs(right)
+}
+
+function roomKickoffTime(room: Room) {
+  const kickoffIso = roomKickoffIso(room)
+  if (!kickoffIso) return ''
+
+  const kickoff = new Date(kickoffIso)
+  if (Number.isNaN(kickoff.getTime())) return ''
+
+  return `${String(kickoff.getHours()).padStart(2, '0')}:${String(kickoff.getMinutes()).padStart(2, '0')}`
 }
 
 function roomStatusLabel(room: Room) {
+  const matchStatus = effectiveRoomMatchStatus(room)
   if (room.currentScore) {
     return `${room.currentScore.status === 'finished' ? 'Finished match' : room.currentScore.status === 'live' ? 'Live match' : 'Score'}: ${room.home.name} ${room.currentScore.home}, ${room.away.name} ${room.currentScore.away}`
   }
-  if (room.matchStatus === 'live') return 'Live match'
+  if (matchStatus === 'live') return 'Live match'
   if (room.roomStatus === 'closed') return 'Closed room'
-  if (room.matchStatus === 'finished') return 'Finished match'
+  if (matchStatus === 'finished') return 'Finished match'
   return 'Upcoming match'
 }
 
 function roomStatusText(room: Room) {
+  const matchStatus = effectiveRoomMatchStatus(room)
   if (room.currentScore) {
     const prefix = room.currentScore.status === 'finished' ? 'FT' : room.currentScore.status === 'live' ? 'Live' : 'Score'
     return `${prefix} ${room.currentScore.home}-${room.currentScore.away}`
   }
-  if (room.matchStatus === 'live') return 'Live'
-  if (room.matchStatus === 'finished') return 'Played'
+  if (matchStatus === 'live') return 'Live'
+  if (matchStatus === 'finished') return 'Played'
   if (room.roomStatus === 'closed') return 'Closed'
   return 'Upcoming'
 }
 
 function roomStatusClass(room: Room) {
-  if (room.currentScore?.status === 'live' || room.matchStatus === 'live') {
+  const matchStatus = effectiveRoomMatchStatus(room)
+  if (matchStatus === 'live') {
     return 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]'
   }
 
-  if (room.currentScore?.status === 'finished' || room.matchStatus === 'finished') {
+  if (matchStatus === 'finished') {
     return 'border-[color:color-mix(in_srgb,var(--muted)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--muted)_8%,transparent)] text-[var(--muted)]'
   }
 
@@ -1138,25 +1221,25 @@ onBeforeUnmount(() => {
 
           <div class="-mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-1" aria-label="Match rooms for the current cycle">
             <button
-              v-for="room in rooms"
+              v-for="room in orderedRooms"
               :key="room.id"
-              class="grid min-h-[84px] min-w-[154px] snap-start content-between rounded-lg border p-2.5 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
+              class="grid min-h-[84px] min-w-[230px] snap-start content-between rounded-lg border p-2.5 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
               :class="[
                 room.id === activeRoomId ? 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))]' : 'border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_46%,transparent)]',
-                room.matchStatus === 'finished' ? 'opacity-80' : '',
+                effectiveRoomMatchStatus(room) === 'finished' ? 'opacity-80' : '',
               ]"
               type="button"
               @click="setActiveRoom(room.id)"
             >
               <span class="grid gap-1.5">
-                <span class="flex items-center gap-1.5 text-[15px] font-[850] leading-none text-[var(--text)]">
+                <span class="grid grid-cols-[58px_3ch_auto_58px_3ch] items-center gap-1.5 text-[15px] font-[850] leading-none text-[var(--text)]">
                   <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
                   <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
                   <span>{{ room.home.code }}</span>
-                  <span class="ref-versus">v</span>
-                  <span>{{ room.away.code }}</span>
+                  <span class="ref-versus justify-self-center">v</span>
                   <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
                   <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
+                  <span>{{ room.away.code }}</span>
                 </span>
               </span>
 
@@ -1168,7 +1251,7 @@ onBeforeUnmount(() => {
                   <span class="h-2.5 w-2.5 rounded-full bg-current shadow-[0_0_0_5px_color-mix(in_srgb,var(--accent)_12%,transparent)]" aria-hidden="true"></span>
                   <span>Live</span>
                 </span>
-                <svg v-else-if="room.currentScore?.status === 'finished' || room.matchStatus === 'finished' || room.roomStatus === 'closed'" class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                <svg v-else-if="effectiveRoomMatchStatus(room) === 'finished' || room.roomStatus === 'closed'" class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                   <rect x="48" y="108" width="160" height="104" rx="16"></rect>
                   <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
                 </svg>
@@ -1418,23 +1501,19 @@ onBeforeUnmount(() => {
               class="grid min-h-[62px] w-full items-center gap-3 rounded-lg border-0 border-t border-t-[color:color-mix(in_srgb,var(--line)_86%,transparent)] bg-transparent p-3 text-left text-[var(--text)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] first:border-t-0 first:pt-0.5 hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] active:translate-y-px max-md:grid-cols-1 max-md:items-start"
               :class="[
                 room.id === activeRoomId ? 'grid-cols-[minmax(0,1fr)_auto] border-t-transparent bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)] outline outline-1 outline-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,black)]' : 'grid-cols-[minmax(0,1fr)_auto]',
-                room.matchStatus === 'finished' ? 'text-[var(--muted)]' : '',
+                effectiveRoomMatchStatus(room) === 'finished' ? 'text-[var(--muted)]' : '',
               ]"
               type="button"
               @click="setActiveRoom(room.id)"
             >
-              <span class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap font-[850]">
-                <span class="grid min-w-0 grid-cols-[18px_auto] items-center gap-2">
-                  <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
-                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
-                  <span>{{ room.home.code }}</span>
-                </span>
-                <span class="ref-versus">v</span>
-                <span class="grid min-w-0 grid-cols-[18px_auto] items-center gap-2">
-                  <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
-                  <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
-                  <span>{{ room.away.code }}</span>
-                </span>
+              <span class="grid min-w-0 grid-cols-[58px_3ch_auto_58px_3ch] items-center gap-2 whitespace-nowrap font-[850]">
+                <span v-if="hasSpriteFlag(room.home)" :class="['ref-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
+                <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
+                <span>{{ room.home.code }}</span>
+                <span class="ref-versus justify-self-center">v</span>
+                <span v-if="hasSpriteFlag(room.away)" :class="['ref-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
+                <span v-else class="ref-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
+                <span>{{ room.away.code }}</span>
               </span>
 
               <span class="inline-flex min-h-8 min-w-11 items-center justify-center gap-2.5 text-[color:color-mix(in_srgb,var(--accent)_62%,var(--text))]" :aria-label="roomStatusLabel(room)">
@@ -1446,7 +1525,7 @@ onBeforeUnmount(() => {
                   <span>Live</span>
                 </span>
                 <svg
-                  v-else-if="room.currentScore?.status === 'finished' || room.matchStatus === 'finished' || room.roomStatus === 'closed'"
+                  v-else-if="effectiveRoomMatchStatus(room) === 'finished' || room.roomStatus === 'closed'"
                   class="ph-icon h-4 w-4"
                   viewBox="0 0 256 256"
                   aria-hidden="true"
@@ -1457,18 +1536,20 @@ onBeforeUnmount(() => {
                   <rect x="48" y="108" width="160" height="104" rx="16"></rect>
                   <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
                 </svg>
-                <svg
-                  v-else
-                  class="ph-icon h-4 w-4"
-                  viewBox="0 0 256 256"
-                  aria-hidden="true"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="18"
-                >
-                  <circle cx="128" cy="128" r="84"></circle>
-                  <path d="M128 76v56l38 22"></path>
-                </svg>
+                <span v-else class="grid justify-items-center gap-0.5 leading-none">
+                  <span v-if="roomKickoffTime(room)" class="text-[9px] font-black tabular-nums text-[color:color-mix(in_srgb,var(--accent)_76%,var(--text))]">{{ roomKickoffTime(room) }}</span>
+                  <svg
+                    class="ph-icon h-4 w-4"
+                    viewBox="0 0 256 256"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="18"
+                  >
+                    <circle cx="128" cy="128" r="84"></circle>
+                    <path d="M128 76v56l38 22"></path>
+                  </svg>
+                </span>
               </span>
             </button>
           </div>
@@ -1602,9 +1683,9 @@ onBeforeUnmount(() => {
 
     <Transition name="sheet-flow">
       <div v-if="predictionModalOpen && activeRoom" class="sheet-overlay fixed inset-0 z-[1200] grid items-end bg-black/50 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]" aria-hidden="false" @click.self="submittingPrediction ? undefined : closePredictionModal()">
-      <section class="sheet-panel mx-auto mb-[max(10px,env(safe-area-inset-bottom))] flex max-h-[min(86dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] w-[min(760px,calc(100%-20px))] flex-col overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-[18px] shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" :aria-labelledby="`sheet-title-${activeRoom.id}`">
-        <div class="sheet-stagger mb-3 flex items-center justify-between gap-3" style="--sheet-index: 0">
-          <h2 class="m-0 text-xl font-extrabold leading-tight" :id="`sheet-title-${activeRoom.id}`">Your {{ activeRoom.home.name }} vs {{ activeRoom.away.name }} score</h2>
+      <section class="sheet-panel mx-auto mb-[max(10px,env(safe-area-inset-bottom))] flex h-fit max-h-[min(86dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] w-[min(760px,calc(100%-20px))] flex-col overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-[18px] shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" :aria-labelledby="`sheet-title-${activeRoom.id}`">
+        <div class="sheet-stagger mb-3 flex items-start justify-between gap-3" style="--sheet-index: 0">
+          <h2 class="m-0 text-xl font-extrabold leading-tight max-md:text-[18px]" :id="`sheet-title-${activeRoom.id}`">Your {{ activeRoom.home.name }} vs {{ activeRoom.away.name }} score</h2>
           <button class="inline-flex min-h-10 w-10 min-w-10 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] p-0 text-[var(--muted)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--line)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_88%,black)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0" type="button" aria-label="Close" :disabled="submittingPrediction" @click="closePredictionModal">
             <svg class="ph-icon h-5 w-5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
               <path d="M200 56 56 200"></path>
@@ -1617,20 +1698,20 @@ onBeforeUnmount(() => {
           <div class="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="home-score">{{ activeRoom.home.name }}</label>
-              <input id="home-score" v-model.number="predictionForm.homeScore" class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60" type="number" min="0" max="20" :disabled="submittingPrediction" required />
+              <input id="home-score" v-model.number="predictionForm.homeScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submittingPrediction" required />
             </div>
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="away-score">{{ activeRoom.away.name }}</label>
-              <input id="away-score" v-model.number="predictionForm.awayScore" class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60" type="number" min="0" max="20" :disabled="submittingPrediction" required />
+              <input id="away-score" v-model.number="predictionForm.awayScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submittingPrediction" required />
             </div>
           </div>
 
-          <div class="mt-2.5 grid gap-2.5">
+          <div class="mt-2.5 grid gap-2">
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="take">Comment</label>
-              <textarea id="take" v-model="predictionForm.comment" class="max-h-24 min-h-20 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60" rows="3" placeholder="Add a little confidence..." :disabled="submittingPrediction"></textarea>
+              <textarea id="take" v-model="predictionForm.comment" class="max-h-20 min-h-16 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 max-md:min-h-14" rows="2" placeholder="Add a little confidence..." :disabled="submittingPrediction"></textarea>
             </div>
-            <button class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,transform,opacity] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-80 disabled:active:translate-y-0" type="submit" :disabled="submittingPrediction">
+            <button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,transform,opacity] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-80 disabled:active:translate-y-0 md:min-h-11" type="submit" :disabled="submittingPrediction">
               <svg v-if="submittingPrediction" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">
                 <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
                 <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path>

@@ -8,6 +8,7 @@
     "build": "wrangler deploy --dry-run --env production --outdir dist",
     "deploy": "wrangler deploy --env production",
     "sync:rooms": "bun src/scripts/sync-rooms.ts",
+    "sync:live-scores": "bun src/scripts/sync-live-scores.ts",
     "types": "wrangler types src/worker-configuration.d.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

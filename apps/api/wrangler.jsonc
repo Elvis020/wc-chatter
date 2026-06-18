@@ -11,6 +11,9 @@
   "vars": {
     "APP_ORIGIN": "http://localhost:5173"
   },
+  "triggers": {
+    "crons": ["0 4 * * *", "* * * * *"]
+  },
   "durable_objects": {
     "bindings": [
       {
@@ -28,7 +31,7 @@
   "env": {
     "production": {
       "vars": {
-        "APP_ORIGIN": "https://your-frontend-domain.example"
+        "APP_ORIGIN": "https://wc-chatter.pages.dev"
       },
       "durable_objects": {
         "bindings": [

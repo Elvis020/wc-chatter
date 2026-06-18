@@ -1,5 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
+  loadFixtures,
+  MATCH_LIVE_DURATION_MS,
+  matchKickoffUtc,
   mockThemes,
   type ApiEvent,
   type CreatePredictionInput,
@@ -7,6 +10,8 @@ import {
   type Reply,
   type ReplyInput,
   type Room,
+  type RoomCurrentScore,
+  type RoomScoreStatus,
   type MatchStatus,
   type RoomInteractionStatus,
   type RoomStatus,
@@ -36,7 +41,14 @@ type RoomRow = {
   match_status?: MatchStatus | null
   room_status?: RoomInteractionStatus | null
   is_featured?: boolean | null
+  current_home_score?: number | null
+  current_away_score?: number | null
+  score_status?: RoomScoreStatus | null
+  score_clock?: string | null
+  score_provider?: string | null
+  score_updated_at?: string | null
   event_date: string | null
+  kickoff_at?: string | null
   created_at: string
 }
 
@@ -93,9 +105,24 @@ const ROOM_STATUS_ORDER: Record<RoomRow['status'], number> = {
   archived: 3,
 }
 const ROOM_SELECT =
-  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, event_date, created_at'
+  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, current_home_score, current_away_score, score_status, score_clock, score_provider, score_updated_at, event_date, kickoff_at, created_at'
+const ROOM_STATE_SELECT =
+  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, event_date, kickoff_at, created_at'
 const LEGACY_ROOM_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at'
+const fixtureKickoffs = new Map(
+  loadFixtures().flatMap((match) => {
+    const kickoff = matchKickoffUtc(match)
+    return [
+      [match.id, kickoff],
+      [`${match.home.code}-${match.away.code}`, kickoff],
+    ]
+  }),
+)
+
+function isMissingColumnError(error?: { code?: string } | null) {
+  return error?.code === 'PGRST204' || error?.code === '42703'
+}
 
 function toTeam(name: string, code: string, iso2?: string | null, flag?: string | null): Team {
   return {
@@ -118,6 +145,37 @@ function legacyMatchStatus(status: RoomRow['status']): MatchStatus {
   return 'upcoming'
 }
 
+function matchStatusFromKickoff(kickoffAt?: string | null): MatchStatus | null {
+  if (!kickoffAt) return null
+  const kickoffMs = Date.parse(kickoffAt)
+  if (!Number.isFinite(kickoffMs)) return null
+
+  const nowMs = Date.now()
+  if (nowMs < kickoffMs) return 'upcoming'
+  if (nowMs <= kickoffMs + MATCH_LIVE_DURATION_MS) return 'live'
+  return 'finished'
+}
+
+function kickoffForRoom(room: RoomRow) {
+  return room.kickoff_at ?? fixtureKickoffs.get(room.slug) ?? fixtureKickoffs.get(`${room.home_code}-${room.away_code}`) ?? null
+}
+
+function effectiveMatchStatus(room: RoomRow): MatchStatus {
+  if (room.match_status === 'finished') return 'finished'
+
+  const timedStatus = matchStatusFromKickoff(kickoffForRoom(room))
+  if (timedStatus) return timedStatus
+
+  return room.match_status ?? legacyMatchStatus(room.status)
+}
+
+function effectiveRoomStatus(room: RoomRow): RoomStatus {
+  const matchStatus = effectiveMatchStatus(room)
+  if (matchStatus === 'finished') return 'archived'
+  if (matchStatus === 'live') return 'live'
+  return toRoomStatus(room.status)
+}
+
 function legacyRoomStatus(status: RoomRow['status']): RoomInteractionStatus {
   if (status === 'closed' || status === 'archived') return 'closed'
   return 'open'
@@ -128,6 +186,28 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
   const side = homeScore > awayScore ? homeName : awayName
   const gap = Math.abs(homeScore - awayScore)
   return `${side} by ${gap}`
+}
+
+function currentScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
+  if (
+    room.current_home_score === undefined ||
+    room.current_home_score === null ||
+    room.current_away_score === undefined ||
+    room.current_away_score === null ||
+    !room.score_status ||
+    !room.score_updated_at
+  ) {
+    return undefined
+  }
+
+  return {
+    home: room.current_home_score,
+    away: room.current_away_score,
+    status: room.score_status,
+    clock: room.score_clock ?? '',
+    provider: room.score_provider ?? '',
+    updatedAt: room.score_updated_at,
+  }
 }
 
 function mostBackedFor(room: RoomRow, predictions: Prediction[]) {
@@ -175,13 +255,17 @@ function mapRoom(
   predictionsByRoom: Map<string, Prediction[]>,
 ): Room {
   const predictions = predictionsByRoom.get(room.id) ?? []
+  const matchStatus = effectiveMatchStatus(room)
+  const kickoffAt = kickoffForRoom(room) ?? undefined
 
   return {
     id: room.id,
-    status: toRoomStatus(room.status),
-    matchStatus: room.match_status ?? legacyMatchStatus(room.status),
+    status: effectiveRoomStatus(room),
+    matchStatus,
     roomStatus: room.room_status ?? legacyRoomStatus(room.status),
-    isFeatured: room.is_featured ?? room.status === 'live',
+    kickoffAt,
+    isFeatured: matchStatus === 'live',
+    currentScore: currentScoreForRoom(room),
     home: toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag),
     away: toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag),
     mostBacked: mostBackedFor(room, predictions),
@@ -289,7 +373,15 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       .order('event_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
 
-    if (response.error?.code === 'PGRST204') {
+    if (isMissingColumnError(response.error)) {
+      response = await supabase
+        .from('rooms')
+        .select(ROOM_STATE_SELECT)
+        .order('event_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+    }
+
+    if (isMissingColumnError(response.error)) {
       response = await supabase
         .from('rooms')
         .select(LEGACY_ROOM_SELECT)
@@ -321,7 +413,15 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       .eq(column, roomRef)
       .maybeSingle()
 
-    if (response.error?.code === 'PGRST204') {
+    if (isMissingColumnError(response.error)) {
+      response = await supabase
+        .from('rooms')
+        .select(ROOM_STATE_SELECT)
+        .eq(column, roomRef)
+        .maybeSingle()
+    }
+
+    if (isMissingColumnError(response.error)) {
       response = await supabase
         .from('rooms')
         .select(LEGACY_ROOM_SELECT)
