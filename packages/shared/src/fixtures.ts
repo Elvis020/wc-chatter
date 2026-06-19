@@ -53,6 +53,19 @@ const FLAG_ICON_SUBDIVISION_CODES = new Map<string, string>([
   ['Wales', 'gb-wls'],
 ])
 
+export function subdivisionFlagIso2(name: string, code?: string): string {
+  const fromName = FLAG_ICON_SUBDIVISION_CODES.get(name)
+  if (fromName) return fromName
+
+  const normalizedCode = code?.toUpperCase()
+  if (normalizedCode === 'ENG') return 'gb-eng'
+  if (normalizedCode === 'NIR') return 'gb-nir'
+  if (normalizedCode === 'SCO') return 'gb-sct'
+  if (normalizedCode === 'WAL' || normalizedCode === 'WLS') return 'gb-wls'
+
+  return ''
+}
+
 function slugify(value: string): string {
   return value
     .normalize('NFKD')
@@ -106,7 +119,7 @@ function buildKnownTeams(): Map<string, Team> {
   return new Map(
     (teamJson as RawTeam[]).map((raw) => {
       const flag = decodeFlagUnicode(raw.flag_unicode)
-      const iso2 = FLAG_ICON_SUBDIVISION_CODES.get(raw.name) ?? emojiFlagToIso2(flag)
+      const iso2 = subdivisionFlagIso2(raw.name, raw.fifa_code) || emojiFlagToIso2(flag)
       return [
         raw.name,
         {

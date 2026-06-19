@@ -8,6 +8,7 @@ import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } fro
 
 type RuntimeEnv = Env & SupabaseEnv
 type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabaseStore>
+type RoomApiEvent = Extract<ApiEvent, { room: Room }>
 
 const app = new Hono<{ Bindings: RuntimeEnv }>()
 const fallbackStore = createStore()
@@ -51,7 +52,7 @@ function appOrigin(env: RuntimeEnv) {
   return env.APP_ORIGIN || (typeof process === 'undefined' ? '' : process.env.APP_ORIGIN) || '*'
 }
 
-async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: ApiEvent) {
+async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: RoomApiEvent) {
   if (!env.ROOM_HUB) {
     store.broadcast(event)
     return

@@ -111,9 +111,23 @@ export interface ToggleLikeInput {
   liked: boolean
 }
 
+export type TypingTarget = 'reply'
+
+export interface TypingEvent {
+  type: 'typing'
+  roomId: string
+  userId: string
+  name: string
+  target: TypingTarget
+  targetId: string
+  active: boolean
+  at: string
+}
+
 export type ApiEvent =
   | { type: 'bootstrap'; room: Room }
   | { type: 'room.updated'; room: Room }
+  | TypingEvent
 
 export const mockThemes: ThemeOption[] = [
   { id: 'paper', label: 'Paper Notes' },
@@ -132,6 +146,7 @@ export {
   matchKickoffUtcMs,
   matchStatusAt,
   nextCycleMatches,
+  subdivisionFlagIso2,
   upcomingMatches,
   MATCH_LIVE_DURATION_MS,
   type FixtureMatch,

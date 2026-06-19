@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
+import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@wc-chatter/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
@@ -27,6 +27,9 @@ const MIN_PREDICTION_COMMENT_LENGTH = 4
 const COMMENT_PREVIEW_LIMIT = 3
 const ROOM_PAGE_SIZE = 4
 const ROOM_REFRESH_MS = 60_000
+const TYPING_IDLE_MS = 1800
+const TYPING_THROTTLE_MS = 1400
+const TYPING_VISIBLE_MS = 3200
 const fixtureKickoffs = new Map(
   loadFixtures().flatMap((match) => {
     const kickoff = matchKickoffUtc(match)
@@ -46,6 +49,13 @@ type FaviconTheme = {
   accent: string
   panel: string
   text: string
+}
+type TypingState = {
+  userId: string
+  name: string
+  target: TypingTarget
+  targetId: string
+  expiresAt: number
 }
 
 const faviconThemes: Record<ThemeId, FaviconTheme> = {
@@ -95,6 +105,7 @@ const editDrafts = reactive<Record<string, string>>({})
 const editErrors = reactive<Record<string, string>>({})
 const updatedRoomIds = ref(new Set<string>())
 const updatedPredictionIds = ref(new Set<string>())
+const typingPeople = ref(new Map<string, TypingState>())
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -102,10 +113,13 @@ let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 let fastCommentCollapseTimer: ReturnType<typeof window.setTimeout> | null = null
 let replyFocusTimers: ReturnType<typeof window.setTimeout>[] = []
 let livePulseTimer: ReturnType<typeof window.setTimeout> | null = null
+let typingCleanupTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectAttempt = 0
 let socketToken = 0
 let roomsRefreshInFlight = false
 const avatarCache = new Map<string, string>()
+const typingStopTimers = new Map<string, ReturnType<typeof window.setTimeout>>()
+const lastTypingSentAt = new Map<string, number>()
 
 const predictionForm = reactive({
   homeScore: 2,
@@ -319,11 +333,15 @@ async function showHome() {
 }
 
 function flagClass(team: Team) {
-  return `flag fi fi-${team.iso2.toLowerCase()}`
+  return `flag fi fi-${teamFlagIso2(team)}`
 }
 
 function hasSpriteFlag(team: Team) {
-  return !!team.iso2
+  return !!teamFlagIso2(team)
+}
+
+function teamFlagIso2(team: Team) {
+  return (team.iso2 || subdivisionFlagIso2(team.name, team.code)).toLowerCase()
 }
 
 function predictionAvatar(name: string) {
@@ -478,6 +496,23 @@ function hasReplyDraft(commentId: string) {
   return !!(replyDrafts[commentId] || '').trim()
 }
 
+function typingKey(target: TypingTarget, targetId: string, id = userId) {
+  return `${target}:${targetId}:${id}`
+}
+
+function typingLabel(target: TypingTarget, targetId: string) {
+  const now = Date.now()
+  const names = [...typingPeople.value.values()]
+    .filter((person) => person.target === target && person.targetId === targetId && person.expiresAt > now)
+    .map((person) => person.name)
+    .slice(0, 3)
+
+  if (names.length === 0) return ''
+  if (names.length === 1) return `${names[0]} is typing...`
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing...`
+  return `${names[0]}, ${names[1]} and others are typing...`
+}
+
 function roomAllowsTextEditing() {
   return !!activeRoom.value && effectiveRoomMatchStatus(activeRoom.value) !== 'finished' && activeRoom.value.roomStatus === 'open'
 }
@@ -501,6 +536,7 @@ function setActiveRoom(roomId: string) {
   fastCollapsingCommentCards.value = new Set()
   editingPredictionId.value = ''
   editingReplyId.value = ''
+  clearTypingState()
 }
 
 function previousRoomPage() {
@@ -621,6 +657,11 @@ function openReplyComposer(predictionId: string, commentId: string) {
   })
 }
 
+function closeReplyComposer(commentId: string) {
+  stopTyping('reply', commentId)
+  activeReplyTarget.value = null
+}
+
 function startEditingPrediction(prediction: Prediction) {
   const comment = leadComment(prediction)
   if (!comment || !canEditPrediction(prediction)) return
@@ -662,11 +703,114 @@ function toggleReply(predictionId: string, commentId: string) {
       return
     }
 
-    activeReplyTarget.value = null
+    closeReplyComposer(commentId)
     return
   }
 
   openReplyComposer(predictionId, commentId)
+}
+
+function sendTyping(target: TypingTarget, targetId: string, active: boolean) {
+  if (!activeRoom.value || !username.value || ws.value?.readyState !== WebSocket.OPEN) return
+
+  const event: TypingEvent = {
+    type: 'typing',
+    roomId: activeRoom.value.id,
+    userId,
+    name: username.value,
+    target,
+    targetId,
+    active,
+    at: new Date().toISOString(),
+  }
+
+  ws.value.send(JSON.stringify(event))
+}
+
+function markTyping(target: TypingTarget, targetId: string) {
+  if (!username.value) return
+
+  const key = typingKey(target, targetId)
+  const now = Date.now()
+  const lastSentAt = lastTypingSentAt.get(key) ?? 0
+
+  if (now - lastSentAt > TYPING_THROTTLE_MS) {
+    sendTyping(target, targetId, true)
+    lastTypingSentAt.set(key, now)
+  }
+
+  const existingTimer = typingStopTimers.get(key)
+  if (existingTimer) window.clearTimeout(existingTimer)
+
+  typingStopTimers.set(key, window.setTimeout(() => {
+    stopTyping(target, targetId)
+  }, TYPING_IDLE_MS))
+}
+
+function stopTyping(target: TypingTarget, targetId: string) {
+  const key = typingKey(target, targetId)
+  const existingTimer = typingStopTimers.get(key)
+  if (existingTimer) window.clearTimeout(existingTimer)
+  typingStopTimers.delete(key)
+  lastTypingSentAt.delete(key)
+  sendTyping(target, targetId, false)
+}
+
+function clearTypingState() {
+  for (const timer of typingStopTimers.values()) {
+    window.clearTimeout(timer)
+  }
+
+  typingStopTimers.clear()
+  lastTypingSentAt.clear()
+  typingPeople.value = new Map()
+
+  if (typingCleanupTimer) {
+    window.clearTimeout(typingCleanupTimer)
+    typingCleanupTimer = null
+  }
+}
+
+function cleanupTypingPeople() {
+  const now = Date.now()
+  const next = new Map(
+    [...typingPeople.value.entries()].filter(([, person]) => person.expiresAt > now),
+  )
+
+  typingPeople.value = next
+
+  if (typingCleanupTimer) {
+    window.clearTimeout(typingCleanupTimer)
+    typingCleanupTimer = null
+  }
+
+  const nextExpiry = Math.min(...[...next.values()].map((person) => person.expiresAt))
+  if (Number.isFinite(nextExpiry)) {
+    typingCleanupTimer = window.setTimeout(cleanupTypingPeople, Math.max(120, nextExpiry - Date.now()))
+  }
+}
+
+function handleTypingEvent(event: TypingEvent) {
+  if (event.roomId !== activeRoom.value?.id || event.userId === userId) return
+
+  const key = typingKey(event.target, event.targetId, event.userId)
+  const next = new Map(typingPeople.value)
+
+  if (!event.active) {
+    next.delete(key)
+    typingPeople.value = next
+    return
+  }
+
+  next.set(key, {
+    userId: event.userId,
+    name: event.name,
+    target: event.target,
+    targetId: event.targetId,
+    expiresAt: Date.now() + TYPING_VISIBLE_MS,
+  })
+  typingPeople.value = next
+  cleanupTypingPeople()
 }
 
 function focusReplyInput(commentId: string) {
@@ -784,6 +928,7 @@ async function submitReply(commentId: string) {
   submittingReplies.value = new Set(submittingReplies.value).add(commentId)
   replyErrors[commentId] = ''
   replyDrafts[commentId] = ''
+  stopTyping('reply', commentId)
   activeReplyTarget.value = null
   updateLocalReplyThread(commentId, (replies) => [...replies, optimisticReply])
 
@@ -1132,6 +1277,11 @@ function handleSocketEvent(event: MessageEvent<string>) {
 
   if (payload.type === 'room.updated') {
     patchRoom(payload.room)
+    return
+  }
+
+  if (payload.type === 'typing') {
+    handleTypingEvent(payload)
   }
 }
 
@@ -1332,6 +1482,7 @@ onBeforeUnmount(() => {
   if (livePulseTimer) {
     window.clearTimeout(livePulseTimer)
   }
+  clearTypingState()
   clearReplyFocusTimers()
   socketToken += 1
   ws.value?.close()
@@ -2060,6 +2211,13 @@ onBeforeUnmount(() => {
                   >
                     <span>{{ isCommentsExpanded(item.id) ? 'Show less' : `Show ${hiddenReplyCount(item)} more` }}</span>
                   </button>
+                  <p
+                    v-if="leadComment(item) && typingLabel('reply', leadComment(item)!.id)"
+                    class="m-0 pl-3 text-[10px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--accent)_68%,var(--muted))]"
+                    aria-live="polite"
+                  >
+                    {{ typingLabel('reply', leadComment(item)!.id) }}
+                  </p>
                 </div>
 
                 <Transition name="reply-composer" @after-enter="focusReplyComposer">
@@ -2076,13 +2234,15 @@ onBeforeUnmount(() => {
                       aria-label="Reply"
                       placeholder="Keep it light..."
                       :disabled="isReplySubmitting(leadComment(item)!.id)"
+                      @input="markTyping('reply', leadComment(item)!.id)"
+                      @blur="stopTyping('reply', leadComment(item)!.id)"
                     />
                     <button
                       class="hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--control-border)] bg-[color:color-mix(in_srgb,var(--control-bg)_76%,transparent)] text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px max-md:inline-flex"
                       type="button"
                       aria-label="Close reply input"
                       :disabled="isReplySubmitting(leadComment(item)!.id)"
-                      @click="activeReplyTarget = null"
+                      @click="closeReplyComposer(leadComment(item)!.id)"
                     >
                       <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="20">
                         <path d="M72 72l112 112"></path>

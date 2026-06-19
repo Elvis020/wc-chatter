@@ -4,6 +4,7 @@ import {
   matchStatusFromKickoff,
   matchKickoffUtc,
   mockThemes,
+  subdivisionFlagIso2,
   type ApiEvent,
   type CreatePredictionInput,
   type Prediction,
@@ -149,7 +150,7 @@ function toTeam(name: string, code: string, iso2?: string | null, flag?: string 
   return {
     name,
     code,
-    iso2: iso2 ?? '',
+    iso2: iso2 || subdivisionFlagIso2(name, code),
     flag: flag ?? '',
   }
 }
