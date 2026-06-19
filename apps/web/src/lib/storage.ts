@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   activeRoomId: 'wc-chatter-active-room-id',
   predictionDrafts: 'wc-chatter-prediction-drafts',
   replyDrafts: 'wc-chatter-reply-drafts',
+  prizeClaims: 'wc-chatter-prize-claims',
 } as const
 const VALID_THEMES = new Set<ThemeId>(['paper', 'desk', 'pub', 'press'])
 const memoryStorage = new Map<string, string>()
@@ -64,6 +65,18 @@ export function getStoredLikes() {
 
 export function setStoredLikes(likes: Set<string>) {
   writeStorage(STORAGE_KEYS.likes, JSON.stringify([...likes]))
+}
+
+export function getStoredPrizeClaims() {
+  try {
+    return new Set<string>(JSON.parse(readStorage(STORAGE_KEYS.prizeClaims) || '[]'))
+  } catch {
+    return new Set<string>()
+  }
+}
+
+export function setStoredPrizeClaims(claims: Set<string>) {
+  writeStorage(STORAGE_KEYS.prizeClaims, JSON.stringify([...claims]))
 }
 
 export function getStoredTheme(): ThemeId {

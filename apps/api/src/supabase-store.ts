@@ -8,6 +8,8 @@ import {
   type ApiEvent,
   type CreatePredictionInput,
   type Prediction,
+  type PrizeClaim,
+  type PrizeClaimInput,
   type Reply,
   type ReplyInput,
   type Room,
@@ -134,6 +136,26 @@ type PredictionOwnerRow = {
   created_at: string
 }
 
+type PrizePredictionRow = {
+  id: string
+  room_id: string
+  author_id: string
+  author_name: string
+  home_score: number
+  away_score: number
+}
+
+type PrizeClaimRow = {
+  id: string
+  room_id: string
+  prediction_id: string
+  author_id: string
+  author_name: string
+  question: string
+  answer: string
+  created_at: string
+}
+
 function isMissingColumnError(error?: { code?: string } | null) {
   return error?.code === 'PGRST204' || error?.code === '42703'
 }
@@ -218,6 +240,28 @@ function currentScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
     clock: room.score_clock ?? '',
     provider: room.score_provider ?? '',
     updatedAt: room.score_updated_at,
+  }
+}
+
+function finalScoreForRoom(row: RoomRow) {
+  const score = currentScoreForRoom(row)
+  if (effectiveMatchStatus(row) !== 'finished' || score?.status !== 'finished') return null
+  return {
+    home: score.home,
+    away: score.away,
+  }
+}
+
+function mapPrizeClaim(row: PrizeClaimRow): PrizeClaim {
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    predictionId: row.prediction_id,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    question: row.question,
+    answer: row.answer,
+    createdAt: row.created_at,
   }
 }
 
@@ -694,6 +738,68 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       }
 
       return hydrateRoom(prediction.room_id)
+    },
+    async addPrizeClaim(predictionId: string, payload: PrizeClaimInput) {
+      const { data: prediction, error: predictionError } = await supabase
+        .from('predictions')
+        .select('id, room_id, author_id, author_name, home_score, away_score')
+        .eq('id', predictionId)
+        .maybeSingle()
+
+      if (predictionError) throw new ApiError('INTERNAL_ERROR', 'Unable to load prediction.', 500)
+      if (!prediction) return null
+
+      const predictionRow = prediction as PrizePredictionRow
+      if (predictionRow.author_id !== payload.userId) {
+        throw new ApiError('FORBIDDEN', 'You can only claim your own prediction.', 403)
+      }
+
+      const room = await getRoomRow(predictionRow.room_id)
+      if (!room) return null
+
+      const finalScore = finalScoreForRoom(room)
+      if (!finalScore) {
+        throw new ApiError('FORBIDDEN', 'Prize claims open after the final score is posted.', 403)
+      }
+      if (predictionRow.home_score !== finalScore.home || predictionRow.away_score !== finalScore.away) {
+        throw new ApiError('FORBIDDEN', 'Only exact-score winners can claim a prize.', 403)
+      }
+
+      const { data: claim, error } = await supabase
+        .from('prize_claims')
+        .insert({
+          room_id: predictionRow.room_id,
+          prediction_id: predictionRow.id,
+          author_id: predictionRow.author_id,
+          author_name: predictionRow.author_name,
+          question: payload.question,
+          answer: payload.answer,
+        })
+        .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
+        .single()
+
+      if (error?.code === '23505') {
+        throw new ApiError('CONFLICT', 'Prize claim already saved for this prediction.', 409)
+      }
+      if (error) {
+        logSupabaseError('addPrizeClaim', error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to save prize claim.', 500)
+      }
+
+      return mapPrizeClaim(claim as PrizeClaimRow)
+    },
+    async getPrizeClaims() {
+      const { data, error } = await supabase
+        .from('prize_claims')
+        .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        logSupabaseError('getPrizeClaims', error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load prize claims.', 500)
+      }
+
+      return ((data ?? []) as PrizeClaimRow[]).map(mapPrizeClaim)
     },
     async addReply(commentId: string, payload: ReplyInput) {
       const { data: comment, error: commentError } = await supabase

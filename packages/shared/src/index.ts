@@ -90,6 +90,23 @@ export interface CreatePredictionInput {
   comment?: string
 }
 
+export interface PrizeClaimInput {
+  userId: string
+  question: string
+  answer: string
+}
+
+export interface PrizeClaim {
+  id: string
+  roomId: string
+  predictionId: string
+  authorId: string
+  authorName: string
+  question: string
+  answer: string
+  createdAt: string
+}
+
 export interface ReplyInput {
   authorId: string
   name: string

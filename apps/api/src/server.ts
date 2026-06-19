@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono'
-import type { ApiEvent, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
+import type { ApiEvent, CreatePredictionInput, PrizeClaimInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'
@@ -9,6 +9,7 @@ import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } fro
 type RuntimeEnv = Env & SupabaseEnv
 type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabaseStore>
 type RoomApiEvent = Extract<ApiEvent, { room: Room }>
+type AdminEnv = RuntimeEnv & { ADMIN_TOKEN?: string }
 
 const app = new Hono<{ Bindings: RuntimeEnv }>()
 const fallbackStore = createStore()
@@ -50,6 +51,18 @@ function enforceMutationRateLimit(userId: string, action: string) {
 
 function appOrigin(env: RuntimeEnv) {
   return env.APP_ORIGIN || (typeof process === 'undefined' ? '' : process.env.APP_ORIGIN) || '*'
+}
+
+function adminToken(env: AdminEnv) {
+  return env.ADMIN_TOKEN || (typeof process === 'undefined' ? '' : process.env.ADMIN_TOKEN) || ''
+}
+
+function assertAdmin(c: Context<{ Bindings: RuntimeEnv }>) {
+  const token = adminToken(c.env as AdminEnv)
+  const header = c.req.header('Authorization') || ''
+  if (!token || header !== `Bearer ${token}`) {
+    throw new ApiError('FORBIDDEN', 'Admin token is required.', 403)
+  }
 }
 
 async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: RoomApiEvent) {
@@ -111,6 +124,28 @@ function parseReplyInput(input: unknown): ReplyInput {
   }
 }
 
+function parsePrizeClaimInput(input: unknown): PrizeClaimInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  const question = normalizeText(body.question, 'Question')
+  const answer = normalizeText(body.answer, 'Answer')
+  if (!question || question.length < 4) {
+    throw new ApiError('VALIDATION_ERROR', 'Question must be at least 4 characters.', 400)
+  }
+  if (!answer || answer.length < 2) {
+    throw new ApiError('VALIDATION_ERROR', 'Answer must be at least 2 characters.', 400)
+  }
+
+  return {
+    userId: normalizeUserId(body.userId),
+    question,
+    answer,
+  }
+}
+
 function parsePredictionEditInput(input: unknown): UpdatePredictionInput {
   if (!input || typeof input !== 'object') {
     throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
@@ -151,7 +186,7 @@ app.use(
     const origin = c.req.header('Origin') || appOrigin(c.env)
     c.header('Access-Control-Allow-Origin', origin)
     c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type')
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
     if (c.req.method === 'OPTIONS') {
       return c.body(null, 204)
@@ -240,6 +275,25 @@ app.post('/api/predictions/:predictionId/edit', async (c) => {
   }
 })
 
+app.post('/api/predictions/:predictionId/prize-claim', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const predictionId = c.req.param('predictionId')
+    const payload = parsePrizeClaimInput(await readJson(c))
+    enforceMutationRateLimit(payload.userId, 'prize-claim')
+    const claim = await store.addPrizeClaim(predictionId, payload)
+
+    if (!claim) {
+      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
+    }
+
+    return c.json({ claim })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
 app.post('/api/comments/:commentId/replies', async (c) => {
   const store = storeFor(c.env)
   try {
@@ -276,6 +330,17 @@ app.post('/api/replies/:replyId/edit', async (c) => {
     const event: ApiEvent = { type: 'room.updated', room }
     await broadcastRoom(c.env, store, event)
     return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.get('/api/admin/prize-claims', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    assertAdmin(c)
+    return c.json({ claims: await store.getPrizeClaims() })
   } catch (error) {
     const response = errorResponse(error)
     return c.json(response.body, response.status)
