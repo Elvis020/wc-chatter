@@ -515,6 +515,186 @@ textarea:focus {
   transform: translateX(0);
 }
 
+.top-pick-carousel {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  --slide-duration: 4.4s;
+}
+
+.top-pick-slide {
+  grid-area: 1 / 1;
+  opacity: 1;
+  transform: none;
+}
+
+.top-pick-slide-hot {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.top-pick-slide-sharp {
+  background:
+    radial-gradient(circle at 88% 16%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 28%),
+    color-mix(in srgb, var(--chip-bg) 50%, transparent);
+}
+
+.top-pick-slide-split {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 44%),
+    color-mix(in srgb, var(--chip-bg) 46%, transparent);
+}
+
+.top-pick-slide-empty,
+.top-pick-slide-calm {
+  background: color-mix(in srgb, var(--chip-bg) 40%, transparent);
+}
+
+.desktop-readout-slide,
+.desktop-readout-slide.top-pick-slide-hot,
+.desktop-readout-slide.top-pick-slide-sharp,
+.desktop-readout-slide.top-pick-slide-split,
+.desktop-readout-slide.top-pick-slide-empty,
+.desktop-readout-slide.top-pick-slide-calm {
+  background: transparent;
+  box-shadow: none;
+}
+
+.top-pick-emoji {
+  display: inline-block;
+  transform-origin: 50% 70%;
+  animation: top-pick-emoji-bob 1.8s var(--ease) infinite;
+}
+
+.top-pick-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 32%, transparent);
+  opacity: 0.72;
+  transition:
+    width 180ms var(--ease),
+    background-color 180ms var(--ease),
+    opacity 180ms var(--ease);
+}
+
+.top-pick-dot-active {
+  width: 18px;
+  background: var(--accent);
+  opacity: 1;
+}
+
+.top-pick-dots-desktop {
+  inset-inline-end: auto;
+}
+
+.room-split-pitch {
+  display: grid;
+  gap: 5px;
+  margin-block: 0;
+  color: var(--text);
+}
+
+.room-split-pitch svg {
+  display: block;
+  width: 100%;
+  height: 52px;
+  overflow: hidden;
+}
+
+.pitch-field {
+  fill: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  stroke: color-mix(in srgb, var(--accent) 24%, var(--line));
+  stroke-width: 1.4;
+}
+
+.pitch-line,
+.pitch-box {
+  fill: none;
+  stroke: color-mix(in srgb, var(--muted) 30%, transparent);
+  stroke-width: 1.2;
+}
+
+.pitch-center {
+  fill: none;
+  stroke: color-mix(in srgb, var(--muted) 24%, transparent);
+  stroke-width: 1.2;
+}
+
+.pitch-fill {
+  opacity: 0.84;
+  mix-blend-mode: multiply;
+}
+
+body[data-theme='pub'] .pitch-fill {
+  mix-blend-mode: screen;
+  opacity: 0.62;
+}
+
+.pitch-fill-home {
+  fill: color-mix(in srgb, var(--accent) 72%, #ffffff);
+}
+
+.pitch-fill-draw {
+  fill: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.pitch-fill-away {
+  fill: color-mix(in srgb, var(--accent) 44%, var(--text));
+}
+
+.room-split-pitch-labels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.room-split-pitch-labels span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-split-pitch-labels span:nth-child(2) {
+  text-align: center;
+}
+
+.room-split-pitch-labels span:nth-child(3) {
+  text-align: right;
+}
+
+.room-split-pitch-mobile {
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.room-split-pitch-mobile .room-split-pitch-labels {
+  font-size: 9px;
+}
+
+.top-pick-fade-enter-active,
+.top-pick-fade-leave-active {
+  transition:
+    opacity 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+.top-pick-fade-enter-from {
+  opacity: 0;
+  transform: translateY(6px) scale(0.99);
+}
+
+.top-pick-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.99);
+}
+
 .room-feed-enter-active {
   transition:
     opacity 260ms var(--ease),
@@ -660,6 +840,16 @@ textarea:focus {
   }
 }
 
+@keyframes top-pick-emoji-bob {
+  0%,
+  100% {
+    transform: rotate(-2deg) translateY(0);
+  }
+  50% {
+    transform: rotate(3deg) translateY(-1px);
+  }
+}
+
 @keyframes room-update-pulse {
   0% {
     box-shadow:
@@ -786,6 +976,7 @@ textarea:focus {
   .reaction-count,
   .room-update-pulse,
   .live-pulse-dot,
+  .top-pick-emoji,
   .skeleton-pulse {
     animation: none;
   }

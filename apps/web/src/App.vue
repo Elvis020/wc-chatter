@@ -34,6 +34,7 @@ const ROOM_REFRESH_MS = 60_000
 const TYPING_IDLE_MS = 1800
 const TYPING_THROTTLE_MS = 1400
 const TYPING_VISIBLE_MS = 3200
+const TOP_PICK_SLIDE_MS = 4400
 const fixtureKickoffs = new Map(
   loadFixtures().flatMap((match) => {
     const kickoff = matchKickoffUtc(match)
@@ -60,6 +61,22 @@ type TypingState = {
   target: TypingTarget
   targetId: string
   expiresAt: number
+}
+type TopPickInsight = {
+  key: string
+  icon: string
+  label: string
+  value: string
+  detail: string
+  caption: string
+  tone: 'hot' | 'calm' | 'split' | 'sharp' | 'empty'
+  split?: {
+    home: number
+    draw: number
+    away: number
+    homeLabel: string
+    awayLabel: string
+  }
 }
 
 const faviconThemes: Record<ThemeId, FaviconTheme> = {
@@ -119,10 +136,12 @@ const updatedPredictionIds = ref(new Set<string>())
 const typingPeople = ref(new Map<string, TypingState>())
 const feedNavMode = ref<'hidden' | 'up' | 'down'>('hidden')
 const roomSwitchDirection = ref<'forward' | 'backward'>('forward')
+const activeTopPickIndex = ref(0)
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
+let topPickCarouselTimer: ReturnType<typeof window.setInterval> | null = null
 let fastCommentCollapseTimer: ReturnType<typeof window.setTimeout> | null = null
 let replyFocusTimers: ReturnType<typeof window.setTimeout>[] = []
 let livePulseTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -184,6 +203,8 @@ const exactPickPreview = computed(() => {
   if (!names.length) return ''
   return `${names.join(' · ')}${remaining > 0 ? ` · +${remaining} more` : ''}`
 })
+const topPickInsights = computed<TopPickInsight[]>(() => buildTopPickInsights(activeRoom.value))
+const activeTopPickInsight = computed(() => topPickInsights.value[activeTopPickIndex.value % Math.max(1, topPickInsights.value.length)] ?? null)
 const hasPrizeVerification = computed(() => prizeQuestion.value.trim().length >= 4 && prizeAnswer.value.trim().length >= 2)
 const canSaveUsername = computed(() =>
   usernameDraft.value.trim().length > 0 &&
@@ -232,9 +253,14 @@ watch(selectedTheme, (value) => {
 
 watch(activeRoom, (room) => {
   if (!room) return
+  activeTopPickIndex.value = 0
   predictionForm.homeScore = room.mostBacked.home
   predictionForm.awayScore = room.mostBacked.away
   predictionForm.comment = predictionDrafts[room.id] ?? ''
+})
+
+watch(() => topPickInsights.value.length, () => {
+  activeTopPickIndex.value = 0
 })
 
 watch(activeRoomId, (roomId) => {
@@ -418,6 +444,225 @@ function leadComment(prediction: Prediction) {
 
 function predictionCommentTotal(prediction: Prediction) {
   return prediction.comments.reduce((sum, comment) => sum + 1 + comment.replies.length, 0)
+}
+
+function percentOf(value: number, total: number) {
+  if (total <= 0) return 0
+  return Math.round((value / total) * 100)
+}
+
+function scoreKey(homeScore: number, awayScore: number) {
+  return `${homeScore}-${awayScore}`
+}
+
+function scoreLabel(room: Room, homeScore: number, awayScore: number) {
+  return `${room.home.code} ${homeScore}-${awayScore} ${room.away.code}`
+}
+
+function scorelineCount(room: Room, homeScore: number, awayScore: number) {
+  const key = scoreKey(homeScore, awayScore)
+  return room.predictions.filter((prediction) => scoreKey(prediction.homeScore, prediction.awayScore) === key).length
+}
+
+function roomSplit(room: Room) {
+  return room.predictions.reduce(
+    (split, prediction) => {
+      if (prediction.homeScore > prediction.awayScore) split.home += 1
+      else if (prediction.homeScore < prediction.awayScore) split.away += 1
+      else split.draw += 1
+      return split
+    },
+    { home: 0, draw: 0, away: 0 },
+  )
+}
+
+function roomSplitPercentages(room: Room) {
+  const split = roomSplit(room)
+  const total = room.predictions.length
+
+  return {
+    counts: split,
+    percentages: {
+      home: percentOf(split.home, total),
+      draw: percentOf(split.draw, total),
+      away: percentOf(split.away, total),
+    },
+  }
+}
+
+function mostDiscussedPrediction(room: Room) {
+  return [...room.predictions].sort((left, right) => {
+    const commentDelta = predictionCommentTotal(right) - predictionCommentTotal(left)
+    if (commentDelta !== 0) return commentDelta
+    return right.likes - left.likes
+  })[0] ?? null
+}
+
+function roomVibeInsight(room: Room, topPickShare: number): TopPickInsight {
+  const split = roomSplit(room)
+  const strongestSide = Math.max(split.home, split.draw, split.away)
+  const strongestSideShare = percentOf(strongestSide, room.predictions.length)
+  const interactionRate = room.predictions.length ? (totalLikes.value + totalComments.value) / room.predictions.length : 0
+
+  if (topPickShare >= 55 && room.predictions.length >= 3) {
+    return {
+      key: 'vibe',
+      icon: '😤',
+      label: 'Room vibe',
+      value: 'Chest out',
+      detail: 'The room is backing one score with confidence.',
+      caption: 'Someone is saving screenshots already.',
+      tone: 'sharp',
+    }
+  }
+
+  if (strongestSideShare <= 45 && room.predictions.length >= 4) {
+    return {
+      key: 'vibe',
+      icon: '🤝',
+      label: 'Room vibe',
+      value: 'Split room',
+      detail: 'No side has fully taken over the table.',
+      caption: 'The group chat has not picked a lane.',
+      tone: 'split',
+    }
+  }
+
+  if (interactionRate >= 4) {
+    return {
+      key: 'vibe',
+      icon: '🔥',
+      label: 'Room vibe',
+      value: 'Loud table',
+      detail: 'Picks are pulling reactions and replies.',
+      caption: 'The room is doing room things.',
+      tone: 'hot',
+    }
+  }
+
+  return {
+    key: 'vibe',
+    icon: '👀',
+    label: 'Room vibe',
+    value: 'Watching closely',
+    detail: 'The room is active, but nobody is shouting yet.',
+    caption: 'Calm before someone says too much.',
+    tone: 'calm',
+  }
+}
+
+function banterWeatherInsight(room: Room): TopPickInsight {
+  const talk = totalComments.value
+  const likes = totalLikes.value
+  const heat = talk * 2 + likes
+
+  if (heat >= 40) {
+    return {
+      key: 'weather',
+      icon: '🌶️',
+      label: 'Banter weather',
+      value: 'Spicy',
+      detail: `${talk} replies and ${likes} likes in the air.`,
+      caption: 'Keep water nearby.',
+      tone: 'hot',
+    }
+  }
+
+  if (heat >= 14) {
+    return {
+      key: 'weather',
+      icon: '🌡️',
+      label: 'Banter weather',
+      value: 'Heating up',
+      detail: `${room.predictions.length} picks are starting to move the room.`,
+      caption: 'Replies are stretching.',
+      tone: 'sharp',
+    }
+  }
+
+  if (room.predictions.length <= 1 && heat <= 2) {
+    return {
+      key: 'weather',
+      icon: '🧊',
+      label: 'Banter weather',
+      value: 'Cold room',
+      detail: 'Not much noise yet.',
+      caption: 'First bold take gets the mic.',
+      tone: 'calm',
+    }
+  }
+
+  return {
+    key: 'weather',
+    icon: '☁️',
+    label: 'Banter weather',
+    value: 'Calm',
+    detail: 'The room is still keeping it measured.',
+    caption: 'Suspiciously polite.',
+    tone: 'calm',
+  }
+}
+
+function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
+  if (!room || room.predictions.length === 0) {
+    return [
+      {
+        key: 'empty',
+        icon: '👀',
+        label: 'Top pick',
+        value: 'No top pick yet',
+        detail: 'The room is waiting for the first brave score.',
+        caption: 'Drop one and become the headline.',
+        tone: 'empty',
+      },
+    ]
+  }
+
+  const total = room.predictions.length
+  const topPickCount = scorelineCount(room, room.mostBacked.home, room.mostBacked.away)
+  const topPickShare = percentOf(topPickCount, total)
+  const { counts: split, percentages } = roomSplitPercentages(room)
+  const discussed = mostDiscussedPrediction(room)
+  const discussedReplies = discussed ? predictionCommentTotal(discussed) : 0
+
+  return [
+    {
+      key: 'crowd',
+      icon: '📣',
+      label: 'Crowd pick',
+      value: scoreLabel(room, room.mostBacked.home, room.mostBacked.away),
+      detail: `${topPickCount}/${total} picks · ${topPickShare}% of the room`,
+      caption: room.mostBacked.margin,
+      tone: topPickShare >= 50 ? 'sharp' : 'split',
+    },
+    {
+      key: 'split',
+      icon: '⚖️',
+      label: 'Room split',
+      value: `${room.home.code} ${percentages.home}% · Draw ${percentages.draw}% · ${room.away.code} ${percentages.away}%`,
+      detail: `${split.home} backing ${room.home.code}, ${split.draw} draw, ${split.away} backing ${room.away.code}`,
+      caption: split.draw >= Math.max(split.home, split.away) ? 'The draw gang has entered the chat.' : 'The room has picked a direction.',
+      tone: 'split',
+      split: {
+        home: percentages.home,
+        draw: percentages.draw,
+        away: percentages.away,
+        homeLabel: room.home.code,
+        awayLabel: room.away.code,
+      },
+    },
+    roomVibeInsight(room, topPickShare),
+    banterWeatherInsight(room),
+    {
+      key: 'noise',
+      icon: discussedReplies > 0 ? '💬' : '🤫',
+      label: 'Noise maker',
+      value: discussed ? scoreLabel(room, discussed.homeScore, discussed.awayScore) : 'No arguments yet',
+      detail: discussedReplies > 0 ? `${discussedReplies} comments around this pick` : 'No comment thread has taken over.',
+      caption: discussedReplies > 0 ? 'This score is carrying the group chat.' : 'Very polite. For now.',
+      tone: discussedReplies >= 4 ? 'hot' : 'calm',
+    },
+  ]
 }
 
 function isCommentsExpanded(predictionId: string) {
@@ -1616,6 +1861,11 @@ onMounted(async () => {
     if (isNotFound.value || document.hidden) return
     void refreshRooms({ preserveActiveRoom: true, silent: true })
   }, ROOM_REFRESH_MS)
+  topPickCarouselTimer = window.setInterval(() => {
+    const count = topPickInsights.value.length
+    if (count <= 1 || document.hidden) return
+    activeTopPickIndex.value = (activeTopPickIndex.value + 1) % count
+  }, TOP_PICK_SLIDE_MS)
 })
 
 onBeforeUnmount(() => {
@@ -1630,6 +1880,9 @@ onBeforeUnmount(() => {
   }
   if (roomRefreshTimer) {
     window.clearInterval(roomRefreshTimer)
+  }
+  if (topPickCarouselTimer) {
+    window.clearInterval(topPickCarouselTimer)
   }
   if (fastCommentCollapseTimer) {
     window.clearTimeout(fastCommentCollapseTimer)
@@ -2114,24 +2367,38 @@ onBeforeUnmount(() => {
           :aria-label="activeRoom.predictions.length ? `Top pick: ${activeRoom.home.code} ${activeRoom.mostBacked.home}, ${activeRoom.away.code} ${activeRoom.mostBacked.away}` : 'No top pick yet'"
         >
           <Transition name="room-surface" mode="out-in">
-            <div :key="`mobile-top-pick-${activeRoom.id}`" class="flex w-full items-center justify-between gap-3">
-              <span class="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-                <span class="text-[10px] font-black uppercase leading-none tracking-[0.08em]" :class="activeRoom.predictions.length ? 'text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))]' : 'text-[var(--muted)]'">Top pick</span>
-                <span class="text-[var(--muted)]">·</span>
-                <span v-if="activeRoom.predictions.length" class="truncate text-[12px] font-[650] leading-tight text-[var(--muted)]">{{ activeRoom.mostBacked.margin }}</span>
-                <span v-else class="truncate text-[12px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--muted)_72%,transparent)]">No top pick yet</span>
-              </span>
+            <div
+              :key="`mobile-top-pick-${activeRoom.id}`"
+              class="top-pick-carousel min-h-[52px] w-full"
+              :style="{ '--slide-count': topPickInsights.length }"
+            >
+              <Transition name="top-pick-fade" mode="out-in">
+                <div
+                  v-if="activeTopPickInsight"
+                  :key="`mobile-readout-${activeRoom.id}-${activeTopPickInsight.key}`"
+                  class="top-pick-slide grid w-full content-center gap-1"
+                  :class="`top-pick-slide-${activeTopPickInsight.tone}`"
+                >
+                  <span class="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+                    <span class="top-pick-emoji text-base leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
+                    <span class="text-[10px] font-black uppercase leading-none tracking-[0.08em]" :class="activeRoom.predictions.length ? 'text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))]' : 'text-[var(--muted)]'">{{ activeTopPickInsight.label }}</span>
+                    <span class="text-[var(--muted)]">·</span>
+                    <span class="truncate text-[12px] font-[650] leading-tight text-[var(--muted)]">{{ activeTopPickInsight.caption }}</span>
+                  </span>
 
-              <span v-if="activeRoom.predictions.length" class="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap [font-variant-numeric:tabular-nums]">
-                <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.home.code }}</span>
-                <span class="text-[19px] font-black leading-none text-[var(--text)]">{{ activeRoom.mostBacked.home }}</span>
-                <span class="text-[13px] font-black leading-none text-[var(--accent)]">-</span>
-                <span class="text-[19px] font-black leading-none text-[var(--text)]">{{ activeRoom.mostBacked.away }}</span>
-                <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.away.code }}</span>
-              </span>
-              <span v-else class="shrink-0 text-[10px] font-black uppercase tracking-[0.06em] text-[color:color-mix(in_srgb,var(--muted)_62%,transparent)]">
-                {{ activeRoomPredictionsClosed ? 'closed' : 'waiting' }}
-              </span>
+                  <span class="truncate text-[15px] font-black leading-tight text-[var(--text)]">
+                    {{ activeTopPickInsight.value }}
+                  </span>
+                </div>
+              </Transition>
+              <div v-if="topPickInsights.length > 1" class="top-pick-dots absolute bottom-0 right-0 flex items-center gap-1.5" aria-hidden="true">
+                <span
+                  v-for="(_, index) in topPickInsights"
+                  :key="`mobile-dot-${index}`"
+                  class="top-pick-dot"
+                  :class="{ 'top-pick-dot-active': index === activeTopPickIndex % topPickInsights.length }"
+                ></span>
+              </div>
             </div>
           </Transition>
         </section>
@@ -2558,29 +2825,66 @@ onBeforeUnmount(() => {
 
       <aside class="grid gap-3 min-[981px]:sticky min-[981px]:top-4 max-md:hidden">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] shadow-[var(--card-shadow)] max-md:rounded-[10px]">
-          <div class="relative grid gap-[14px] pt-[22px] max-md:pt-[18px]" :aria-label="`Most backed score: ${activeRoom.home.name} ${activeRoom.mostBacked.home}, ${activeRoom.away.name} ${activeRoom.mostBacked.away}`">
-            <span class="absolute right-[-54px] top-[22px] z-20 inline-flex h-7 w-[184px] origin-center rotate-45 items-center justify-center border-y border-y-[color:color-mix(in_srgb,var(--accent)_42%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--panel))] px-3 text-center text-[10px] font-extrabold uppercase leading-none tracking-[0.08em] text-[color:color-mix(in_srgb,var(--accent)_88%,var(--text))] max-md:right-[-52px] max-md:top-[19px] max-md:h-6 max-md:w-[164px] max-md:text-[9px]">Top pick</span>
-            <div class="text-xs font-extrabold uppercase text-[var(--muted)]">Most-backed score</div>
-            <div class="grid grid-cols-[auto_auto_auto] items-center justify-center justify-items-center gap-[clamp(14px,3vw,28px)] py-3 pt-3 pb-2.5">
-              <div class="grid justify-items-center gap-[7px]">
-                <span v-if="hasSpriteFlag(activeRoom.home)" :class="flagClass(activeRoom.home)" aria-hidden="true"></span>
-                <span v-else class="flag flag-fallback flag-fallback-small" aria-hidden="true">{{ activeRoom.home.flag || activeRoom.home.code }}</span>
-                <span class="text-xs font-extrabold uppercase text-[var(--muted)]">{{ activeRoom.home.code }}</span>
-              </div>
+          <div
+            class="relative grid gap-[14px] pt-[22px] max-md:pt-[18px]"
+            :aria-label="`Room readout carousel for ${activeRoom.home.name} vs ${activeRoom.away.name}`"
+          >
+            <div class="text-xs font-extrabold uppercase text-[var(--muted)]">Room readout</div>
+            <div
+              class="top-pick-carousel min-h-[206px]"
+              :style="{ '--slide-count': topPickInsights.length }"
+            >
+              <Transition name="top-pick-fade" mode="out-in">
+                <article
+                  v-if="activeTopPickInsight"
+                  :key="`desktop-readout-${activeRoom.id}-${activeTopPickInsight.key}`"
+                  class="top-pick-slide desktop-readout-slide relative grid content-center gap-3 px-1 py-2"
+                  :class="`top-pick-slide-${activeTopPickInsight.tone}`"
+                >
+                  <span v-if="activeTopPickInsight.key === 'crowd'" class="absolute right-[-73px] top-[-30px] z-20 inline-flex h-7 w-[184px] origin-center rotate-45 items-center justify-center border-y border-y-[color:color-mix(in_srgb,var(--accent)_42%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--panel))] px-3 text-center text-[10px] font-extrabold uppercase leading-none tracking-[0.08em] text-[color:color-mix(in_srgb,var(--accent)_88%,var(--text))]">Top pick</span>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
+                      <span class="top-pick-emoji text-[22px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
+                      <span>{{ activeTopPickInsight.label }}</span>
+                    </span>
+                  </div>
 
-              <div class="inline-flex items-center gap-2.5 [font-variant-numeric:tabular-nums]">
-                <div class="text-[clamp(58px,8vw,78px)] leading-[0.86] font-black text-[var(--text)]">{{ activeRoom.mostBacked.home }}</div>
-                <div class="text-2xl font-black text-[var(--accent)]">-</div>
-                <div class="text-[clamp(58px,8vw,78px)] leading-[0.86] font-black text-[var(--text)]">{{ activeRoom.mostBacked.away }}</div>
-              </div>
+                  <div v-if="!activeTopPickInsight.split" class="grid gap-1.5">
+                    <strong class="text-[clamp(22px,2.35vw,30px)] font-black leading-[1.06] text-[var(--text)]">{{ activeTopPickInsight.value }}</strong>
+                    <span class="text-sm font-[720] leading-snug text-[var(--soft)]">{{ activeTopPickInsight.detail }}</span>
+                  </div>
 
-              <div class="grid justify-items-center gap-[7px]">
-                <span v-if="hasSpriteFlag(activeRoom.away)" :class="flagClass(activeRoom.away)" aria-hidden="true"></span>
-                <span v-else class="flag flag-fallback flag-fallback-small" aria-hidden="true">{{ activeRoom.away.flag || activeRoom.away.code }}</span>
-                <span class="text-xs font-extrabold uppercase text-[var(--muted)]">{{ activeRoom.away.code }}</span>
-              </div>
+                  <div v-else class="grid gap-2">
+                    <div class="room-split-pitch" aria-hidden="true">
+                      <svg viewBox="0 0 260 56" role="img">
+                        <rect class="pitch-field" x="2" y="2" width="256" height="52" rx="10"></rect>
+                        <path class="pitch-line" d="M86.5 2v52M173.5 2v52M130 2v52"></path>
+                        <circle class="pitch-center" cx="130" cy="28" r="12"></circle>
+                        <path class="pitch-box" d="M2 16h26v24H2M258 16h-26v24h26"></path>
+                        <rect class="pitch-fill pitch-fill-home" x="2" y="2" :width="Math.max(10, activeTopPickInsight.split.home * 2.56)" height="52" rx="10"></rect>
+                        <rect class="pitch-fill pitch-fill-draw" :x="130 - Math.max(7, activeTopPickInsight.split.draw * 1.28)" y="2" :width="Math.max(14, activeTopPickInsight.split.draw * 2.56)" height="52"></rect>
+                        <rect class="pitch-fill pitch-fill-away" :x="258 - Math.max(10, activeTopPickInsight.split.away * 2.56)" y="2" :width="Math.max(10, activeTopPickInsight.split.away * 2.56)" height="52" rx="10"></rect>
+                    </svg>
+                      <div class="room-split-pitch-labels">
+                        <span>{{ activeTopPickInsight.split.homeLabel }} {{ activeTopPickInsight.split.home }}%</span>
+                        <span>D {{ activeTopPickInsight.split.draw }}%</span>
+                        <span>{{ activeTopPickInsight.split.awayLabel }} {{ activeTopPickInsight.split.away }}%</span>
+                      </div>
+                    </div>
+                    <span class="text-sm font-[720] leading-snug text-[var(--soft)]">{{ activeTopPickInsight.detail }}</span>
+                  </div>
 
-              <div class="col-span-full text-xs font-[650] text-[var(--muted)]">{{ activeRoom.mostBacked.margin }}</div>
+                  <p class="m-0 text-xs font-[650] leading-snug text-[var(--muted)]">{{ activeTopPickInsight.caption }}</p>
+                </article>
+              </Transition>
+              <div v-if="topPickInsights.length > 1" class="top-pick-dots top-pick-dots-desktop absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5" aria-hidden="true">
+                <span
+                  v-for="(_, index) in topPickInsights"
+                  :key="`desktop-dot-${index}`"
+                  class="top-pick-dot"
+                  :class="{ 'top-pick-dot-active': index === activeTopPickIndex % topPickInsights.length }"
+                ></span>
+              </div>
             </div>
 
             <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-t border-t-[rgba(229,229,229,0.08)] px-1 pt-3">
