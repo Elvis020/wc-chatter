@@ -163,6 +163,19 @@ const totalComments = computed(
       0,
     ) ?? 0,
 )
+const activeRoomFinalScore = computed(() => finalScoreForRoom(activeRoom.value))
+const exactPickPredictions = computed(() => {
+  const score = activeRoomFinalScore.value
+  if (!score || !activeRoom.value) return []
+  return activeRoom.value.predictions.filter((prediction) => isExactPick(prediction, score))
+})
+const exactPickNames = computed(() => exactPickPredictions.value.map((prediction) => prediction.name))
+const exactPickPreview = computed(() => {
+  const names = exactPickNames.value.slice(0, 3)
+  const remaining = exactPickNames.value.length - names.length
+  if (!names.length) return ''
+  return `${names.join(' · ')}${remaining > 0 ? ` · +${remaining} more` : ''}`
+})
 const canSaveUsername = computed(() => !username.value && usernameDraft.value.trim().length > 0)
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
 const activeRoomPredictionsClosed = computed(() => !!activeRoom.value && isRoomLockedByState(activeRoom.value, { fixtureKickoffs }))
@@ -429,6 +442,19 @@ function roomKickoffMs(room: Room) {
 
 function effectiveRoomMatchStatus(room: Room) {
   return effectiveRoomMatchStatusByState(room, { fixtureKickoffs })
+}
+
+function finalScoreForRoom(room?: Room | null) {
+  if (!room || effectiveRoomMatchStatus(room) !== 'finished') return null
+  if (!room.currentScore || room.currentScore.status !== 'finished') return null
+  return {
+    home: room.currentScore.home,
+    away: room.currentScore.away,
+  }
+}
+
+function isExactPick(prediction: Prediction, score = activeRoomFinalScore.value) {
+  return !!score && prediction.homeScore === score.home && prediction.awayScore === score.away
 }
 
 function showsLiveRoomIcon(room: Room) {
@@ -1986,7 +2012,33 @@ onBeforeUnmount(() => {
                   </span>
                 </h1>
 
-                <div class="mt-0.5 grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 border-t border-[var(--line)] pt-4 max-md:pt-3" aria-label="Event stats">
+                <div
+                  v-if="activeRoomFinalScore"
+                  class="mt-0.5 grid gap-3 border-t border-[var(--line)] pt-4 text-center max-md:gap-2 max-md:pt-3"
+                  aria-label="Exact score picks"
+                >
+                  <div class="flex flex-wrap items-center justify-center gap-2 text-[13px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)] max-md:text-[10px]">
+                    <span>Final score</span>
+                    <span class="rounded-md border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-2 py-1 text-[var(--text)] [font-variant-numeric:tabular-nums]">
+                      {{ activeRoom.home.code }} {{ activeRoomFinalScore.home }}-{{ activeRoomFinalScore.away }} {{ activeRoom.away.code }}
+                    </span>
+                  </div>
+
+                  <div class="grid justify-items-center gap-1.5">
+                    <strong class="block text-[clamp(28px,3vw,44px)] leading-none text-[var(--text)] max-md:text-[24px]">{{ exactPickPredictions.length }}</strong>
+                    <span class="text-[13px] font-[750] text-[var(--muted)] max-md:text-[11px]">
+                      {{ exactPickPredictions.length === 1 ? 'exact pick' : 'exact picks' }}
+                    </span>
+                    <span v-if="exactPickPreview" class="max-w-full truncate text-[14px] font-[750] text-[color:color-mix(in_srgb,var(--accent)_70%,var(--text))] max-md:text-[12px]">
+                      {{ exactPickPreview }}
+                    </span>
+                    <span v-else class="text-[14px] font-[650] text-[var(--muted)] max-md:text-[12px]">
+                      No exact picks
+                    </span>
+                  </div>
+                </div>
+
+                <div v-else class="mt-0.5 grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 border-t border-[var(--line)] pt-4 max-md:pt-3" aria-label="Event stats">
                   <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
                     <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ activeRoom.predictions.length }}</strong>
                     <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Predictions</span>
@@ -2214,7 +2266,18 @@ onBeforeUnmount(() => {
                 ]"
               >
               <div class="pt-0.5 max-md:pt-0">
-                <img class="prediction-avatar" :src="predictionAvatar(item.name)" :alt="`${item.name} avatar`" loading="lazy" decoding="async" />
+                <div class="prediction-avatar-wrap">
+                  <img class="prediction-avatar" :src="predictionAvatar(item.name)" :alt="`${item.name} avatar`" loading="lazy" decoding="async" />
+                  <svg
+                    v-if="isExactPick(item)"
+                    class="prediction-crown"
+                    viewBox="0 0 256 256"
+                    aria-hidden="true"
+                    fill="currentColor"
+                  >
+                    <path d="M44 200h168a12 12 0 0 1 0 24H44a12 12 0 0 1 0-24Zm2.6-122.4a12 12 0 0 1 15.1 2.1l38.8 42.4 17-70.8a12 12 0 0 1 20.9-4.9l17.1 20.5 17.1-20.5a12 12 0 0 1 20.9 4.9l17 70.8 38.8-42.4a12 12 0 0 1 20.6 10.4l-28 88a12 12 0 0 1-11.4 8.4H54.5a12 12 0 0 1-11.4-8.4l-28-88a12 12 0 0 1 31.5-12.5Z"></path>
+                  </svg>
+                </div>
               </div>
 
               <div class="grid min-w-0 gap-2 max-md:gap-1.5">
