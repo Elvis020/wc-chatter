@@ -2171,8 +2171,10 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <Transition name="room-feed" mode="out-in">
           <div
             v-if="!sortedPredictions.length"
+            :key="`feed-empty-${activeRoom.id}`"
             class="grid justify-items-center gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-5 text-center shadow-[var(--card-shadow)] max-md:rounded-[10px] max-md:p-4"
           >
             <div class="inline-grid h-12 w-12 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] text-[var(--accent)]">
@@ -2196,8 +2198,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <Transition v-else name="room-feed" mode="out-in">
-            <div ref="predictionFeedList">
+            <div v-else :key="`feed-list-${activeRoom.id}`" ref="predictionFeedList">
             <TransitionGroup :key="activeRoom.id" name="prediction-list" tag="div" class="grid gap-2.5 max-md:gap-3">
               <article
                 v-for="item in sortedPredictions"
