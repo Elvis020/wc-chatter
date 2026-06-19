@@ -2058,6 +2058,7 @@ onBeforeUnmount(() => {
             </Transition>
 
             <p
+              v-if="!activeRoomPredictionsClosed"
               class="mt-1 text-center text-[15px] leading-[1.45] font-medium text-[var(--muted)] max-md:hidden"
             >
               Drop your score and let the room react.
