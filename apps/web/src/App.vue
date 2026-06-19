@@ -8,11 +8,17 @@ import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
 import {
   getOrCreateUserId,
+  getStoredActiveRoomId,
   getStoredLikes,
+  getStoredPredictionDrafts,
+  getStoredReplyDrafts,
   getStoredTheme,
   getStoredUsername,
+  setStoredActiveRoomId,
   setStoredUsername,
   setStoredLikes,
+  setStoredPredictionDrafts,
+  setStoredReplyDrafts,
   setStoredTheme,
 } from './lib/storage'
 
@@ -55,7 +61,7 @@ const username = ref(getStoredUsername())
 const usernameDraft = ref(username.value)
 const usernameError = ref('')
 const rooms = ref<Room[]>([])
-const activeRoomId = ref('')
+const activeRoomId = ref(getStoredActiveRoomId())
 const loading = ref(true)
 const refreshingRooms = ref(false)
 const errorMessage = ref('')
@@ -68,6 +74,7 @@ const identityPromptOpen = ref(false)
 const identityPromptMessage = ref('')
 const themeMenuOpen = ref(false)
 const selectedTheme = ref<ThemeId>(getStoredTheme() as ThemeId)
+const themePreview = ref<ThemeId | null>(null)
 const feedSortMode = ref<FeedSortMode>('likes')
 const roomPage = ref(0)
 const likedPredictions = ref(getStoredLikes())
@@ -86,12 +93,15 @@ const editingReplyId = ref('')
 const replyErrors = reactive<Record<string, string>>({})
 const editDrafts = reactive<Record<string, string>>({})
 const editErrors = reactive<Record<string, string>>({})
+const updatedRoomIds = ref(new Set<string>())
+const updatedPredictionIds = ref(new Set<string>())
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 let fastCommentCollapseTimer: ReturnType<typeof window.setTimeout> | null = null
 let replyFocusTimers: ReturnType<typeof window.setTimeout>[] = []
+let livePulseTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectAttempt = 0
 let socketToken = 0
 let roomsRefreshInFlight = false
@@ -103,7 +113,8 @@ const predictionForm = reactive({
   comment: '',
 })
 
-const replyDrafts = reactive<Record<string, string>>({})
+const predictionDrafts = reactive<Record<string, string>>(getStoredPredictionDrafts())
+const replyDrafts = reactive<Record<string, string>>(getStoredReplyDrafts())
 
 const activeRoom = computed(() => rooms.value.find((room) => room.id === activeRoomId.value) ?? rooms.value.find((room) => room.isFeatured) ?? rooms.value[0] ?? null)
 const sortedPredictions = computed(() => {
@@ -162,20 +173,26 @@ const statusNotice = computed(() => {
   if (realtimeStatus.value === 'offline') return 'Live updates are offline. Retrying...'
   return ''
 })
+const effectiveTheme = computed(() => themePreview.value ?? selectedTheme.value)
 
-watch(selectedTheme, (value) => {
+watch(effectiveTheme, (value) => {
   document.body.dataset.theme = value === 'paper' ? '' : value
-  setStoredTheme(value)
   updateFavicon(value)
 }, { immediate: true })
+
+watch(selectedTheme, (value) => {
+  setStoredTheme(value)
+})
 
 watch(activeRoom, (room) => {
   if (!room) return
   predictionForm.homeScore = room.mostBacked.home
   predictionForm.awayScore = room.mostBacked.away
+  predictionForm.comment = predictionDrafts[room.id] ?? ''
 })
 
 watch(activeRoomId, (roomId) => {
+  if (roomId) setStoredActiveRoomId(roomId)
   connectActiveRoomEvents(roomId)
 })
 
@@ -188,6 +205,17 @@ watch(rooms, () => {
 watch(username, (value) => {
   if (value) usernameDraft.value = value
 })
+
+watch(() => predictionForm.comment, (comment) => {
+  const roomId = activeRoom.value?.id
+  if (!roomId) return
+  predictionDrafts[roomId] = comment
+  setStoredPredictionDrafts({ ...predictionDrafts })
+})
+
+watch(replyDrafts, () => {
+  setStoredReplyDrafts({ ...replyDrafts })
+}, { deep: true })
 
 function validateUsername(value: string) {
   const normalized = value.normalize('NFKC').replace(/\s+/g, ' ').trim().slice(0, 24)
@@ -323,6 +351,22 @@ function isFastCollapsingComments(predictionId: string) {
   return fastCollapsingCommentCards.value.has(predictionId)
 }
 
+function isRoomRecentlyUpdated(roomId: string) {
+  return updatedRoomIds.value.has(roomId)
+}
+
+function isPredictionRecentlyUpdated(predictionId: string) {
+  return updatedPredictionIds.value.has(predictionId)
+}
+
+function isOptimisticReply(replyId: string) {
+  return replyId.startsWith('optimistic-reply-')
+}
+
+function isOptimisticPrediction(predictionId: string) {
+  return predictionId.startsWith('optimistic-prediction-')
+}
+
 function sortedReplies(prediction: Prediction) {
   return [...(leadComment(prediction)?.replies ?? [])].sort(
     (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
@@ -430,6 +474,10 @@ function canSubmitReply(commentId: string) {
   return !isReplySubmitting(commentId) && !!(replyDrafts[commentId] || '').trim()
 }
 
+function hasReplyDraft(commentId: string) {
+  return !!(replyDrafts[commentId] || '').trim()
+}
+
 function roomAllowsTextEditing() {
   return !!activeRoom.value && effectiveRoomMatchStatus(activeRoom.value) !== 'finished' && activeRoom.value.roomStatus === 'open'
 }
@@ -518,6 +566,8 @@ async function submitPrediction() {
     const response = await createPrediction(roomId, payload)
     patchRoom(response.room)
     predictionForm.comment = ''
+    predictionDrafts[roomId] = ''
+    setStoredPredictionDrafts({ ...predictionDrafts })
   } catch (error) {
     removeLocalPrediction(optimisticPrediction.id)
     predictionModalOpen.value = !!activeRoom.value && activeRoom.value.id === roomId
@@ -817,6 +867,16 @@ async function submitReplyEdit(reply: Reply) {
 }
 
 function patchRoom(nextRoom: Room) {
+  const previousRoom = rooms.value.find((room) => room.id === nextRoom.id)
+  if (previousRoom && roomPulseSignature(previousRoom) !== roomPulseSignature(nextRoom)) {
+    const previousPredictions = predictionPulseSignatures(previousRoom)
+    const nextPredictions = predictionPulseSignatures(nextRoom)
+    const changedPredictionIds = nextRoom.predictions
+      .filter((prediction) => previousPredictions.get(prediction.id) !== nextPredictions.get(prediction.id))
+      .map((prediction) => prediction.id)
+    markRoomUpdated(nextRoom.id, changedPredictionIds)
+  }
+
   const existing = rooms.value.some((room) => room.id === nextRoom.id)
   rooms.value = existing
     ? rooms.value.map((room) => (room.id === nextRoom.id ? nextRoom : room))
@@ -1020,6 +1080,9 @@ function positionThemeMenu() {
 
 function toggleThemeMenu() {
   themeMenuOpen.value = !themeMenuOpen.value
+  if (!themeMenuOpen.value) {
+    clearThemePreview()
+  }
   if (themeMenuOpen.value) {
     nextTick(positionThemeMenu)
   }
@@ -1027,13 +1090,23 @@ function toggleThemeMenu() {
 
 function applyTheme(themeId: ThemeId) {
   selectedTheme.value = themeId
+  themePreview.value = null
   themeMenuOpen.value = false
+}
+
+function previewTheme(themeId: ThemeId) {
+  themePreview.value = themeId
+}
+
+function clearThemePreview() {
+  themePreview.value = null
 }
 
 function handleGlobalClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('.ui-select')) {
     themeMenuOpen.value = false
+    clearThemePreview()
   }
 }
 
@@ -1060,6 +1133,55 @@ function handleSocketEvent(event: MessageEvent<string>) {
   if (payload.type === 'room.updated') {
     patchRoom(payload.room)
   }
+}
+
+function roomPulseSignature(room: Room) {
+  return JSON.stringify({
+    matchStatus: room.matchStatus,
+    roomStatus: room.roomStatus,
+    currentScore: room.currentScore,
+    mostBacked: room.mostBacked,
+    predictions: room.predictions.map((prediction) => ({
+      id: prediction.id,
+      likes: prediction.likes,
+      comments: prediction.comments.map((comment) => ({
+        id: comment.id,
+        text: comment.text,
+        replies: comment.replies.map((reply) => ({
+          id: reply.id,
+          text: reply.text,
+          editedAt: reply.editedAt ?? '',
+        })),
+      })),
+    })),
+  })
+}
+
+function predictionPulseSignatures(room: Room) {
+  return new Map(
+    room.predictions.map((prediction) => [
+      prediction.id,
+      JSON.stringify({
+        likes: prediction.likes,
+        comments: prediction.comments,
+        editedAt: prediction.editedAt ?? '',
+      }),
+    ]),
+  )
+}
+
+function markRoomUpdated(roomId: string, predictionIds: string[] = []) {
+  updatedRoomIds.value = new Set([...updatedRoomIds.value, roomId])
+  if (predictionIds.length) {
+    updatedPredictionIds.value = new Set([...updatedPredictionIds.value, ...predictionIds])
+  }
+
+  if (livePulseTimer) window.clearTimeout(livePulseTimer)
+  livePulseTimer = window.setTimeout(() => {
+    updatedRoomIds.value = new Set()
+    updatedPredictionIds.value = new Set()
+    livePulseTimer = null
+  }, 1800)
 }
 
 function connectActiveRoomEvents(roomId: string) {
@@ -1134,8 +1256,14 @@ async function refreshRooms(options: { preserveActiveRoom?: boolean; silent?: bo
     const response = await fetchBootstrap()
     rooms.value = response.rooms
     const currentRoomExists = response.rooms.some((room) => room.id === activeRoomId.value)
+    const storedRoomId = getStoredActiveRoomId()
+    const storedRoomExists = response.rooms.some((room) => room.id === storedRoomId)
     if (!options.preserveActiveRoom || !currentRoomExists) {
-      activeRoomId.value = response.rooms.find((room) => room.isFeatured)?.id ?? response.rooms[0]?.id ?? ''
+      activeRoomId.value = currentRoomExists
+        ? activeRoomId.value
+        : storedRoomExists
+          ? storedRoomId
+          : response.rooms.find((room) => room.isFeatured)?.id ?? response.rooms[0]?.id ?? ''
     }
     errorMessage.value = ''
     return true
@@ -1201,6 +1329,9 @@ onBeforeUnmount(() => {
   if (fastCommentCollapseTimer) {
     window.clearTimeout(fastCommentCollapseTimer)
   }
+  if (livePulseTimer) {
+    window.clearTimeout(livePulseTimer)
+  }
   clearReplyFocusTimers()
   socketToken += 1
   ws.value?.close()
@@ -1218,7 +1349,17 @@ onBeforeUnmount(() => {
         <div class="inline-flex items-baseline gap-2 whitespace-nowrap text-[clamp(22px,2.2vw,30px)] leading-none font-black text-[var(--accent)]" aria-label="turntabl score room">turntabl <span class="font-[750] text-[var(--text)]">score room</span></div>
       </div>
 
-      <div class="relative z-[var(--layer-dropdown)] w-[46px]" :class="{ open: themeMenuOpen }">
+      <div class="flex items-center gap-2">
+        <div
+          v-if="username"
+          class="hidden min-h-10 max-w-[180px] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] px-2.5 text-[12px] font-bold text-[var(--text)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent)] sm:inline-flex"
+          aria-label="Current username"
+        >
+          <img class="h-6 w-6 rounded-full" :src="predictionAvatar(username)" alt="" decoding="async" />
+          <span class="min-w-0 truncate">{{ username }}</span>
+        </div>
+
+      <div class="ui-select relative z-[var(--layer-dropdown)] w-[46px]" :class="{ open: themeMenuOpen }">
         <button
           ref="themeTrigger"
           class="inline-grid min-h-[46px] w-[46px] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] p-0 text-[var(--text)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line-strong)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] active:translate-y-px"
@@ -1249,12 +1390,17 @@ onBeforeUnmount(() => {
             class="grid min-h-11 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-2.5 rounded-lg bg-transparent px-3 text-left text-[13px] font-[750] text-[var(--text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px aria-selected:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))]"
             type="button"
             :aria-selected="String(selectedTheme === theme.id)"
+            @mouseenter="previewTheme(theme.id)"
+            @focus="previewTheme(theme.id)"
+            @mouseleave="clearThemePreview"
+            @blur="clearThemePreview"
             @click="applyTheme(theme.id)"
           >
             <span class="text-[var(--accent)] font-black">{{ selectedTheme === theme.id ? '✓' : '' }}</span>
             <span>{{ theme.label }}</span>
           </button>
         </div>
+      </div>
       </div>
     </header>
 
@@ -1555,7 +1701,10 @@ onBeforeUnmount(() => {
         </button>
 
         <div class="match-stage-sticky">
-          <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:p-4">
+          <section
+            class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:p-4"
+            :class="isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : ''"
+          >
             <div class="relative z-[1] my-7 grid gap-[18px] max-md:my-3 max-md:gap-3">
               <h1 class="grid max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 text-center max-md:gap-2 md:gap-10">
                 <span class="grid min-w-0 justify-self-end justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
@@ -1617,7 +1766,10 @@ onBeforeUnmount(() => {
 
         <section
           class="hidden min-h-11 items-center justify-between gap-3 rounded-[10px] border bg-[color:color-mix(in_srgb,var(--panel)_68%,transparent)] px-3.5 py-2.5 text-left max-md:flex"
-          :class="activeRoom.predictions.length ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] shadow-[0_10px_24px_color-mix(in_srgb,var(--text)_5%,transparent)]' : 'border-dashed border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))]'"
+          :class="[
+            activeRoom.predictions.length ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] shadow-[0_10px_24px_color-mix(in_srgb,var(--text)_5%,transparent)]' : 'border-dashed border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))]',
+            isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : '',
+          ]"
           :aria-label="activeRoom.predictions.length ? `Top pick: ${activeRoom.home.code} ${activeRoom.mostBacked.home}, ${activeRoom.away.code} ${activeRoom.mostBacked.away}` : 'No top pick yet'"
         >
           <span class="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
@@ -1660,6 +1812,7 @@ onBeforeUnmount(() => {
               :class="[
                 room.id === activeRoomId ? 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))]' : 'border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_46%,transparent)]',
                 effectiveRoomMatchStatus(room) === 'finished' ? 'opacity-80' : '',
+                isRoomRecentlyUpdated(room.id) ? 'room-update-pulse' : '',
               ]"
               type="button"
               @click="setActiveRoom(room.id)"
@@ -1769,7 +1922,11 @@ onBeforeUnmount(() => {
                 :key="item.id"
                 data-prediction-card
                 class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-visible rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] transition-[background-color,border-color,box-shadow] duration-300 ease-[var(--ease)] max-md:rounded-[10px] max-md:p-3.5"
-                :class="leadComment(item) && (isReplying(item.id, leadComment(item)!.id) || isCommentsExpanded(item.id)) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))] shadow-[0_14px_36px_rgba(42,37,32,0.10)]' : ''"
+                :class="[
+                  leadComment(item) && (isReplying(item.id, leadComment(item)!.id) || isCommentsExpanded(item.id)) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))] shadow-[0_14px_36px_rgba(42,37,32,0.10)]' : '',
+                  isPredictionRecentlyUpdated(item.id) ? 'room-update-pulse' : '',
+                  isOptimisticPrediction(item.id) ? 'opacity-80' : '',
+                ]"
               >
               <div class="pt-0.5">
                 <img class="prediction-avatar" :src="predictionAvatar(item.name)" :alt="`${item.name} avatar`" loading="lazy" decoding="async" />
@@ -1784,6 +1941,7 @@ onBeforeUnmount(() => {
                     <strong class="text-[16px] font-[900] text-[var(--text)]">{{ item.homeScore }}-{{ item.awayScore }}</strong>
                     <span>{{ activeRoom.away.code }}</span>
                   </span>
+                  <span v-if="isOptimisticPrediction(item.id)" class="ml-2 text-[10px] font-black uppercase leading-none text-[var(--accent)]">sending</span>
                 </div>
 
                 <div v-if="leadComment(item)" class="grid gap-1">
@@ -1880,6 +2038,7 @@ onBeforeUnmount(() => {
                       </form>
                       <span v-else>
                         <strong>{{ reply.name }}:</strong> {{ reply.text }}
+                        <span v-if="isOptimisticReply(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">sending</span>
                         <span v-if="reply.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
                         <button
                           v-if="canEditReply(reply)"
@@ -1973,6 +2132,11 @@ onBeforeUnmount(() => {
                     <path d="M45.2 188.7A88 88 0 1 1 76 219.5L36 228Z"></path>
                   </svg>
                   <span :key="predictionCommentTotal(item)" class="reaction-count [font-variant-numeric:tabular-nums]">{{ predictionCommentTotal(item) }}</span>
+                  <span
+                    v-if="leadComment(item) && hasReplyDraft(leadComment(item)!.id)"
+                    class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
+                    aria-label="Reply draft saved"
+                  ></span>
                 </button>
               </div>
               </article>
@@ -2036,6 +2200,7 @@ onBeforeUnmount(() => {
               :class="[
                 room.id === activeRoomId ? 'grid-cols-[minmax(0,1fr)_auto] border-t-transparent bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)] outline outline-1 outline-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,black)]' : 'grid-cols-[minmax(0,1fr)_auto]',
                 effectiveRoomMatchStatus(room) === 'finished' ? 'text-[var(--muted)]' : '',
+                isRoomRecentlyUpdated(room.id) ? 'room-update-pulse' : '',
               ]"
               type="button"
               @click="setActiveRoom(room.id)"

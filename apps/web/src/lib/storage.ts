@@ -5,6 +5,9 @@ const STORAGE_KEYS = {
   username: 'wc-chatter-username',
   likes: 'wc-chatter-liked-predictions',
   theme: 'wc-chatter-theme',
+  activeRoomId: 'wc-chatter-active-room-id',
+  predictionDrafts: 'wc-chatter-prediction-drafts',
+  replyDrafts: 'wc-chatter-reply-drafts',
 } as const
 const VALID_THEMES = new Set<ThemeId>(['paper', 'desk', 'pub', 'press'])
 const memoryStorage = new Map<string, string>()
@@ -70,4 +73,44 @@ export function getStoredTheme(): ThemeId {
 
 export function setStoredTheme(value: ThemeId) {
   writeStorage(STORAGE_KEYS.theme, value)
+}
+
+export function getStoredActiveRoomId() {
+  return readStorage(STORAGE_KEYS.activeRoomId)
+}
+
+export function setStoredActiveRoomId(value: string) {
+  writeStorage(STORAGE_KEYS.activeRoomId, value)
+}
+
+function getStoredRecord(key: string) {
+  try {
+    const value = JSON.parse(readStorage(key) || '{}') as Record<string, string>
+    return value && typeof value === 'object' ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+function setStoredRecord(key: string, value: Record<string, string>) {
+  const compact = Object.fromEntries(
+    Object.entries(value).filter(([, text]) => text.trim().length > 0),
+  )
+  writeStorage(key, JSON.stringify(compact))
+}
+
+export function getStoredPredictionDrafts() {
+  return getStoredRecord(STORAGE_KEYS.predictionDrafts)
+}
+
+export function setStoredPredictionDrafts(value: Record<string, string>) {
+  setStoredRecord(STORAGE_KEYS.predictionDrafts, value)
+}
+
+export function getStoredReplyDrafts() {
+  return getStoredRecord(STORAGE_KEYS.replyDrafts)
+}
+
+export function setStoredReplyDrafts(value: Record<string, string>) {
+  setStoredRecord(STORAGE_KEYS.replyDrafts, value)
 }

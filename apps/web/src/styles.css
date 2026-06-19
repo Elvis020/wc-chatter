@@ -457,6 +457,10 @@ textarea:focus {
   transform: translateY(-6px) scale(0.98);
 }
 
+.room-update-pulse {
+  animation: room-update-pulse 1.45s var(--ease);
+}
+
 .sheet-flow-enter-active,
 .sheet-flow-leave-active {
   transition: opacity 220ms var(--ease);
@@ -550,6 +554,23 @@ textarea:focus {
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes room-update-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--accent) 26%, transparent),
+      var(--card-shadow);
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  }
+  55% {
+    box-shadow:
+      0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent),
+      var(--card-shadow);
+  }
+  100% {
+    box-shadow: var(--card-shadow);
   }
 }
 
@@ -649,6 +670,7 @@ textarea:focus {
 
   .reaction-pop,
   .reaction-count,
+  .room-update-pulse,
   .live-pulse-dot,
   .skeleton-pulse {
     animation: none;
