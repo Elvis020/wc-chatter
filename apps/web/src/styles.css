@@ -103,9 +103,13 @@ body[data-theme='pub'] {
 body[data-theme='pub'] .match-stage {
   color: var(--text);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.008)),
     repeating-linear-gradient(90deg, transparent 0 88px, rgba(255, 255, 255, 0.035) 88px 89px),
     var(--panel);
+}
+
+body[data-theme='pub'] .match-stage::before {
+  opacity: 0.08;
 }
 
 body[data-theme='pub'] .match-stage::after {
@@ -115,6 +119,20 @@ body[data-theme='pub'] .match-stage::after {
 body[data-theme='pub'] .match-stage strong,
 body[data-theme='pub'] .prediction h3 {
   color: var(--text);
+}
+
+body[data-theme='pub'] .prediction,
+body[data-theme='pub'] input,
+body[data-theme='pub'] textarea {
+  color: var(--text);
+}
+
+body[data-theme='pub'] .prediction [data-lead-comment] {
+  color: var(--soft);
+}
+
+body[data-theme='pub'] button:disabled {
+  color: color-mix(in srgb, var(--muted) 86%, var(--text));
 }
 
 body[data-theme='press'] {
@@ -251,10 +269,33 @@ textarea:focus {
     var(--panel);
 }
 
+.match-stage::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: clamp(58px, 17%, 92px);
+  width: clamp(132px, 14vw, 204px);
+  height: clamp(164px, 18vw, 252px);
+  z-index: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 72%, var(--text));
+  opacity: 0.18;
+  transform: translateX(-50%);
+  -webkit-mask-image: url('./assets/trophy-mark.svg');
+  mask-image: url('./assets/trophy-mark.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
 .match-stage::after {
   content: '';
   position: absolute;
   inset: auto -15% -55% 28%;
+  z-index: 0;
   height: 250px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px 999px 0 0;
@@ -282,7 +323,7 @@ textarea:focus {
 
 .mobile-room-flag {
   display: block;
-  width: 34px !important;
+  width: 28px !important;
   aspect-ratio: 4 / 3;
   overflow: hidden;
   border-radius: 5px;
@@ -658,8 +699,8 @@ textarea:focus {
   }
 
   .prediction-avatar {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
   }
 }
 
