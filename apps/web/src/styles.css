@@ -72,16 +72,16 @@ body[data-theme='desk'] {
 }
 
 body[data-theme='pub'] {
-  --bg: #171816;
-  --panel: #20211d;
-  --panel-2: #2a2c27;
-  --card: #23241f;
-  --card-soft: #2b2d28;
-  --line: rgba(236, 228, 214, 0.1);
-  --line-strong: rgba(236, 228, 214, 0.18);
-  --text: #ece4d6;
-  --muted: #a79f91;
-  --soft: #d7cebf;
+  --bg: #12130f;
+  --panel: #1b1c18;
+  --panel-2: #24251f;
+  --card: #1d1e1a;
+  --card-soft: #262720;
+  --line: rgba(229, 229, 229, 0.1);
+  --line-strong: rgba(229, 229, 229, 0.18);
+  --text: #e5e5e5;
+  --muted: #a1a1a1;
+  --soft: #d1d1cf;
   --accent: #c8a96a;
   --accent-2: #7f8f7a;
   --accent-text: #171816;
@@ -98,6 +98,23 @@ body[data-theme='pub'] {
   --grain-dot: rgba(255, 240, 220, 0.03);
   --grain-haze: rgba(255, 248, 236, 0.012);
   color-scheme: dark;
+}
+
+body[data-theme='pub'] .match-stage {
+  color: var(--text);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    repeating-linear-gradient(90deg, transparent 0 88px, rgba(255, 255, 255, 0.035) 88px 89px),
+    var(--panel);
+}
+
+body[data-theme='pub'] .match-stage::after {
+  border-color: rgba(229, 229, 229, 0.065);
+}
+
+body[data-theme='pub'] .match-stage strong,
+body[data-theme='pub'] .prediction h3 {
+  color: var(--text);
 }
 
 body[data-theme='press'] {
@@ -265,7 +282,7 @@ textarea:focus {
 
 .mobile-room-flag {
   display: block;
-  width: 42px !important;
+  width: 34px !important;
   aspect-ratio: 4 / 3;
   overflow: hidden;
   border-radius: 5px;
@@ -287,6 +304,10 @@ textarea:focus {
   inset: 0 auto 0 0;
   width: 4px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 72%, transparent), transparent 82%);
+}
+
+.prediction {
+  color: var(--text);
 }
 
 .prediction-avatar {
@@ -602,12 +623,17 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  html {
+    scroll-behavior: smooth;
+  }
+
   .match-stage-sticky {
     position: static;
   }
 
   .match-stage {
     min-height: 0;
+    box-shadow: none;
   }
 
   .prediction-avatar {
@@ -617,6 +643,10 @@ textarea:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .reaction-pop,
   .reaction-count,
   .live-pulse-dot,
