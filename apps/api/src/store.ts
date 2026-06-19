@@ -4,7 +4,6 @@ import {
   type CreatePredictionInput,
   type Prediction,
   type PrizeClaim,
-  type PrizeClaimInput,
   type Reply,
   type ReplyInput,
   type Room,
@@ -37,17 +36,6 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
 function assertRoomWritable(room: Room) {
   if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
     throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
-  }
-}
-
-function finalScoreForRoom(room: Room) {
-  if (room.matchStatus !== 'finished' || room.currentScore?.status !== 'finished') {
-    return null
-  }
-
-  return {
-    home: room.currentScore.home,
-    away: room.currentScore.away,
   }
 }
 
@@ -107,6 +95,18 @@ export function createStore() {
       }
 
       room.predictions.unshift(prediction)
+      if (payload.prizeQuestion && payload.prizeAnswer) {
+        prizeClaims.set(prediction.id, {
+          id: `claim-${prediction.id}-${Date.now()}`,
+          roomId: room.id,
+          predictionId: prediction.id,
+          authorId: payload.authorId,
+          authorName: payload.name,
+          question: payload.prizeQuestion,
+          answer: payload.prizeAnswer,
+          createdAt: prediction.createdAt,
+        })
+      }
       room.mostBacked = {
         home: payload.homeScore,
         away: payload.awayScore,
@@ -153,40 +153,6 @@ export function createStore() {
       }
 
       return cloneRoom(room)
-    },
-    addPrizeClaim(predictionId: string, payload: PrizeClaimInput) {
-      const room = rooms.find((item) => item.predictions.some((prediction) => prediction.id === predictionId))
-      if (!room) return null
-
-      const prediction = room.predictions.find((item) => item.id === predictionId)
-      if (!prediction) return null
-      if (prediction.authorId !== payload.userId) {
-        throw new ApiError('FORBIDDEN', 'You can only claim your own prediction.', 403)
-      }
-
-      const finalScore = finalScoreForRoom(room)
-      if (!finalScore) {
-        throw new ApiError('FORBIDDEN', 'Prize claims open after the final score is posted.', 403)
-      }
-      if (prediction.homeScore !== finalScore.home || prediction.awayScore !== finalScore.away) {
-        throw new ApiError('FORBIDDEN', 'Only exact-score winners can claim a prize.', 403)
-      }
-      if (prizeClaims.has(predictionId)) {
-        throw new ApiError('CONFLICT', 'Prize claim already saved for this prediction.', 409)
-      }
-
-      const claim: PrizeClaim = {
-        id: `claim-${predictionId}-${Date.now()}`,
-        roomId: room.id,
-        predictionId,
-        authorId: prediction.authorId,
-        authorName: prediction.name,
-        question: payload.question,
-        answer: payload.answer,
-        createdAt: new Date().toISOString(),
-      }
-      prizeClaims.set(predictionId, claim)
-      return claim
     },
     getPrizeClaims() {
       return [...prizeClaims.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))

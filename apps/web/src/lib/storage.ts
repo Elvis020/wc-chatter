@@ -3,12 +3,13 @@ import type { ThemeId } from '@wc-chatter/shared'
 const STORAGE_KEYS = {
   userId: 'wc-chatter-user-id',
   username: 'wc-chatter-username',
+  prizeQuestion: 'wc-chatter-prize-question',
+  prizeAnswer: 'wc-chatter-prize-answer',
   likes: 'wc-chatter-liked-predictions',
   theme: 'wc-chatter-theme',
   activeRoomId: 'wc-chatter-active-room-id',
   predictionDrafts: 'wc-chatter-prediction-drafts',
   replyDrafts: 'wc-chatter-reply-drafts',
-  prizeClaims: 'wc-chatter-prize-claims',
 } as const
 const VALID_THEMES = new Set<ThemeId>(['paper', 'desk', 'pub', 'press'])
 const memoryStorage = new Map<string, string>()
@@ -55,6 +56,22 @@ export function setStoredUsername(value: string) {
   writeStorage(STORAGE_KEYS.username, value)
 }
 
+export function getStoredPrizeQuestion() {
+  return readStorage(STORAGE_KEYS.prizeQuestion)
+}
+
+export function setStoredPrizeQuestion(value: string) {
+  writeStorage(STORAGE_KEYS.prizeQuestion, value)
+}
+
+export function getStoredPrizeAnswer() {
+  return readStorage(STORAGE_KEYS.prizeAnswer)
+}
+
+export function setStoredPrizeAnswer(value: string) {
+  writeStorage(STORAGE_KEYS.prizeAnswer, value)
+}
+
 export function getStoredLikes() {
   try {
     return new Set<string>(JSON.parse(readStorage(STORAGE_KEYS.likes) || '[]'))
@@ -65,18 +82,6 @@ export function getStoredLikes() {
 
 export function setStoredLikes(likes: Set<string>) {
   writeStorage(STORAGE_KEYS.likes, JSON.stringify([...likes]))
-}
-
-export function getStoredPrizeClaims() {
-  try {
-    return new Set<string>(JSON.parse(readStorage(STORAGE_KEYS.prizeClaims) || '[]'))
-  } catch {
-    return new Set<string>()
-  }
-}
-
-export function setStoredPrizeClaims(claims: Set<string>) {
-  writeStorage(STORAGE_KEYS.prizeClaims, JSON.stringify([...claims]))
 }
 
 export function getStoredTheme(): ThemeId {

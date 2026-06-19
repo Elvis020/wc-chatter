@@ -2,25 +2,26 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@wc-chatter/shared'
 import 'flag-icons/css/flag-icons.min.css'
-import { connectRoomEvents, createPrediction, createPrizeClaim, createReply, fetchBootstrap, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
+import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
-import PrizeClaimDrawer from './components/PrizeClaimDrawer.vue'
 import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
 import {
   getOrCreateUserId,
   getStoredActiveRoomId,
   getStoredLikes,
+  getStoredPrizeAnswer,
+  getStoredPrizeQuestion,
   getStoredPredictionDrafts,
-  getStoredPrizeClaims,
   getStoredReplyDrafts,
   getStoredTheme,
   getStoredUsername,
   setStoredActiveRoomId,
   setStoredUsername,
   setStoredLikes,
+  setStoredPrizeAnswer,
+  setStoredPrizeQuestion,
   setStoredPredictionDrafts,
-  setStoredPrizeClaims,
   setStoredReplyDrafts,
   setStoredTheme,
 } from './lib/storage'
@@ -72,6 +73,10 @@ const userId = getOrCreateUserId()
 const showUsernameReset = import.meta.env.VITE_ENABLE_USERNAME_RESET !== 'false'
 const username = ref(getStoredUsername())
 const usernameDraft = ref(username.value)
+const prizeQuestion = ref(getStoredPrizeQuestion())
+const prizeQuestionDraft = ref(prizeQuestion.value)
+const prizeAnswer = ref(getStoredPrizeAnswer())
+const prizeAnswerDraft = ref(prizeAnswer.value)
 const usernameError = ref('')
 const rooms = ref<Room[]>([])
 const activeRoomId = ref(getStoredActiveRoomId())
@@ -82,9 +87,7 @@ const mutationError = ref('')
 const realtimeStatus = ref<RealtimeStatus>('idle')
 const routePath = ref(window.location.pathname)
 const predictionModalOpen = ref(false)
-const prizeClaimModalOpen = ref(false)
 const submittingPrediction = ref(false)
-const submittingPrizeClaim = ref(false)
 const identityPromptOpen = ref(false)
 const identityPromptMessage = ref('')
 const themeMenuOpen = ref(false)
@@ -93,7 +96,6 @@ const themePreview = ref<ThemeId | null>(null)
 const feedSortMode = ref<FeedSortMode>('likes')
 const roomPage = ref(0)
 const likedPredictions = ref(getStoredLikes())
-const claimedPredictions = ref(getStoredPrizeClaims())
 const activeReplyTarget = ref<{ predictionId: string; commentId: string } | null>(null)
 const closingReplyTargets = ref(new Set<string>())
 const expandedCommentCards = ref(new Set<string>())
@@ -117,7 +119,6 @@ const updatedPredictionIds = ref(new Set<string>())
 const typingPeople = ref(new Map<string, TypingState>())
 const feedNavMode = ref<'hidden' | 'up' | 'down'>('hidden')
 const roomSwitchDirection = ref<'forward' | 'backward'>('forward')
-const prizeClaimPredictionId = ref('')
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -137,12 +138,6 @@ const predictionForm = reactive({
   homeScore: 2,
   awayScore: 1,
   comment: '',
-})
-
-const prizeClaimForm = reactive({
-  question: '',
-  answer: '',
-  error: '',
 })
 
 const predictionDrafts = reactive<Record<string, string>>(getStoredPredictionDrafts())
@@ -189,13 +184,13 @@ const exactPickPreview = computed(() => {
   if (!names.length) return ''
   return `${names.join(' · ')}${remaining > 0 ? ` · +${remaining} more` : ''}`
 })
-const prizeClaimPrediction = computed(() =>
-  activeRoom.value?.predictions.find((prediction) => prediction.id === prizeClaimPredictionId.value) ?? null,
+const hasPrizeVerification = computed(() => prizeQuestion.value.trim().length >= 4 && prizeAnswer.value.trim().length >= 2)
+const canSaveUsername = computed(() =>
+  usernameDraft.value.trim().length > 0 &&
+  prizeQuestionDraft.value.trim().length >= 4 &&
+  prizeAnswerDraft.value.trim().length >= 2 &&
+  (!username.value || !hasPrizeVerification.value),
 )
-const canSubmitPrizeClaim = computed(
-  () => prizeClaimForm.question.trim().length >= 4 && prizeClaimForm.answer.trim().length >= 2 && !submittingPrizeClaim.value,
-)
-const canSaveUsername = computed(() => !username.value && usernameDraft.value.trim().length > 0)
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
 const activeRoomPredictionsClosed = computed(() => !!activeRoom.value && isRoomLockedByState(activeRoom.value, { fixtureKickoffs }))
 const canSubmitPrediction = computed(() => !activeRoomPredictionsClosed.value)
@@ -292,10 +287,27 @@ function saveUsername() {
     return
   }
 
+  const normalizedPrizeQuestion = prizeQuestionDraft.value.normalize('NFKC').replace(/\s+/g, ' ').trim()
+  const normalizedPrizeAnswer = prizeAnswerDraft.value.normalize('NFKC').replace(/\s+/g, ' ').trim()
+  if (normalizedPrizeQuestion.length < 4) {
+    usernameError.value = 'Pickup question must be at least 4 characters.'
+    return
+  }
+  if (normalizedPrizeAnswer.length < 2) {
+    usernameError.value = 'Pickup answer must be at least 2 characters.'
+    return
+  }
+
   username.value = result.value
   usernameDraft.value = result.value
+  prizeQuestion.value = normalizedPrizeQuestion
+  prizeQuestionDraft.value = normalizedPrizeQuestion
+  prizeAnswer.value = normalizedPrizeAnswer
+  prizeAnswerDraft.value = normalizedPrizeAnswer
   usernameError.value = ''
   setStoredUsername(result.value)
+  setStoredPrizeQuestion(normalizedPrizeQuestion)
+  setStoredPrizeAnswer(normalizedPrizeAnswer)
   const action = pendingIdentityAction.value
   pendingIdentityAction.value = null
   closeIdentityPrompt(false)
@@ -310,12 +322,18 @@ function saveUsername() {
 function resetUsername() {
   username.value = ''
   usernameDraft.value = ''
+  prizeQuestion.value = ''
+  prizeQuestionDraft.value = ''
+  prizeAnswer.value = ''
+  prizeAnswerDraft.value = ''
   usernameError.value = ''
   setStoredUsername('')
+  setStoredPrizeQuestion('')
+  setStoredPrizeAnswer('')
 }
 
 function openIdentityPrompt(message = 'Set your username first.', action?: PendingIdentityAction) {
-  if (username.value) return true
+  if (username.value && hasPrizeVerification.value) return true
   if (action) pendingIdentityAction.value = action
   identityPromptMessage.value = message
   usernameError.value = message
@@ -330,7 +348,7 @@ function closeIdentityPrompt(clearPendingAction = true) {
 }
 
 function requireUsername(message = 'Set your username first.', action?: PendingIdentityAction) {
-  if (username.value) return true
+  if (username.value && hasPrizeVerification.value) return true
   return openIdentityPrompt(message, action)
 }
 
@@ -342,20 +360,6 @@ function openPredictionModal() {
 
 function closePredictionModal() {
   predictionModalOpen.value = false
-}
-
-function openPrizeClaimModal(prediction: Prediction) {
-  if (!canClaimPrize(prediction) || hasPrizeClaim(prediction.id)) return
-  prizeClaimPredictionId.value = prediction.id
-  prizeClaimForm.question = ''
-  prizeClaimForm.answer = ''
-  prizeClaimForm.error = ''
-  prizeClaimModalOpen.value = true
-}
-
-function closePrizeClaimModal() {
-  if (submittingPrizeClaim.value) return
-  prizeClaimModalOpen.value = false
 }
 
 function errorText(error: unknown, fallback: string) {
@@ -617,14 +621,6 @@ function canEditReply(reply: Reply) {
   return reply.authorId === userId && roomAllowsTextEditing() && !reply.id.startsWith('optimistic-')
 }
 
-function canClaimPrize(prediction: Prediction) {
-  return prediction.authorId === userId && isExactPick(prediction) && !isOptimisticPrediction(prediction.id)
-}
-
-function hasPrizeClaim(predictionId: string) {
-  return claimedPredictions.value.has(predictionId)
-}
-
 function canSubmitEdit(contentId: string, minLength = 1) {
   return !isEditSubmitting(contentId) && (editDrafts[contentId] || '').trim().length >= minLength
 }
@@ -681,6 +677,8 @@ async function submitPrediction() {
     homeScore: predictionForm.homeScore,
     awayScore: predictionForm.awayScore,
     comment: submittedComment || undefined,
+    prizeQuestion: prizeQuestion.value,
+    prizeAnswer: prizeAnswer.value,
   }
   const optimisticPrediction: Prediction = {
     id: `optimistic-prediction-${roomId}-${Date.now()}`,
@@ -718,32 +716,6 @@ async function submitPrediction() {
     showMutationError(errorText(error, 'Prediction did not post. Try again.'))
   } finally {
     submittingPrediction.value = false
-  }
-}
-
-async function submitPrizeClaim() {
-  const prediction = prizeClaimPrediction.value
-  if (!prediction || submittingPrizeClaim.value || !canSubmitPrizeClaim.value) return
-
-  submittingPrizeClaim.value = true
-  prizeClaimForm.error = ''
-
-  try {
-    await createPrizeClaim(prediction.id, {
-      userId,
-      question: prizeClaimForm.question.trim(),
-      answer: prizeClaimForm.answer.trim(),
-    })
-
-    const nextClaims = new Set(claimedPredictions.value)
-    nextClaims.add(prediction.id)
-    claimedPredictions.value = nextClaims
-    setStoredPrizeClaims(nextClaims)
-    prizeClaimModalOpen.value = false
-  } catch (error) {
-    prizeClaimForm.error = errorText(error, 'Prize claim did not save. Try again.')
-  } finally {
-    submittingPrizeClaim.value = false
   }
 }
 
@@ -2407,19 +2379,6 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
 
-                <button
-                  v-if="canClaimPrize(item)"
-                  class="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-black uppercase leading-none tracking-[0.04em] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px disabled:cursor-default disabled:active:translate-y-0"
-                  :class="hasPrizeClaim(item.id)
-                    ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))] text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))]'
-                    : 'border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--panel))] text-[var(--accent)] hover:bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--panel))]'"
-                  type="button"
-                  :disabled="hasPrizeClaim(item.id)"
-                  @click="openPrizeClaimModal(item)"
-                >
-                  <span>{{ hasPrizeClaim(item.id) ? 'Claim saved' : 'Claim prize' }}</span>
-                </button>
-
                 <div v-if="leadComment(item)?.replies.length" data-reply-thread class="grid gap-2 pt-1 pl-3">
                   <TransitionGroup
                     :name="isFastCollapsingComments(item.id) ? 'reply-row-fast' : 'reply-row'"
@@ -2739,7 +2698,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <form class="grid gap-2 pt-1" @submit.prevent="saveUsername">
+          <form class="grid gap-2 pt-1" @submit.prevent="openIdentityPrompt('Set your room name and pickup verification before posting.')">
             <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="username">Username</label>
             <div class="grid items-center gap-2" :class="username ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_auto]'">
               <input
@@ -2755,8 +2714,8 @@ onBeforeUnmount(() => {
                 v-if="!username"
                 class="inline-flex h-11 min-w-[82px] flex-none items-center justify-center gap-1.5 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_30%,var(--control-border))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--control-bg))] px-3.5 text-sm font-[750] leading-none text-[var(--accent)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[border-color,background-color,color,box-shadow,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_44%,var(--control-border))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--control-bg))] active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_76%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-[0.58] disabled:shadow-none disabled:active:translate-y-0"
                 type="submit"
-                :disabled="!canSaveUsername"
-                :aria-label="canSaveUsername ? 'Save username' : 'Enter username to save'"
+                :disabled="usernameDraft.trim().length === 0"
+                :aria-label="usernameDraft.trim().length > 0 ? 'Set up username' : 'Enter username to set up'"
               >
                 <svg
                   class="ph-icon h-4 w-4 flex-none"
@@ -2770,7 +2729,7 @@ onBeforeUnmount(() => {
                   <path d="M88 56v64h72V56"></path>
                   <path d="M88 216v-56h80v56"></path>
                 </svg>
-                <span>Save</span>
+                <span>Set up</span>
               </button>
             </div>
             <p
@@ -2793,6 +2752,8 @@ onBeforeUnmount(() => {
     <IdentityPrompt
       ref="identityPrompt"
       v-model:username-draft="usernameDraft"
+      v-model:prize-question-draft="prizeQuestionDraft"
+      v-model:prize-answer-draft="prizeAnswerDraft"
       :open="identityPromptOpen"
       :can-save="canSaveUsername"
       :error="usernameError"
@@ -2812,19 +2773,6 @@ onBeforeUnmount(() => {
       :closed="activeRoomPredictionsClosed"
       @close="closePredictionModal"
       @submit="submitPrediction"
-    />
-
-    <PrizeClaimDrawer
-      v-model:question="prizeClaimForm.question"
-      v-model:answer="prizeClaimForm.answer"
-      :open="prizeClaimModalOpen"
-      :room="activeRoom"
-      :prediction="prizeClaimPrediction"
-      :submitting="submittingPrizeClaim"
-      :can-submit="canSubmitPrizeClaim"
-      :error="prizeClaimForm.error"
-      @close="closePrizeClaimModal"
-      @submit="submitPrizeClaim"
     />
   </main>
 </template>

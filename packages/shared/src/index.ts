@@ -88,12 +88,8 @@ export interface CreatePredictionInput {
   homeScore: number
   awayScore: number
   comment?: string
-}
-
-export interface PrizeClaimInput {
-  userId: string
-  question: string
-  answer: string
+  prizeQuestion?: string
+  prizeAnswer?: string
 }
 
 export interface PrizeClaim {

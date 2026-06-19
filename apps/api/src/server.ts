@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono'
-import type { ApiEvent, CreatePredictionInput, PrizeClaimInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
+import type { ApiEvent, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'
@@ -81,12 +81,29 @@ function parsePredictionInput(input: unknown): CreatePredictionInput {
   }
 
   const body = input as Record<string, unknown>
+  const prizeQuestion = normalizeText(body.prizeQuestion, 'Pickup question')
+  const prizeAnswer = normalizeText(body.prizeAnswer, 'Pickup answer')
+  if (prizeQuestion && prizeQuestion.length < 4) {
+    throw new ApiError('VALIDATION_ERROR', 'Pickup question must be at least 4 characters.', 400)
+  }
+  if (prizeAnswer && prizeAnswer.length < 2) {
+    throw new ApiError('VALIDATION_ERROR', 'Pickup answer must be at least 2 characters.', 400)
+  }
+  if (prizeQuestion && !prizeAnswer) {
+    throw new ApiError('VALIDATION_ERROR', 'Pickup answer is required.', 400)
+  }
+  if (prizeAnswer && !prizeQuestion) {
+    throw new ApiError('VALIDATION_ERROR', 'Pickup question is required.', 400)
+  }
+
   return {
     authorId: normalizeUserId(body.authorId),
     name: normalizeUsername(body.name),
     homeScore: normalizeScore(body.homeScore, 'Home score'),
     awayScore: normalizeScore(body.awayScore, 'Away score'),
     comment: normalizeText(body.comment, 'Comment'),
+    prizeQuestion,
+    prizeAnswer,
   }
 }
 
@@ -121,28 +138,6 @@ function parseReplyInput(input: unknown): ReplyInput {
     authorId: normalizeUserId(body.authorId),
     name: normalizeUsername(body.name),
     text,
-  }
-}
-
-function parsePrizeClaimInput(input: unknown): PrizeClaimInput {
-  if (!input || typeof input !== 'object') {
-    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
-  }
-
-  const body = input as Record<string, unknown>
-  const question = normalizeText(body.question, 'Question')
-  const answer = normalizeText(body.answer, 'Answer')
-  if (!question || question.length < 4) {
-    throw new ApiError('VALIDATION_ERROR', 'Question must be at least 4 characters.', 400)
-  }
-  if (!answer || answer.length < 2) {
-    throw new ApiError('VALIDATION_ERROR', 'Answer must be at least 2 characters.', 400)
-  }
-
-  return {
-    userId: normalizeUserId(body.userId),
-    question,
-    answer,
   }
 }
 
@@ -269,25 +264,6 @@ app.post('/api/predictions/:predictionId/edit', async (c) => {
     const event: ApiEvent = { type: 'room.updated', room }
     await broadcastRoom(c.env, store, event)
     return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
-})
-
-app.post('/api/predictions/:predictionId/prize-claim', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const predictionId = c.req.param('predictionId')
-    const payload = parsePrizeClaimInput(await readJson(c))
-    enforceMutationRateLimit(payload.userId, 'prize-claim')
-    const claim = await store.addPrizeClaim(predictionId, payload)
-
-    if (!claim) {
-      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
-    }
-
-    return c.json({ claim })
   } catch (error) {
     const response = errorResponse(error)
     return c.json(response.body, response.status)

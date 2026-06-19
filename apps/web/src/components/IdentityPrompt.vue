@@ -14,6 +14,8 @@ const emit = defineEmits<{
 }>()
 
 const usernameDraft = defineModel<string>('usernameDraft', { required: true })
+const prizeQuestionDraft = defineModel<string>('prizeQuestionDraft', { required: true })
+const prizeAnswerDraft = defineModel<string>('prizeAnswerDraft', { required: true })
 const input = ref<HTMLInputElement | null>(null)
 
 function focus() {
@@ -30,7 +32,7 @@ defineExpose({ focus })
         <div class="sheet-stagger mb-4 flex items-center justify-between gap-3" style="--sheet-index: 0">
           <div>
             <h2 id="identity-title" class="m-0 text-xl font-extrabold leading-tight text-[var(--text)]">Pick your room name</h2>
-            <p class="m-0 text-[13px] leading-snug text-[var(--muted)]">Set once for this browser. Used for comments and likes.</p>
+            <p class="m-0 text-[13px] leading-snug text-[var(--muted)]">Set once for this browser. Used for comments, likes, and prize pickup.</p>
           </div>
           <button class="inline-flex h-11 min-h-11 w-11 min-w-11 flex-none items-center justify-center rounded-lg bg-white/[0.06] p-0 text-[var(--text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-white/[0.1] active:translate-y-px" type="button" aria-label="Set username later" @click="emit('close')">
             <svg class="ph-icon h-5 w-5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
@@ -68,6 +70,30 @@ defineExpose({ focus })
             </button>
           </div>
           <p id="identity-prompt-help" class="m-0 text-xs leading-[1.4] text-[var(--muted)]">2-24 chars: letters, numbers, space, . ' -</p>
+
+          <div class="mt-2 grid gap-2">
+            <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-question">Pickup question</label>
+            <input
+              id="prompt-prize-question"
+              v-model="prizeQuestionDraft"
+              class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+              maxlength="280"
+              placeholder="What should admin ask you?"
+              aria-describedby="identity-prompt-error"
+            />
+          </div>
+
+          <div class="grid gap-2">
+            <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-answer">Pickup answer</label>
+            <input
+              id="prompt-prize-answer"
+              v-model="prizeAnswerDraft"
+              class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+              maxlength="280"
+              placeholder="Answer only you should know"
+              aria-describedby="identity-prompt-error"
+            />
+          </div>
           <p id="identity-prompt-error" class="m-0 min-h-[14px] text-xs leading-[1.4] text-[var(--danger)]" role="status" aria-live="polite">{{ error || message }}</p>
         </form>
       </section>

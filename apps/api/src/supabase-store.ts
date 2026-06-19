@@ -9,7 +9,6 @@ import {
   type CreatePredictionInput,
   type Prediction,
   type PrizeClaim,
-  type PrizeClaimInput,
   type Reply,
   type ReplyInput,
   type Room,
@@ -136,15 +135,6 @@ type PredictionOwnerRow = {
   created_at: string
 }
 
-type PrizePredictionRow = {
-  id: string
-  room_id: string
-  author_id: string
-  author_name: string
-  home_score: number
-  away_score: number
-}
-
 type PrizeClaimRow = {
   id: string
   room_id: string
@@ -240,15 +230,6 @@ function currentScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
     clock: room.score_clock ?? '',
     provider: room.score_provider ?? '',
     updatedAt: room.score_updated_at,
-  }
-}
-
-function finalScoreForRoom(row: RoomRow) {
-  const score = currentScoreForRoom(row)
-  if (effectiveMatchStatus(row) !== 'finished' || score?.status !== 'finished') return null
-  return {
-    home: score.home,
-    away: score.away,
   }
 }
 
@@ -672,6 +653,22 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
 
         if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
       }
+
+      if (payload.prizeQuestion && payload.prizeAnswer) {
+        const { error: claimError } = await supabase.from('prize_claims').insert({
+          room_id: room.id,
+          prediction_id: prediction.id,
+          author_id: payload.authorId,
+          author_name: payload.name,
+          question: payload.prizeQuestion,
+          answer: payload.prizeAnswer,
+        })
+
+        if (claimError) {
+          logSupabaseError('addPredictionPrizeClaim', claimError)
+          throw new ApiError('INTERNAL_ERROR', 'Unable to save pickup verification.', 500)
+        }
+      }
       return hydrateRoom(room.id)
     },
     async setPredictionLike(predictionId: string, userId: string, liked: boolean) {
@@ -738,55 +735,6 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       }
 
       return hydrateRoom(prediction.room_id)
-    },
-    async addPrizeClaim(predictionId: string, payload: PrizeClaimInput) {
-      const { data: prediction, error: predictionError } = await supabase
-        .from('predictions')
-        .select('id, room_id, author_id, author_name, home_score, away_score')
-        .eq('id', predictionId)
-        .maybeSingle()
-
-      if (predictionError) throw new ApiError('INTERNAL_ERROR', 'Unable to load prediction.', 500)
-      if (!prediction) return null
-
-      const predictionRow = prediction as PrizePredictionRow
-      if (predictionRow.author_id !== payload.userId) {
-        throw new ApiError('FORBIDDEN', 'You can only claim your own prediction.', 403)
-      }
-
-      const room = await getRoomRow(predictionRow.room_id)
-      if (!room) return null
-
-      const finalScore = finalScoreForRoom(room)
-      if (!finalScore) {
-        throw new ApiError('FORBIDDEN', 'Prize claims open after the final score is posted.', 403)
-      }
-      if (predictionRow.home_score !== finalScore.home || predictionRow.away_score !== finalScore.away) {
-        throw new ApiError('FORBIDDEN', 'Only exact-score winners can claim a prize.', 403)
-      }
-
-      const { data: claim, error } = await supabase
-        .from('prize_claims')
-        .insert({
-          room_id: predictionRow.room_id,
-          prediction_id: predictionRow.id,
-          author_id: predictionRow.author_id,
-          author_name: predictionRow.author_name,
-          question: payload.question,
-          answer: payload.answer,
-        })
-        .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
-        .single()
-
-      if (error?.code === '23505') {
-        throw new ApiError('CONFLICT', 'Prize claim already saved for this prediction.', 409)
-      }
-      if (error) {
-        logSupabaseError('addPrizeClaim', error)
-        throw new ApiError('INTERNAL_ERROR', 'Unable to save prize claim.', 500)
-      }
-
-      return mapPrizeClaim(claim as PrizeClaimRow)
     },
     async getPrizeClaims() {
       const { data, error } = await supabase
