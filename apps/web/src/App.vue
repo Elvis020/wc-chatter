@@ -50,6 +50,7 @@ const faviconThemes: Record<ThemeId, FaviconTheme> = {
 }
 
 const userId = getOrCreateUserId()
+const showUsernameReset = import.meta.env.VITE_ENABLE_USERNAME_RESET !== 'false'
 const username = ref(getStoredUsername())
 const usernameDraft = ref(username.value)
 const usernameError = ref('')
@@ -763,7 +764,6 @@ async function submitPredictionEdit(prediction: Prediction) {
   nextSubmitting.add(prediction.id)
   submittingEdits.value = nextSubmitting
   editErrors[prediction.id] = ''
-  editingPredictionId.value = ''
   updateLocalPrediction(prediction.id, (item) => ({
     ...item,
     editedAt,
@@ -773,6 +773,7 @@ async function submitPredictionEdit(prediction: Prediction) {
   try {
     const response = await updatePredictionText(prediction.id, { userId, comment: text })
     patchRoom(response.room)
+    editingPredictionId.value = ''
   } catch (error) {
     updateLocalPrediction(prediction.id, () => previousPrediction)
     editingPredictionId.value = prediction.id
@@ -796,12 +797,12 @@ async function submitReplyEdit(reply: Reply) {
   nextSubmitting.add(reply.id)
   submittingEdits.value = nextSubmitting
   editErrors[reply.id] = ''
-  editingReplyId.value = ''
   updateLocalReply(reply.id, (item) => ({ ...item, text, editedAt }))
 
   try {
     const response = await updateReply(reply.id, { userId, text })
     patchRoom(response.room)
+    editingReplyId.value = ''
   } catch (error) {
     updateLocalReply(reply.id, () => previousReply)
     editingReplyId.value = reply.id
@@ -1663,7 +1664,7 @@ onBeforeUnmount(() => {
               type="button"
               @click="setActiveRoom(room.id)"
             >
-              <span class="grid min-w-0 gap-1.5">
+              <span class="grid min-w-0 content-center gap-1.5 self-center">
                 <span class="grid min-w-0 grid-cols-[34px_3ch_auto_34px_3ch] items-center gap-1.5 text-[13px] font-[820] leading-none text-[var(--text)]">
                   <span v-if="hasSpriteFlag(room.home)" :class="['mobile-room-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
                   <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
@@ -1676,7 +1677,7 @@ onBeforeUnmount(() => {
               </span>
 
               <span
-                class="grid min-w-[42px] justify-items-center gap-1 justify-self-end text-[color:color-mix(in_srgb,var(--accent)_68%,var(--text))]"
+                class="grid min-w-[42px] content-center justify-items-center gap-1 justify-self-end self-center text-[color:color-mix(in_srgb,var(--accent)_68%,var(--text))]"
                 :aria-label="roomStatusLabel(room)"
               >
                 <span v-if="showsLiveRoomIcon(room)" class="grid justify-items-center gap-1">
@@ -2153,7 +2154,7 @@ onBeforeUnmount(() => {
             >
               <span>{{ usernameError || (username ? 'Saved locally for this browser' : '') }}</span>
               <button
-                v-if="username"
+                v-if="username && showUsernameReset"
                 class="text-[11px] font-bold text-[var(--accent)] transition-[color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,black)] active:translate-y-px"
                 type="button"
                 @click="resetUsername"
