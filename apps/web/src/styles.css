@@ -344,7 +344,9 @@ textarea:focus {
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
+  border-radius: 12px 0 0 12px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 72%, transparent), transparent 82%);
+  pointer-events: none;
 }
 
 .prediction {
@@ -761,6 +763,10 @@ textarea:focus {
   .prediction-avatar-wrap {
     width: 40px;
     height: 40px;
+  }
+
+  .prediction::before {
+    border-radius: 10px 0 0 10px;
   }
 
   .prediction-crown {

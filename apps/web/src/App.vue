@@ -2298,7 +2298,7 @@ onBeforeUnmount(() => {
                 v-for="item in sortedPredictions"
                 :key="item.id"
                 data-prediction-card
-                class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-visible rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] transition-[background-color,border-color,box-shadow] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
+                class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] transition-[background-color,border-color,box-shadow] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
                 :class="[
                   leadComment(item) && (isReplying(item.id, leadComment(item)!.id) || isCommentsExpanded(item.id)) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))] shadow-[0_14px_36px_rgba(42,37,32,0.10)]' : '',
                   isPredictionRecentlyUpdated(item.id) ? 'room-update-pulse' : '',
@@ -2427,14 +2427,6 @@ onBeforeUnmount(() => {
                         <span v-if="isOptimisticReply(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">sending</span>
                         <span v-if="isEditSubmitting(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">saving</span>
                         <span v-if="reply.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
-                        <button
-                          v-if="canEditReply(reply)"
-                          class="ml-1 inline-flex rounded px-1 text-[9px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
-                          type="button"
-                          @click="startEditingReply(reply)"
-                        >
-                          Edit
-                        </button>
                       </span>
                     </div>
                   </TransitionGroup>
