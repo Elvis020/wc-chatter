@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { loadFixtures, MATCH_LIVE_DURATION_MS, matchKickoffUtc, mockThemes, type ApiEvent, type CreatePredictionInput, type MatchStatus, type Prediction, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
+import { CONTENT_EDIT_WINDOW_MS, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
 import 'flag-icons/css/flag-icons.min.css'
-import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike } from './lib/api'
+import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
+import IdentityPrompt from './components/IdentityPrompt.vue'
+import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
 import {
   getOrCreateUserId,
@@ -15,6 +17,7 @@ import {
 } from './lib/storage'
 
 const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
+const MIN_PREDICTION_COMMENT_LENGTH = 4
 const COMMENT_PREVIEW_LIMIT = 3
 const ROOM_PAGE_SIZE = 4
 const ROOM_REFRESH_MS = 60_000
@@ -72,19 +75,26 @@ const expandedCommentCards = ref(new Set<string>())
 const fastCollapsingCommentCards = ref(new Set<string>())
 const pendingIdentityAction = ref<PendingIdentityAction | null>(null)
 const themeTrigger = ref<HTMLElement | null>(null)
-const identityPromptInput = ref<HTMLInputElement | null>(null)
+const identityPrompt = ref<InstanceType<typeof IdentityPrompt> | null>(null)
 const themeMenuStyle = ref<Record<string, string>>({})
 const ws = ref<WebSocket | null>(null)
 const submittingReplies = ref(new Set<string>())
+const submittingEdits = ref(new Set<string>())
+const editingPredictionId = ref('')
+const editingReplyId = ref('')
 const replyErrors = reactive<Record<string, string>>({})
+const editDrafts = reactive<Record<string, string>>({})
+const editErrors = reactive<Record<string, string>>({})
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 let fastCommentCollapseTimer: ReturnType<typeof window.setTimeout> | null = null
+let replyFocusTimers: ReturnType<typeof window.setTimeout>[] = []
 let reconnectAttempt = 0
 let socketToken = 0
 let roomsRefreshInFlight = false
+const avatarCache = new Map<string, string>()
 
 const predictionForm = reactive({
   homeScore: 2,
@@ -124,11 +134,14 @@ const totalComments = computed(
 )
 const canSaveUsername = computed(() => !username.value && usernameDraft.value.trim().length > 0)
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
+const canSubmitPrediction = computed(() => predictionForm.comment.trim().length >= MIN_PREDICTION_COMMENT_LENGTH)
 const userPrediction = computed(() => activeRoom.value?.predictions.find((prediction) => prediction.authorId === userId) ?? null)
 const hasUserPredicted = computed(() => !!userPrediction.value)
 const scoreCtaLabel = computed(() => (hasUserPredicted.value ? 'Pick locked' : 'Drop your score'))
 const isNotFound = computed(() => routePath.value !== '/')
-const orderedRooms = computed(() => [...rooms.value].sort(compareRoomsForSwitcher))
+const orderedRooms = computed(() =>
+  [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { fixtureKickoffs })),
+)
 const roomPageCount = computed(() => Math.max(1, Math.ceil(orderedRooms.value.length / ROOM_PAGE_SIZE)))
 const visibleRooms = computed(() => {
   const start = roomPage.value * ROOM_PAGE_SIZE
@@ -218,7 +231,7 @@ function openIdentityPrompt(message = 'Set your username first.', action?: Pendi
   identityPromptMessage.value = message
   usernameError.value = message
   identityPromptOpen.value = true
-  nextTick(() => identityPromptInput.value?.focus())
+  nextTick(() => identityPrompt.value?.focus())
   return false
 }
 
@@ -280,7 +293,12 @@ function hasSpriteFlag(team: Team) {
 }
 
 function predictionAvatar(name: string) {
-  return createNaviiIcon(name, `${name} avatar`)
+  const cached = avatarCache.get(name)
+  if (cached) return cached
+
+  const avatar = createNaviiIcon(name, `${name} avatar`)
+  avatarCache.set(name, avatar)
+  return avatar
 }
 
 function leadComment(prediction: Prediction) {
@@ -328,78 +346,20 @@ function shouldFadeCommentPreview(prediction: Prediction) {
   return shouldShowCommentToggle(prediction) && !isCommentsExpanded(prediction.id)
 }
 
-function roomKickoffIso(room: Room) {
-  return room.kickoffAt ?? fixtureKickoffs.get(room.id) ?? fixtureKickoffs.get(`${room.home.code}-${room.away.code}`) ?? ''
-}
-
 function roomKickoffMs(room: Room) {
-  const kickoffIso = roomKickoffIso(room)
-  if (!kickoffIso) return Number.POSITIVE_INFINITY
-
-  const kickoffMs = Date.parse(kickoffIso)
-  return Number.isFinite(kickoffMs) ? kickoffMs : Number.POSITIVE_INFINITY
+  return roomKickoffMsByState(room, fixtureKickoffs)
 }
 
-function effectiveRoomMatchStatus(room: Room): MatchStatus {
-  if (room.currentScore?.status === 'finished') return 'finished'
-  if (room.currentScore?.status === 'live') return 'live'
-
-  const kickoffIso = roomKickoffIso(room)
-  if (kickoffIso) {
-    const kickoffMs = Date.parse(kickoffIso)
-    if (Number.isFinite(kickoffMs)) {
-      const nowMs = Date.now()
-      if (nowMs < kickoffMs) return 'upcoming'
-      if (nowMs <= kickoffMs + MATCH_LIVE_DURATION_MS) return 'live'
-      return 'finished'
-    }
-  }
-
-  return room.matchStatus
+function effectiveRoomMatchStatus(room: Room) {
+  return effectiveRoomMatchStatusByState(room, { fixtureKickoffs })
 }
 
 function showsLiveRoomIcon(room: Room) {
   return effectiveRoomMatchStatus(room) === 'live'
 }
 
-function isLockedRoom(room: Room) {
-  return effectiveRoomMatchStatus(room) === 'finished' || room.roomStatus === 'closed'
-}
-
-function roomLockedAtMs(room: Room) {
-  const scoreUpdatedAt = room.currentScore?.status === 'finished' ? Date.parse(room.currentScore.updatedAt) : NaN
-  if (Number.isFinite(scoreUpdatedAt)) return scoreUpdatedAt
-
-  const kickoffMs = roomKickoffMs(room)
-  if (Number.isFinite(kickoffMs)) return kickoffMs + MATCH_LIVE_DURATION_MS
-
-  return Number.NEGATIVE_INFINITY
-}
-
-function compareRoomsForSwitcher(left: Room, right: Room) {
-  const leftLocked = isLockedRoom(left)
-  const rightLocked = isLockedRoom(right)
-  if (leftLocked !== rightLocked) return leftLocked ? 1 : -1
-
-  if (leftLocked && rightLocked) {
-    return roomLockedAtMs(right) - roomLockedAtMs(left)
-  }
-
-  const leftLive = effectiveRoomMatchStatus(left) === 'live'
-  const rightLive = effectiveRoomMatchStatus(right) === 'live'
-  if (leftLive !== rightLive) return leftLive ? -1 : 1
-
-  return roomKickoffMs(left) - roomKickoffMs(right)
-}
-
 function roomKickoffTime(room: Room) {
-  const kickoffIso = roomKickoffIso(room)
-  if (!kickoffIso) return ''
-
-  const kickoff = new Date(kickoffIso)
-  if (Number.isNaN(kickoff.getTime())) return ''
-
-  return `${String(kickoff.getHours()).padStart(2, '0')}:${String(kickoff.getMinutes()).padStart(2, '0')}`
+  return roomKickoffTimeByState(room, fixtureKickoffs)
 }
 
 function roomStatusLabel(room: Room) {
@@ -456,8 +416,33 @@ function isReplySubmitting(commentId: string) {
   return submittingReplies.value.has(commentId)
 }
 
+function isEditSubmitting(contentId: string) {
+  return submittingEdits.value.has(contentId)
+}
+
 function canSubmitReply(commentId: string) {
   return !isReplySubmitting(commentId) && !!(replyDrafts[commentId] || '').trim()
+}
+
+function roomAllowsTextEditing() {
+  return !!activeRoom.value && effectiveRoomMatchStatus(activeRoom.value) !== 'finished' && activeRoom.value.roomStatus === 'open'
+}
+
+function isInsideEditWindow(createdAt: string) {
+  const createdMs = Date.parse(createdAt)
+  return Number.isFinite(createdMs) && Date.now() - createdMs <= CONTENT_EDIT_WINDOW_MS
+}
+
+function canEditPrediction(prediction: Prediction) {
+  return prediction.authorId === userId && roomAllowsTextEditing() && isInsideEditWindow(prediction.createdAt) && !prediction.id.startsWith('optimistic-')
+}
+
+function canEditReply(reply: Reply) {
+  return reply.authorId === userId && roomAllowsTextEditing() && isInsideEditWindow(reply.createdAt) && !reply.id.startsWith('optimistic-')
+}
+
+function canSubmitEdit(contentId: string, minLength = 1) {
+  return !isEditSubmitting(contentId) && (editDrafts[contentId] || '').trim().length >= minLength
 }
 
 function setActiveRoom(roomId: string) {
@@ -465,6 +450,8 @@ function setActiveRoom(roomId: string) {
   activeReplyTarget.value = null
   expandedCommentCards.value = new Set()
   fastCollapsingCommentCards.value = new Set()
+  editingPredictionId.value = ''
+  editingReplyId.value = ''
 }
 
 function previousRoomPage() {
@@ -480,26 +467,55 @@ function toggleFeedSort() {
   feedSortMode.value = feedSortMode.value === 'likes' ? 'comments' : 'likes'
 }
 
+function formatMargin(homeName: string, awayName: string, homeScore: number, awayScore: number) {
+  if (homeScore === awayScore) return 'Draw backed most'
+  const side = homeScore > awayScore ? homeName : awayName
+  return `${side} by ${Math.abs(homeScore - awayScore)}`
+}
+
 async function submitPrediction() {
   if (submittingPrediction.value) return
   if (!activeRoom.value || !requireUsername('Set your username before posting.')) return
+  if (!canSubmitPrediction.value) return
 
+  const roomId = activeRoom.value.id
+  const submittedComment = predictionForm.comment.trim()
   const payload: CreatePredictionInput = {
     authorId: userId,
     name: username.value,
     homeScore: predictionForm.homeScore,
     awayScore: predictionForm.awayScore,
-    comment: predictionForm.comment,
+    comment: submittedComment,
+  }
+  const optimisticPrediction: Prediction = {
+    id: `optimistic-prediction-${roomId}-${Date.now()}`,
+    authorId: userId,
+    name: username.value,
+    homeScore: predictionForm.homeScore,
+    awayScore: predictionForm.awayScore,
+    likes: 0,
+    createdAt: new Date().toISOString(),
+    comments: [
+      {
+        id: `optimistic-comment-${roomId}-${Date.now()}`,
+        authorId: userId,
+        text: submittedComment || 'Fresh from the confidence department.',
+        replies: [],
+      },
+    ],
   }
 
   submittingPrediction.value = true
+  closePredictionModal()
+  addLocalPrediction(roomId, optimisticPrediction)
 
   try {
-    const response = await createPrediction(activeRoom.value.id, payload)
+    const response = await createPrediction(roomId, payload)
     patchRoom(response.room)
     predictionForm.comment = ''
-    closePredictionModal()
   } catch (error) {
+    removeLocalPrediction(optimisticPrediction.id)
+    predictionModalOpen.value = !!activeRoom.value && activeRoom.value.id === roomId
     showMutationError(errorText(error, 'Prediction did not post. Try again.'))
   } finally {
     submittingPrediction.value = false
@@ -521,6 +537,10 @@ async function submitLike(predictionId: string, authorId?: string) {
 
   likedPredictions.value = nextLikes
   setStoredLikes(nextLikes)
+  updateLocalPrediction(predictionId, (prediction) => ({
+    ...prediction,
+    likes: Math.max(0, prediction.likes + (liked ? 1 : -1)),
+  }))
 
   try {
     const response = await togglePredictionLike(predictionId, { userId, liked })
@@ -528,22 +548,61 @@ async function submitLike(predictionId: string, authorId?: string) {
   } catch (error) {
     likedPredictions.value = previousLikes
     setStoredLikes(previousLikes)
+    updateLocalPrediction(predictionId, (prediction) => ({
+      ...prediction,
+      likes: Math.max(0, prediction.likes + (liked ? -1 : 1)),
+    }))
     showMutationError(errorText(error, 'Like did not update. Try again.'))
   }
 }
 
 function openReplyComposer(predictionId: string, commentId: string) {
   fastCollapsingCommentCards.value = new Set()
+  editingPredictionId.value = ''
+  editingReplyId.value = ''
   activeReplyTarget.value = { predictionId, commentId }
   nextTick(() => {
     focusReplyInput(commentId)
   })
 }
 
+function startEditingPrediction(prediction: Prediction) {
+  const comment = leadComment(prediction)
+  if (!comment || !canEditPrediction(prediction)) return
+  activeReplyTarget.value = null
+  editingReplyId.value = ''
+  editingPredictionId.value = prediction.id
+  editDrafts[prediction.id] = comment.text
+  editErrors[prediction.id] = ''
+  nextTick(() => focusEditInput(prediction.id))
+}
+
+function startEditingReply(reply: Reply) {
+  if (!canEditReply(reply)) return
+  activeReplyTarget.value = null
+  editingPredictionId.value = ''
+  editingReplyId.value = reply.id
+  editDrafts[reply.id] = reply.text
+  editErrors[reply.id] = ''
+  nextTick(() => focusEditInput(reply.id))
+}
+
+function cancelEdit(contentId: string) {
+  if (editingPredictionId.value === contentId) editingPredictionId.value = ''
+  if (editingReplyId.value === contentId) editingReplyId.value = ''
+  editErrors[contentId] = ''
+}
+
+function focusEditInput(contentId: string) {
+  const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-edit-key="${CSS.escape(contentId)}"]`)
+  input?.focus()
+  input?.select()
+}
+
 function toggleReply(predictionId: string, commentId: string) {
   if (!requireUsername('Set your username before replying.', { type: 'reply', predictionId, commentId })) return
   if (isReplying(predictionId, commentId)) {
-    if (window.matchMedia('(max-width: 767px)').matches) {
+    if (isMobileViewport()) {
       focusReplyInput(commentId)
       return
     }
@@ -557,11 +616,65 @@ function toggleReply(predictionId: string, commentId: string) {
 
 function focusReplyInput(commentId: string) {
   const input = document.querySelector<HTMLInputElement>(`input[data-reply-key="${CSS.escape(commentId)}"]`)
-  input?.focus()
+  focusReplyElement(input)
 }
 
 function focusReplyComposer(element: Element) {
-  element.querySelector<HTMLInputElement>('input[data-reply-key]')?.focus()
+  focusReplyElement(element.querySelector<HTMLInputElement>('input[data-reply-key]'))
+}
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 767px)').matches
+}
+
+function clearReplyFocusTimers() {
+  replyFocusTimers.forEach((timer) => window.clearTimeout(timer))
+  replyFocusTimers = []
+}
+
+function focusReplyElement(input: HTMLInputElement | null) {
+  if (!input) return
+
+  if (!isMobileViewport()) {
+    input.focus()
+    return
+  }
+
+  clearReplyFocusTimers()
+  alignReplyComposerWithViewport(input, 'auto')
+  input.focus({ preventScroll: true })
+  replyFocusTimers = [120, 360].map((delay) =>
+    window.setTimeout(() => {
+      alignReplyComposerWithViewport(input)
+    }, delay),
+  )
+}
+
+function alignReplyComposerWithViewport(input: HTMLInputElement, behavior: ScrollBehavior = 'smooth') {
+  const composer = input.closest<HTMLElement>('[data-reply-composer]') ?? input
+  const viewport = window.visualViewport
+  const viewportTop = viewport?.offsetTop ?? 0
+  const viewportHeight = viewport?.height ?? window.innerHeight
+  const viewportBottom = viewportTop + viewportHeight
+  const rect = composer.getBoundingClientRect()
+  const topInset = 92
+  const bottomInset = 28
+
+  if (rect.top < topInset) {
+    window.scrollBy({
+      top: rect.top - topInset,
+      behavior,
+    })
+    return
+  }
+
+  const overflow = rect.bottom - (viewportBottom - bottomInset)
+  if (overflow > 0) {
+    window.scrollBy({
+      top: overflow + 48,
+      behavior,
+    })
+  }
 }
 
 async function runPendingIdentityAction(action: PendingIdentityAction) {
@@ -605,22 +718,96 @@ async function submitReply(commentId: string) {
     name: username.value,
     text,
   }
+  const optimisticReply: Reply = {
+    id: `optimistic-reply-${commentId}-${Date.now()}`,
+    authorId: userId,
+    name: username.value,
+    text,
+    createdAt: new Date().toISOString(),
+  }
 
   submittingReplies.value = new Set(submittingReplies.value).add(commentId)
   replyErrors[commentId] = ''
+  replyDrafts[commentId] = ''
+  activeReplyTarget.value = null
+  updateLocalReplyThread(commentId, (replies) => [...replies, optimisticReply])
 
   try {
     const response = await createReply(commentId, payload)
     patchRoom(response.room)
-    replyDrafts[commentId] = ''
-    activeReplyTarget.value = null
   } catch (error) {
+    removeLocalReply(optimisticReply.id)
+    replyDrafts[commentId] = text
+    const predictionId = predictionIdForComment(commentId)
+    activeReplyTarget.value = predictionId ? { predictionId, commentId } : null
     replyErrors[commentId] = errorText(error, 'Reply did not send. Try again.')
     showMutationError(replyErrors[commentId])
   } finally {
     const nextSubmitting = new Set(submittingReplies.value)
     nextSubmitting.delete(commentId)
     submittingReplies.value = nextSubmitting
+  }
+}
+
+async function submitPredictionEdit(prediction: Prediction) {
+  const text = (editDrafts[prediction.id] || '').trim()
+  if (!text || text.length < MIN_PREDICTION_COMMENT_LENGTH || isEditSubmitting(prediction.id)) return
+
+  const previousPrediction = structuredClone(prediction)
+  const editedAt = new Date().toISOString()
+  const nextSubmitting = new Set(submittingEdits.value)
+  nextSubmitting.add(prediction.id)
+  submittingEdits.value = nextSubmitting
+  editErrors[prediction.id] = ''
+  editingPredictionId.value = ''
+  updateLocalPrediction(prediction.id, (item) => ({
+    ...item,
+    editedAt,
+    comments: item.comments.map((comment, index) => index === 0 ? { ...comment, text, editedAt } : comment),
+  }))
+
+  try {
+    const response = await updatePredictionText(prediction.id, { userId, comment: text })
+    patchRoom(response.room)
+  } catch (error) {
+    updateLocalPrediction(prediction.id, () => previousPrediction)
+    editingPredictionId.value = prediction.id
+    editDrafts[prediction.id] = text
+    editErrors[prediction.id] = errorText(error, 'Prediction edit did not save. Try again.')
+    showMutationError(editErrors[prediction.id])
+  } finally {
+    const next = new Set(submittingEdits.value)
+    next.delete(prediction.id)
+    submittingEdits.value = next
+  }
+}
+
+async function submitReplyEdit(reply: Reply) {
+  const text = (editDrafts[reply.id] || '').trim()
+  if (!text || isEditSubmitting(reply.id)) return
+
+  const previousReply = structuredClone(reply)
+  const editedAt = new Date().toISOString()
+  const nextSubmitting = new Set(submittingEdits.value)
+  nextSubmitting.add(reply.id)
+  submittingEdits.value = nextSubmitting
+  editErrors[reply.id] = ''
+  editingReplyId.value = ''
+  updateLocalReply(reply.id, (item) => ({ ...item, text, editedAt }))
+
+  try {
+    const response = await updateReply(reply.id, { userId, text })
+    patchRoom(response.room)
+  } catch (error) {
+    updateLocalReply(reply.id, () => previousReply)
+    editingReplyId.value = reply.id
+    editDrafts[reply.id] = text
+    editErrors[reply.id] = errorText(error, 'Reply edit did not save. Try again.')
+    showMutationError(editErrors[reply.id])
+  } finally {
+    const next = new Set(submittingEdits.value)
+    next.delete(reply.id)
+    submittingEdits.value = next
   }
 }
 
@@ -633,6 +820,149 @@ function patchRoom(nextRoom: Room) {
   if (!activeRoomId.value) {
     activeRoomId.value = nextRoom.id
   }
+}
+
+function updateLocalPrediction(predictionId: string, update: (prediction: Prediction) => Prediction) {
+  let changed = false
+
+  const nextRooms = rooms.value.map((room) => {
+    let roomChanged = false
+    const predictions = room.predictions.map((prediction) => {
+      if (prediction.id !== predictionId) return prediction
+      changed = true
+      roomChanged = true
+      return update(prediction)
+    })
+
+    return roomChanged ? { ...room, predictions } : room
+  })
+
+  if (changed) {
+    rooms.value = nextRooms
+  }
+}
+
+function addLocalPrediction(roomId: string, prediction: Prediction) {
+  rooms.value = rooms.value.map((room) => {
+    if (room.id !== roomId) return room
+
+    return {
+      ...room,
+      mostBacked: {
+        home: prediction.homeScore,
+        away: prediction.awayScore,
+        margin: formatMargin(room.home.name, room.away.name, prediction.homeScore, prediction.awayScore),
+      },
+      predictions: [prediction, ...room.predictions],
+    }
+  })
+}
+
+function removeLocalPrediction(predictionId: string) {
+  rooms.value = rooms.value.map((room) => {
+    const predictions = room.predictions.filter((prediction) => prediction.id !== predictionId)
+    return predictions.length === room.predictions.length ? room : { ...room, predictions }
+  })
+}
+
+function updateLocalReplyThread(commentId: string, update: (replies: Reply[]) => Reply[]) {
+  let changed = false
+
+  const nextRooms = rooms.value.map((room) => {
+    let roomChanged = false
+    const predictions = room.predictions.map((prediction) => {
+      let predictionChanged = false
+      const comments = prediction.comments.map((comment) => {
+        if (comment.id !== commentId) return comment
+        changed = true
+        roomChanged = true
+        predictionChanged = true
+        return {
+          ...comment,
+          replies: update(comment.replies),
+        }
+      })
+
+      return predictionChanged ? { ...prediction, comments } : prediction
+    })
+
+    return roomChanged ? { ...room, predictions } : room
+  })
+
+  if (changed) {
+    rooms.value = nextRooms
+  }
+}
+
+function updateLocalReply(replyId: string, update: (reply: Reply) => Reply) {
+  let changed = false
+
+  const nextRooms = rooms.value.map((room) => {
+    let roomChanged = false
+    const predictions = room.predictions.map((prediction) => {
+      let predictionChanged = false
+      const comments = prediction.comments.map((comment) => {
+        let commentChanged = false
+        const replies = comment.replies.map((reply) => {
+          if (reply.id !== replyId) return reply
+          changed = true
+          roomChanged = true
+          predictionChanged = true
+          commentChanged = true
+          return update(reply)
+        })
+
+        return commentChanged ? { ...comment, replies } : comment
+      })
+
+      return predictionChanged ? { ...prediction, comments } : prediction
+    })
+
+    return roomChanged ? { ...room, predictions } : room
+  })
+
+  if (changed) {
+    rooms.value = nextRooms
+  }
+}
+
+function removeLocalReply(replyId: string) {
+  let changed = false
+
+  const nextRooms = rooms.value.map((room) => {
+    let roomChanged = false
+    const predictions = room.predictions.map((prediction) => {
+      let predictionChanged = false
+      const comments = prediction.comments.map((comment) => {
+        const replies = comment.replies.filter((reply) => reply.id !== replyId)
+        if (replies.length === comment.replies.length) return comment
+        changed = true
+        roomChanged = true
+        predictionChanged = true
+        return { ...comment, replies }
+      })
+
+      return predictionChanged ? { ...prediction, comments } : prediction
+    })
+
+    return roomChanged ? { ...room, predictions } : room
+  })
+
+  if (changed) {
+    rooms.value = nextRooms
+  }
+}
+
+function predictionIdForComment(commentId: string) {
+  for (const room of rooms.value) {
+    for (const prediction of room.predictions) {
+      if (prediction.comments.some((comment) => comment.id === commentId)) {
+        return prediction.id
+      }
+    }
+  }
+
+  return ''
 }
 
 function selectedThemeLabel() {
@@ -708,7 +1038,15 @@ function handleRouteChange() {
 
 function handleSocketEvent(event: MessageEvent<string>) {
   if (event.data === 'pong') return
-  const payload = JSON.parse(event.data) as ApiEvent
+  let payload: ApiEvent
+
+  try {
+    payload = JSON.parse(event.data) as ApiEvent
+  } catch {
+    console.warn('Ignored invalid room event payload')
+    return
+  }
+
   if (payload.type === 'bootstrap') {
     patchRoom(payload.room)
     return
@@ -858,6 +1196,7 @@ onBeforeUnmount(() => {
   if (fastCommentCollapseTimer) {
     window.clearTimeout(fastCommentCollapseTimer)
   }
+  clearReplyFocusTimers()
   socketToken += 1
   ws.value?.close()
   document.removeEventListener('click', handleGlobalClick)
@@ -1423,6 +1762,7 @@ onBeforeUnmount(() => {
               <article
                 v-for="item in sortedPredictions"
                 :key="item.id"
+                data-prediction-card
                 class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-visible rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] transition-[background-color,border-color,box-shadow] duration-300 ease-[var(--ease)] max-md:rounded-[10px] max-md:p-3.5"
                 :class="leadComment(item) && (isReplying(item.id, leadComment(item)!.id) || isCommentsExpanded(item.id)) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))] shadow-[0_14px_36px_rgba(42,37,32,0.10)]' : ''"
               >
@@ -1441,8 +1781,51 @@ onBeforeUnmount(() => {
                   </span>
                 </div>
 
-                <div v-if="leadComment(item)">
-                  <p data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-base">{{ leadComment(item)?.text }}</p>
+                <div v-if="leadComment(item)" class="grid gap-1">
+                  <form
+                    v-if="editingPredictionId === item.id"
+                    class="grid gap-2"
+                    @submit.prevent="submitPredictionEdit(item)"
+                  >
+                    <textarea
+                      :data-edit-key="item.id"
+                      v-model="editDrafts[item.id]"
+                      class="min-h-16 w-full resize-none rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 py-2 text-sm text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ease)] focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)] disabled:cursor-wait disabled:opacity-70"
+                      maxlength="280"
+                      aria-label="Edit prediction text"
+                      :disabled="isEditSubmitting(item.id)"
+                    ></textarea>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button
+                        class="inline-flex min-h-8 items-center justify-center rounded-md bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
+                        type="submit"
+                        :disabled="!canSubmitEdit(item.id, MIN_PREDICTION_COMMENT_LENGTH)"
+                      >
+                        {{ isEditSubmitting(item.id) ? 'Saving' : 'Save' }}
+                      </button>
+                      <button
+                        class="inline-flex min-h-8 items-center justify-center rounded-md px-2.5 text-xs font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px"
+                        type="button"
+                        :disabled="isEditSubmitting(item.id)"
+                        @click="cancelEdit(item.id)"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p v-if="editErrors[item.id]" class="m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[item.id] }}</p>
+                  </form>
+                  <p v-else data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-base">
+                    {{ leadComment(item)?.text }}
+                    <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
+                  </p>
+                  <button
+                    v-if="editingPredictionId !== item.id && canEditPrediction(item)"
+                    class="inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
+                    type="button"
+                    @click="startEditingPrediction(item)"
+                  >
+                    Edit
+                  </button>
                 </div>
 
                 <div v-if="leadComment(item)?.replies.length" data-reply-thread class="grid gap-2 pt-1 pl-3">
@@ -1458,7 +1841,48 @@ onBeforeUnmount(() => {
                       class="reply-row text-xs leading-[1.45] text-[var(--muted)]"
                       :style="{ '--reply-index': replyIndex }"
                     >
-                      <strong>{{ reply.name }}:</strong> {{ reply.text }}
+                      <form
+                        v-if="editingReplyId === reply.id"
+                        class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto]"
+                        @submit.prevent="submitReplyEdit(reply)"
+                      >
+                        <input
+                          :data-edit-key="reply.id"
+                          v-model="editDrafts[reply.id]"
+                          class="min-h-8 w-full rounded-md border border-[var(--control-border)] bg-[var(--control-bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] disabled:cursor-wait disabled:opacity-70"
+                          maxlength="280"
+                          aria-label="Edit reply"
+                          :disabled="isEditSubmitting(reply.id)"
+                        />
+                        <button
+                          class="inline-flex min-h-8 items-center justify-center rounded-md bg-[var(--accent)] px-2 text-[10px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
+                          type="submit"
+                          :disabled="!canSubmitEdit(reply.id)"
+                        >
+                          {{ isEditSubmitting(reply.id) ? 'Saving' : 'Save' }}
+                        </button>
+                        <button
+                          class="inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
+                          type="button"
+                          :disabled="isEditSubmitting(reply.id)"
+                          @click="cancelEdit(reply.id)"
+                        >
+                          Cancel
+                        </button>
+                        <p v-if="editErrors[reply.id]" class="col-span-full m-0 text-[11px] font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[reply.id] }}</p>
+                      </form>
+                      <span v-else>
+                        <strong>{{ reply.name }}:</strong> {{ reply.text }}
+                        <span v-if="reply.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
+                        <button
+                          v-if="canEditReply(reply)"
+                          class="ml-1 inline-flex rounded px-1 text-[9px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
+                          type="button"
+                          @click="startEditingReply(reply)"
+                        >
+                          Edit
+                        </button>
+                      </span>
                     </div>
                   </TransitionGroup>
                   <button
@@ -1476,7 +1900,7 @@ onBeforeUnmount(() => {
                   <form
                     v-if="leadComment(item) && isReplying(item.id, leadComment(item)!.id)"
                     data-reply-composer
-                    class="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2 max-md:grid-cols-[minmax(0,1fr)_auto]"
+                    class="mt-1 grid scroll-mt-24 grid-cols-[minmax(0,1fr)_auto] gap-2 max-md:mb-2 max-md:grid-cols-[minmax(0,1fr)_auto]"
                     @submit.prevent="submitReply(leadComment(item)!.id)"
                   >
                     <input
@@ -1734,97 +2158,27 @@ onBeforeUnmount(() => {
       </aside>
     </section>
 
-    <Transition name="sheet-flow">
-      <div v-if="identityPromptOpen" class="sheet-overlay fixed inset-0 z-[1300] grid items-end bg-black/50 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]" aria-hidden="false" @click.self="closeIdentityPrompt">
-      <section class="sheet-panel mx-auto mb-[max(10px,env(safe-area-inset-bottom))] flex max-h-[min(86dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] w-[min(760px,calc(100%-20px))] flex-col overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-[18px] shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" aria-labelledby="identity-title">
-        <div class="sheet-stagger mb-4 flex items-center justify-between gap-3" style="--sheet-index: 0">
-          <div>
-            <h2 id="identity-title" class="m-0 text-xl font-extrabold leading-tight text-[var(--text)]">Pick your room name</h2>
-            <p class="m-0 text-[13px] leading-snug text-[var(--muted)]">Set once for this browser. Used for comments and likes.</p>
-          </div>
-          <button class="inline-flex h-11 min-h-11 w-11 min-w-11 flex-none items-center justify-center rounded-lg bg-white/[0.06] p-0 text-[var(--text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-white/[0.1] active:translate-y-px" type="button" aria-label="Set username later" @click="closeIdentityPrompt">
-            <svg class="ph-icon h-5 w-5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
-              <path d="M200 56 56 200"></path>
-              <path d="M56 56l144 144"></path>
-            </svg>
-          </button>
-        </div>
+    <IdentityPrompt
+      ref="identityPrompt"
+      v-model:username-draft="usernameDraft"
+      :open="identityPromptOpen"
+      :can-save="canSaveUsername"
+      :error="usernameError"
+      :message="identityPromptMessage"
+      @close="closeIdentityPrompt"
+      @save="saveUsername"
+    />
 
-        <form class="sheet-stagger mt-3 grid gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--card-soft)] p-3" style="--sheet-index: 1" @submit.prevent="saveUsername">
-          <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-username">Username</label>
-          <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <input
-              id="prompt-username"
-              ref="identityPromptInput"
-              v-model="usernameDraft"
-              class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
-              autocomplete="nickname"
-              maxlength="24"
-              placeholder="Your name"
-              aria-describedby="identity-prompt-help identity-prompt-error"
-            />
-            <button
-              class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_72%,black)] bg-[var(--accent)] px-3.5 text-[13px] font-[760] leading-none text-[var(--accent-text)] shadow-[0_8px_20px_color-mix(in_srgb,var(--accent)_18%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[transform,background-color,border-color,box-shadow,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--accent)_88%,black)] hover:shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_22%,transparent),inset_0_1px_0_rgba(255,255,255,0.18)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0"
-              type="submit"
-              :disabled="!canSaveUsername"
-              aria-label="Save username"
-            >
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5.5 5.5h10l3 3v10h-13z"></path>
-                <path d="M8 5.5V11h8V5.5"></path>
-                <path d="M8 18.5v-4h8v4"></path>
-              </svg>
-              <span>Save</span>
-            </button>
-          </div>
-          <p id="identity-prompt-help" class="m-0 text-xs leading-[1.4] text-[var(--muted)]">2-24 chars: letters, numbers, space, . ' -</p>
-          <p id="identity-prompt-error" class="m-0 min-h-[14px] text-xs leading-[1.4] text-[var(--danger)]" role="status" aria-live="polite">{{ usernameError || identityPromptMessage }}</p>
-        </form>
-      </section>
-      </div>
-    </Transition>
-
-    <Transition name="sheet-flow">
-      <div v-if="predictionModalOpen && activeRoom" class="sheet-overlay fixed inset-0 z-[1200] grid items-end bg-black/50 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]" aria-hidden="false" @click.self="submittingPrediction ? undefined : closePredictionModal()">
-      <section class="sheet-panel mx-auto mb-[max(10px,env(safe-area-inset-bottom))] flex h-fit max-h-[min(86dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-18px))] w-[min(760px,calc(100%-20px))] flex-col overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-[18px] shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" :aria-labelledby="`sheet-title-${activeRoom.id}`">
-        <div class="sheet-stagger mb-3 flex items-start justify-between gap-3" style="--sheet-index: 0">
-          <h2 class="m-0 text-xl font-extrabold leading-tight max-md:text-[18px]" :id="`sheet-title-${activeRoom.id}`">Your {{ activeRoom.home.name }} vs {{ activeRoom.away.name }} score</h2>
-          <button class="inline-flex min-h-10 w-10 min-w-10 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] p-0 text-[var(--muted)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--line)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_88%,black)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0" type="button" aria-label="Close" :disabled="submittingPrediction" @click="closePredictionModal">
-            <svg class="ph-icon h-5 w-5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
-              <path d="M200 56 56 200"></path>
-              <path d="M56 56l144 144"></path>
-            </svg>
-          </button>
-        </div>
-
-        <form class="sheet-stagger" style="--sheet-index: 1" :aria-busy="submittingPrediction" @submit.prevent="submitPrediction">
-          <div class="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
-            <div class="grid gap-1.5">
-              <label class="text-xs font-bold text-[var(--muted)]" for="home-score">{{ activeRoom.home.name }}</label>
-              <input id="home-score" v-model.number="predictionForm.homeScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submittingPrediction" required />
-            </div>
-            <div class="grid gap-1.5">
-              <label class="text-xs font-bold text-[var(--muted)]" for="away-score">{{ activeRoom.away.name }}</label>
-              <input id="away-score" v-model.number="predictionForm.awayScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submittingPrediction" required />
-            </div>
-          </div>
-
-          <div class="mt-2.5 grid gap-2">
-            <div class="grid gap-1.5">
-              <label class="text-xs font-bold text-[var(--muted)]" for="take">Comment</label>
-              <textarea id="take" v-model="predictionForm.comment" class="max-h-20 min-h-16 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 max-md:min-h-14" rows="2" placeholder="Add a little confidence..." :disabled="submittingPrediction"></textarea>
-            </div>
-            <button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,transform,opacity] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-80 disabled:active:translate-y-0 md:min-h-11" type="submit" :disabled="submittingPrediction">
-              <svg v-if="submittingPrediction" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">
-                <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
-                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path>
-              </svg>
-              <span>{{ submittingPrediction ? 'Posting...' : 'Post prediction' }}</span>
-            </button>
-          </div>
-        </form>
-      </section>
-      </div>
-    </Transition>
+    <ScoreDrawer
+      v-model:home-score="predictionForm.homeScore"
+      v-model:away-score="predictionForm.awayScore"
+      v-model:comment="predictionForm.comment"
+      :open="predictionModalOpen"
+      :room="activeRoom"
+      :submitting="submittingPrediction"
+      :can-submit="canSubmitPrediction"
+      @close="closePredictionModal"
+      @submit="submitPrediction"
+    />
   </main>
 </template>

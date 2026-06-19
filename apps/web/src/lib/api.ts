@@ -1,4 +1,4 @@
-import type { BootstrapResponse, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput } from '@wc-chatter/shared'
+import type { BootstrapResponse, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
 
 const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8787'
 const wsBaseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8787/ws'
@@ -44,9 +44,29 @@ export async function togglePredictionLike(predictionId: string, payload: Toggle
   )
 }
 
+export async function updatePredictionText(predictionId: string, payload: UpdatePredictionInput) {
+  return parseResponse<{ room: Room }>(
+    await fetch(`${apiBaseUrl}/api/predictions/${predictionId}/edit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  )
+}
+
 export async function createReply(commentId: string, payload: ReplyInput) {
   return parseResponse<{ room: Room }>(
     await fetch(`${apiBaseUrl}/api/comments/${commentId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  )
+}
+
+export async function updateReply(replyId: string, payload: UpdateReplyInput) {
+  return parseResponse<{ room: Room }>(
+    await fetch(`${apiBaseUrl}/api/replies/${replyId}/edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

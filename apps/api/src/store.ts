@@ -1,4 +1,5 @@
 import {
+  CONTENT_EDIT_WINDOW_MS,
   mockThemes,
   type ApiEvent,
   type CreatePredictionInput,
@@ -7,6 +8,8 @@ import {
   type ReplyInput,
   type Room,
   type ThemeOption,
+  type UpdatePredictionInput,
+  type UpdateReplyInput,
 } from '@wc-chatter/shared'
 import { createMockRooms } from '@wc-chatter/shared/mock-data'
 import { ApiError } from './errors.js'
@@ -28,6 +31,18 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
   const side = homeScore > awayScore ? homeName : awayName
   const gap = Math.abs(homeScore - awayScore)
   return `${side} by ${gap}`
+}
+
+function assertRoomWritable(room: Room) {
+  if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
+    throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
+  }
+}
+
+function assertEditable(createdAt: string) {
+  if (Date.now() - Date.parse(createdAt) > CONTENT_EDIT_WINDOW_MS) {
+    throw new ApiError('FORBIDDEN', 'The edit window has closed.', 403)
+  }
 }
 
 export function createStore() {
@@ -61,9 +76,7 @@ export function createStore() {
     addPrediction(roomId: string, payload: CreatePredictionInput) {
       const room = rooms.find((item) => item.id === roomId)
       if (!room) return null
-      if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
-        throw new ApiError('FORBIDDEN', 'This room is closed for new predictions.', 403)
-      }
+      assertRoomWritable(room)
 
       const prediction: Prediction = {
         id: `prediction-${roomId}-${Date.now()}`,
@@ -111,6 +124,28 @@ export function createStore() {
 
       return cloneRoom(room)
     },
+    updatePredictionText(predictionId: string, payload: UpdatePredictionInput) {
+      const room = rooms.find((item) => item.predictions.some((prediction) => prediction.id === predictionId))
+      if (!room) return null
+      assertRoomWritable(room)
+
+      const prediction = room.predictions.find((item) => item.id === predictionId)
+      if (!prediction) return null
+      if (prediction.authorId !== payload.userId) {
+        throw new ApiError('FORBIDDEN', 'You can only edit your own prediction.', 403)
+      }
+      assertEditable(prediction.createdAt)
+
+      const editedAt = new Date().toISOString()
+      prediction.editedAt = editedAt
+      const [leadComment] = prediction.comments
+      if (leadComment) {
+        leadComment.text = payload.comment.trim()
+        leadComment.editedAt = editedAt
+      }
+
+      return cloneRoom(room)
+    },
     addReply(commentId: string, payload: ReplyInput) {
       const room = rooms.find((item) =>
         item.predictions.some((prediction) => prediction.comments.some((comment) => comment.id === commentId)),
@@ -131,6 +166,31 @@ export function createStore() {
 
         comment.replies.push(reply)
         return cloneRoom(room)
+      }
+
+      return null
+    },
+    updateReply(replyId: string, payload: UpdateReplyInput) {
+      const room = rooms.find((item) =>
+        item.predictions.some((prediction) =>
+          prediction.comments.some((comment) => comment.replies.some((reply) => reply.id === replyId)),
+        ),
+      )
+      if (!room) return null
+      assertRoomWritable(room)
+
+      for (const prediction of room.predictions) {
+        for (const comment of prediction.comments) {
+          const reply = comment.replies.find((item) => item.id === replyId)
+          if (!reply) continue
+          if (reply.authorId !== payload.userId) {
+            throw new ApiError('FORBIDDEN', 'You can only edit your own reply.', 403)
+          }
+          assertEditable(reply.createdAt)
+          reply.text = payload.text.trim()
+          reply.editedAt = new Date().toISOString()
+          return cloneRoom(room)
+        }
       }
 
       return null

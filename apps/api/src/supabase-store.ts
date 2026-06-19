@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
+  CONTENT_EDIT_WINDOW_MS,
   loadFixtures,
-  MATCH_LIVE_DURATION_MS,
+  matchStatusFromKickoff,
   matchKickoffUtc,
   mockThemes,
   type ApiEvent,
@@ -17,6 +18,8 @@ import {
   type RoomStatus,
   type Team,
   type ThemeOption,
+  type UpdatePredictionInput,
+  type UpdateReplyInput,
 } from '@wc-chatter/shared'
 import { ApiError } from './errors.js'
 
@@ -61,6 +64,7 @@ type PredictionRow = {
   away_score: number
   take: string | null
   created_at: string
+  edited_at?: string | null
 }
 
 type LikeRow = {
@@ -75,6 +79,7 @@ type CommentRow = {
   author_name: string
   text: string
   created_at: string
+  edited_at?: string | null
 }
 
 type ReplyRow = {
@@ -84,6 +89,7 @@ type ReplyRow = {
   author_name: string
   text: string
   created_at: string
+  edited_at?: string | null
 }
 
 export type SupabaseStoreConfig = {
@@ -121,6 +127,13 @@ const fixtureKickoffs = new Map(
   }),
 )
 
+type PredictionOwnerRow = {
+  id: string
+  room_id: string
+  author_id: string
+  created_at: string
+}
+
 function isMissingColumnError(error?: { code?: string } | null) {
   return error?.code === 'PGRST204' || error?.code === '42703'
 }
@@ -152,17 +165,6 @@ function legacyMatchStatus(status: RoomRow['status']): MatchStatus {
   if (status === 'live') return 'live'
   if (status === 'closed' || status === 'archived') return 'finished'
   return 'upcoming'
-}
-
-function matchStatusFromKickoff(kickoffAt?: string | null): MatchStatus | null {
-  if (!kickoffAt) return null
-  const kickoffMs = Date.parse(kickoffAt)
-  if (!Number.isFinite(kickoffMs)) return null
-
-  const nowMs = Date.now()
-  if (nowMs < kickoffMs) return 'upcoming'
-  if (nowMs <= kickoffMs + MATCH_LIVE_DURATION_MS) return 'live'
-  return 'finished'
 }
 
 function kickoffForRoom(room: RoomRow) {
@@ -282,7 +284,7 @@ function mapRoom(
   }
 }
 
-function mapPredictions(
+export function mapPredictions(
   predictions: PredictionRow[],
   likes: LikeRow[],
   comments: CommentRow[],
@@ -304,6 +306,7 @@ function mapPredictions(
       text: reply.text,
       createdAt: reply.created_at,
     }
+    if (reply.edited_at) nextReply.editedAt = reply.edited_at
     repliesByComment.set(reply.comment_id, [...(repliesByComment.get(reply.comment_id) ?? []), nextReply])
   }
 
@@ -327,6 +330,11 @@ function mapPredictions(
         text: comment.text,
         replies: repliesByComment.get(comment.id) ?? [],
       })),
+    }
+    if (prediction.edited_at) nextPrediction.editedAt = prediction.edited_at
+    for (const comment of nextPrediction.comments) {
+      const row = (commentsByPrediction.get(prediction.id) ?? []).find((item) => item.id === comment.id)
+      if (row?.edited_at) comment.editedAt = row.edited_at
     }
 
     byRoom.set(prediction.room_id, [...(byRoom.get(prediction.room_id) ?? []), nextPrediction])
@@ -449,7 +457,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     if (roomIds.length === 0) return []
     const { data, error } = await supabase
       .from('predictions')
-      .select('id, room_id, author_id, author_name, home_score, away_score, take, created_at')
+      .select('id, room_id, author_id, author_name, home_score, away_score, take, created_at, edited_at')
       .in('room_id', roomIds)
       .order('created_at', { ascending: false })
 
@@ -488,7 +496,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
       const { data, error } = await supabase
         .from('comments')
-        .select('id, prediction_id, author_id, author_name, text, created_at')
+        .select('id, prediction_id, author_id, author_name, text, created_at, edited_at')
         .in('prediction_id', batch)
         .eq('hidden', false)
         .order('created_at', { ascending: true })
@@ -511,7 +519,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     for (const batch of chunks(commentIds, SUPABASE_IN_BATCH_SIZE)) {
       const { data, error } = await supabase
         .from('comment_replies')
-        .select('id, comment_id, author_id, author_name, text, created_at')
+        .select('id, comment_id, author_id, author_name, text, created_at, edited_at')
         .in('comment_id', batch)
         .eq('hidden', false)
         .order('created_at', { ascending: true })
@@ -543,15 +551,27 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     return hydrated
   }
 
+  function assertRoomWritable(room: RoomRow) {
+    if (effectiveMatchStatus(room) === 'finished' || !ROOM_WRITE_STATUSES.has(room.room_status ?? legacyRoomStatus(room.status))) {
+      throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
+    }
+  }
+
+  function assertEditable(createdAt: string) {
+    if (Date.now() - Date.parse(createdAt) > CONTENT_EDIT_WINDOW_MS) {
+      throw new ApiError('FORBIDDEN', 'The edit window has closed.', 403)
+    }
+  }
+
   async function getPredictionOwner(predictionId: string) {
     const { data, error } = await supabase
       .from('predictions')
-      .select('id, room_id, author_id')
+      .select('id, room_id, author_id, created_at')
       .eq('id', predictionId)
       .maybeSingle()
 
     if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to load prediction.', 500)
-    return data as { id: string; room_id: string; author_id: string } | null
+    return data as PredictionOwnerRow | null
   }
 
   return {
@@ -583,9 +603,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     async addPrediction(roomRef: string, payload: CreatePredictionInput) {
       const room = await getRoomRow(roomRef)
       if (!room) return null
-      if (effectiveMatchStatus(room) === 'finished' || !ROOM_WRITE_STATUSES.has(room.room_status ?? legacyRoomStatus(room.status))) {
-        throw new ApiError('FORBIDDEN', 'This room is closed for new predictions.', 403)
-      }
+      assertRoomWritable(room)
 
       const take = payload.comment?.trim() || 'Fresh from the confidence department.'
       const { data: prediction, error } = await supabase
@@ -640,6 +658,49 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
 
       return hydrateRoom(prediction.room_id)
     },
+    async updatePredictionText(predictionId: string, payload: UpdatePredictionInput) {
+      const prediction = await getPredictionOwner(predictionId)
+      if (!prediction) return null
+      if (prediction.author_id !== payload.userId) {
+        throw new ApiError('FORBIDDEN', 'You can only edit your own prediction.', 403)
+      }
+      assertEditable(prediction.created_at)
+
+      const room = await getRoomRow(prediction.room_id)
+      if (!room) return null
+      assertRoomWritable(room)
+
+      const editedAt = new Date().toISOString()
+      const { error: predictionError } = await supabase
+        .from('predictions')
+        .update({ take: payload.comment, edited_at: editedAt })
+        .eq('id', predictionId)
+
+      if (predictionError) throw new ApiError('INTERNAL_ERROR', 'Unable to edit prediction.', 500)
+
+      const { data: leadComment, error: commentLoadError } = await supabase
+        .from('comments')
+        .select('id')
+        .eq('prediction_id', predictionId)
+        .eq('author_id', payload.userId)
+        .eq('hidden', false)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (commentLoadError) throw new ApiError('INTERNAL_ERROR', 'Unable to load prediction comment.', 500)
+
+      if (leadComment) {
+        const { error: commentError } = await supabase
+          .from('comments')
+          .update({ text: payload.comment, edited_at: editedAt })
+          .eq('id', (leadComment as { id: string }).id)
+
+        if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to edit prediction comment.', 500)
+      }
+
+      return hydrateRoom(prediction.room_id)
+    },
     async addReply(commentId: string, payload: ReplyInput) {
       const { data: comment, error: commentError } = await supabase
         .from('comments')
@@ -666,6 +727,54 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
 
       if (prediction.error) throw new ApiError('INTERNAL_ERROR', 'Unable to load room.', 500)
       return hydrateRoom(prediction.data.room_id)
+    },
+    async updateReply(replyId: string, payload: UpdateReplyInput) {
+      const { data: reply, error: replyError } = await supabase
+        .from('comment_replies')
+        .select('id, comment_id, author_id, created_at')
+        .eq('id', replyId)
+        .eq('hidden', false)
+        .maybeSingle()
+
+      if (replyError) throw new ApiError('INTERNAL_ERROR', 'Unable to load reply.', 500)
+      if (!reply) return null
+
+      const replyRow = reply as { id: string; comment_id: string; author_id: string; created_at: string }
+      if (replyRow.author_id !== payload.userId) {
+        throw new ApiError('FORBIDDEN', 'You can only edit your own reply.', 403)
+      }
+      assertEditable(replyRow.created_at)
+
+      const { data: comment, error: commentError } = await supabase
+        .from('comments')
+        .select('prediction_id')
+        .eq('id', replyRow.comment_id)
+        .maybeSingle()
+
+      if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to load comment.', 500)
+      if (!comment) return null
+
+      const { data: prediction, error: predictionError } = await supabase
+        .from('predictions')
+        .select('room_id')
+        .eq('id', (comment as { prediction_id: string }).prediction_id)
+        .maybeSingle()
+
+      if (predictionError) throw new ApiError('INTERNAL_ERROR', 'Unable to load prediction.', 500)
+      if (!prediction) return null
+
+      const roomId = (prediction as { room_id: string }).room_id
+      const room = await getRoomRow(roomId)
+      if (!room) return null
+      assertRoomWritable(room)
+
+      const { error } = await supabase
+        .from('comment_replies')
+        .update({ text: payload.text, edited_at: new Date().toISOString() })
+        .eq('id', replyId)
+
+      if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to edit reply.', 500)
+      return hydrateRoom(roomId)
     },
   }
 }

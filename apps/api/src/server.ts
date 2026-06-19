@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono'
-import type { ApiEvent, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput } from '@wc-chatter/shared'
+import type { ApiEvent, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'
@@ -110,6 +110,40 @@ function parseReplyInput(input: unknown): ReplyInput {
   }
 }
 
+function parsePredictionEditInput(input: unknown): UpdatePredictionInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  const comment = normalizeText(body.comment, 'Comment')
+  if (!comment || comment.length < 4) {
+    throw new ApiError('VALIDATION_ERROR', 'Comment must be at least 4 characters.', 400)
+  }
+
+  return {
+    userId: normalizeUserId(body.userId),
+    comment,
+  }
+}
+
+function parseReplyEditInput(input: unknown): UpdateReplyInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  const text = normalizeText(body.text, 'Reply')
+  if (!text) {
+    throw new ApiError('VALIDATION_ERROR', 'Reply is required.', 400)
+  }
+
+  return {
+    userId: normalizeUserId(body.userId),
+    text,
+  }
+}
+
 app.use(
   '*',
   async (c, next) => {
@@ -184,6 +218,27 @@ app.post('/api/predictions/:predictionId/likes', async (c) => {
   }
 })
 
+app.post('/api/predictions/:predictionId/edit', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const predictionId = c.req.param('predictionId')
+    const payload = parsePredictionEditInput(await readJson(c))
+    enforceMutationRateLimit(payload.userId, 'edit')
+    const room = await store.updatePredictionText(predictionId, payload)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
 app.post('/api/comments/:commentId/replies', async (c) => {
   const store = storeFor(c.env)
   try {
@@ -194,6 +249,27 @@ app.post('/api/comments/:commentId/replies', async (c) => {
 
     if (!room) {
       throw new ApiError('NOT_FOUND', 'Comment not found.', 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.post('/api/replies/:replyId/edit', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const replyId = c.req.param('replyId')
+    const payload = parseReplyEditInput(await readJson(c))
+    enforceMutationRateLimit(payload.userId, 'edit')
+    const room = await store.updateReply(replyId, payload)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Reply not found.', 404)
     }
 
     const event: ApiEvent = { type: 'room.updated', room }

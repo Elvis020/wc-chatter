@@ -22,6 +22,7 @@ export interface Reply {
   name: string
   text: string
   createdAt: string
+  editedAt?: string
 }
 
 export interface Comment {
@@ -29,6 +30,7 @@ export interface Comment {
   authorId?: string
   text: string
   replies: Reply[]
+  editedAt?: string
 }
 
 export interface Prediction {
@@ -40,6 +42,7 @@ export interface Prediction {
   likes: number
   comments: Comment[]
   createdAt: string
+  editedAt?: string
 }
 
 export interface RoomSummary {
@@ -93,6 +96,16 @@ export interface ReplyInput {
   text: string
 }
 
+export interface UpdatePredictionInput {
+  userId: string
+  comment: string
+}
+
+export interface UpdateReplyInput {
+  userId: string
+  text: string
+}
+
 export interface ToggleLikeInput {
   userId: string
   liked: boolean
@@ -101,6 +114,8 @@ export interface ToggleLikeInput {
 export type ApiEvent =
   | { type: 'bootstrap'; room: Room }
   | { type: 'room.updated'; room: Room }
+
+export const CONTENT_EDIT_WINDOW_MS = 5 * 60 * 1000
 
 export const mockThemes: ThemeOption[] = [
   { id: 'paper', label: 'Paper Notes' },
@@ -124,3 +139,15 @@ export {
   type FixtureMatch,
   type MatchCycleWindow,
 } from './fixtures.js'
+
+export {
+  compareRoomsForSwitcher,
+  effectiveRoomMatchStatus,
+  isRoomLocked,
+  matchStatusFromKickoff,
+  roomKickoffIso,
+  roomKickoffMs,
+  roomKickoffTime,
+  roomLockedAtMs,
+  type FixtureKickoffLookup,
+} from './room-state.js'
