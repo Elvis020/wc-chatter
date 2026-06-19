@@ -89,6 +89,7 @@ const feedSortMode = ref<FeedSortMode>('likes')
 const roomPage = ref(0)
 const likedPredictions = ref(getStoredLikes())
 const activeReplyTarget = ref<{ predictionId: string; commentId: string } | null>(null)
+const closingReplyTargets = ref(new Set<string>())
 const expandedCommentCards = ref(new Set<string>())
 const fastCollapsingCommentCards = ref(new Set<string>())
 const pendingIdentityAction = ref<PendingIdentityAction | null>(null)
@@ -109,6 +110,7 @@ const updatedRoomIds = ref(new Set<string>())
 const updatedPredictionIds = ref(new Set<string>())
 const typingPeople = ref(new Map<string, TypingState>())
 const feedNavMode = ref<'hidden' | 'up' | 'down'>('hidden')
+const roomSwitchDirection = ref<'forward' | 'backward'>('forward')
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -414,7 +416,7 @@ function hiddenReplyCount(prediction: Prediction) {
 
 function shouldShowCommentToggle(prediction: Prediction) {
   const comment = leadComment(prediction)
-  return !!comment && !isReplying(prediction.id, comment.id) && hiddenReplyCount(prediction) > 0
+  return !!comment && !isReplying(prediction.id, comment.id) && !isReplyComposerClosing(prediction.id, comment.id) && hiddenReplyCount(prediction) > 0
 }
 
 function shouldFadeCommentPreview(prediction: Prediction) {
@@ -487,6 +489,30 @@ function isReplying(predictionId: string, commentId: string) {
   )
 }
 
+function replyTargetKey(predictionId: string, commentId: string) {
+  return `${predictionId}:${commentId}`
+}
+
+function isReplyComposerClosing(predictionId: string, commentId: string) {
+  return closingReplyTargets.value.has(replyTargetKey(predictionId, commentId))
+}
+
+function markReplyComposerClosing(commentId: string) {
+  const predictionId = activeReplyTarget.value?.commentId === commentId
+    ? activeReplyTarget.value.predictionId
+    : predictionIdForComment(commentId)
+
+  if (!predictionId) return
+
+  closingReplyTargets.value = new Set(closingReplyTargets.value).add(replyTargetKey(predictionId, commentId))
+}
+
+function finishReplyComposerClose(predictionId: string, commentId: string) {
+  const nextClosing = new Set(closingReplyTargets.value)
+  nextClosing.delete(replyTargetKey(predictionId, commentId))
+  closingReplyTargets.value = nextClosing
+}
+
 function isReplySubmitting(commentId: string) {
   return submittingReplies.value.has(commentId)
 }
@@ -537,8 +563,14 @@ function canSubmitEdit(contentId: string, minLength = 1) {
 }
 
 function setActiveRoom(roomId: string) {
+  const currentIndex = orderedRooms.value.findIndex((room) => room.id === activeRoomId.value)
+  const nextIndex = orderedRooms.value.findIndex((room) => room.id === roomId)
+  if (currentIndex !== -1 && nextIndex !== -1 && currentIndex !== nextIndex) {
+    roomSwitchDirection.value = nextIndex > currentIndex ? 'forward' : 'backward'
+  }
   activeRoomId.value = roomId
   activeReplyTarget.value = null
+  closingReplyTargets.value = new Set()
   expandedCommentCards.value = new Set()
   fastCollapsingCommentCards.value = new Set()
   editingPredictionId.value = ''
@@ -658,6 +690,7 @@ function openReplyComposer(predictionId: string, commentId: string) {
   fastCollapsingCommentCards.value = new Set()
   editingPredictionId.value = ''
   editingReplyId.value = ''
+  finishReplyComposerClose(predictionId, commentId)
   activeReplyTarget.value = { predictionId, commentId }
   nextTick(() => {
     focusReplyInput(commentId)
@@ -666,6 +699,7 @@ function openReplyComposer(predictionId: string, commentId: string) {
 
 function closeReplyComposer(commentId: string) {
   stopTyping('reply', commentId)
+  markReplyComposerClosing(commentId)
   activeReplyTarget.value = null
 }
 
@@ -980,6 +1014,7 @@ async function submitReply(commentId: string) {
   replyErrors[commentId] = ''
   replyDrafts[commentId] = ''
   stopTyping('reply', commentId)
+  markReplyComposerClosing(commentId)
   activeReplyTarget.value = null
   updateLocalReplyThread(commentId, (replies) => [...replies, optimisticReply])
 
@@ -1015,11 +1050,11 @@ async function submitPredictionEdit(prediction: Prediction) {
     editedAt,
     comments: item.comments.map((comment, index) => index === 0 ? { ...comment, text, editedAt } : comment),
   }))
+  editingPredictionId.value = ''
 
   try {
     const response = await updatePredictionText(prediction.id, { userId, comment: text })
     patchRoom(response.room)
-    editingPredictionId.value = ''
   } catch (error) {
     updateLocalPrediction(prediction.id, () => previousPrediction)
     editingPredictionId.value = prediction.id
@@ -1044,11 +1079,11 @@ async function submitReplyEdit(reply: Reply) {
   submittingEdits.value = nextSubmitting
   editErrors[reply.id] = ''
   updateLocalReply(reply.id, (item) => ({ ...item, text, editedAt }))
+  editingReplyId.value = ''
 
   try {
     const response = await updateReply(reply.id, { userId, text })
     patchRoom(response.room)
-    editingReplyId.value = ''
   } catch (error) {
     updateLocalReply(reply.id, () => previousReply)
     editingReplyId.value = reply.id
@@ -1888,7 +1923,11 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </section>
-    <section v-else-if="activeRoom" class="grid items-start gap-[18px] min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
+    <section
+      v-else-if="activeRoom"
+      class="grid items-start gap-[18px] min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]"
+      :class="roomSwitchDirection === 'forward' ? 'room-switch-forward' : 'room-switch-backward'"
+    >
       <div class="grid gap-[18px] max-md:gap-3">
         <button
           v-if="sortedPredictions.length"
@@ -1911,56 +1950,58 @@ onBeforeUnmount(() => {
             class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:p-4"
             :class="isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : ''"
           >
-            <div class="relative z-[1] my-7 grid gap-[18px] max-md:my-3 max-md:gap-3">
-              <h1 class="grid max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 text-center max-md:gap-2 md:gap-10">
-                <span class="grid min-w-0 justify-self-end justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
-                  <span
-                    v-if="hasSpriteFlag(activeRoom.home)"
-                    class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
-                    :class="flagClass(activeRoom.home)"
-                    :aria-label="`${activeRoom.home.name} flag`"
-                  ></span>
-                  <span
-                    v-else
-                    class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
-                    :aria-label="`${activeRoom.home.name} flag`"
-                  >{{ activeRoom.home.flag || activeRoom.home.code }}</span>
-                  <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[12ch] max-md:overflow-hidden max-md:text-ellipsis max-md:whitespace-nowrap max-md:text-xs" :title="activeRoom.home.name">{{ activeRoom.home.name }}</span>
-                </span>
-                <span class="versus self-center text-[clamp(20px,2.6vw,32px)] font-semibold leading-none text-[var(--accent)] max-md:text-[clamp(18px,5vw,24px)]">vs</span>
-                <span class="grid min-w-0 justify-self-start justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
-                  <span
-                    v-if="hasSpriteFlag(activeRoom.away)"
-                    class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
-                    :class="flagClass(activeRoom.away)"
-                    :aria-label="`${activeRoom.away.name} flag`"
-                  ></span>
-                  <span
-                    v-else
-                    class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
-                    :aria-label="`${activeRoom.away.name} flag`"
-                  >{{ activeRoom.away.flag || activeRoom.away.code }}</span>
-                  <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[12ch] max-md:overflow-hidden max-md:text-ellipsis max-md:whitespace-nowrap max-md:text-xs" :title="activeRoom.away.name">{{ activeRoom.away.name }}</span>
-                </span>
-              </h1>
+            <Transition name="room-surface" mode="out-in">
+              <div :key="`hero-${activeRoom.id}`" class="relative z-[1] my-7 grid gap-[18px] max-md:my-3 max-md:gap-3">
+                <h1 class="grid max-w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6 text-center max-md:gap-2 md:gap-10">
+                  <span class="grid min-w-0 justify-self-end justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
+                    <span
+                      v-if="hasSpriteFlag(activeRoom.home)"
+                      class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
+                      :class="flagClass(activeRoom.home)"
+                      :aria-label="`${activeRoom.home.name} flag`"
+                    ></span>
+                    <span
+                      v-else
+                      class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
+                      :aria-label="`${activeRoom.home.name} flag`"
+                    >{{ activeRoom.home.flag || activeRoom.home.code }}</span>
+                    <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[12ch] max-md:overflow-hidden max-md:text-ellipsis max-md:whitespace-nowrap max-md:text-xs" :title="activeRoom.home.name">{{ activeRoom.home.name }}</span>
+                  </span>
+                  <span class="versus self-center text-[clamp(20px,2.6vw,32px)] font-semibold leading-none text-[var(--accent)] max-md:text-[clamp(18px,5vw,24px)]">vs</span>
+                  <span class="grid min-w-0 justify-self-start justify-items-center gap-3 max-md:justify-self-center max-md:gap-2">
+                    <span
+                      v-if="hasSpriteFlag(activeRoom.away)"
+                      class="title-flag !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
+                      :class="flagClass(activeRoom.away)"
+                      :aria-label="`${activeRoom.away.name} flag`"
+                    ></span>
+                    <span
+                      v-else
+                      class="title-flag flag-fallback !block aspect-[4/3] !w-[clamp(208px,21.6vw,304px)] max-w-full overflow-hidden rounded-[6px] border-0 shadow-none max-md:!w-[clamp(74px,25vw,104px)]"
+                      :aria-label="`${activeRoom.away.name} flag`"
+                    >{{ activeRoom.away.flag || activeRoom.away.code }}</span>
+                    <span class="max-w-[20ch] text-center text-[clamp(14px,1.28vw,18px)] font-medium leading-[1.08] text-[var(--soft)] max-md:max-w-[12ch] max-md:overflow-hidden max-md:text-ellipsis max-md:whitespace-nowrap max-md:text-xs" :title="activeRoom.away.name">{{ activeRoom.away.name }}</span>
+                  </span>
+                </h1>
 
-              <div class="mt-0.5 grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 border-t border-[var(--line)] pt-4 max-md:pt-3" aria-label="Event stats">
-                <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
-                  <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ activeRoom.predictions.length }}</strong>
-                  <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Predictions</span>
-                </div>
-                <span class="h-1.5 w-1.5 self-center rounded-full bg-[color:color-mix(in_srgb,var(--muted)_38%,transparent)]" aria-hidden="true"></span>
-                <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
-                  <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalLikes }}</strong>
-                  <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Likes</span>
-                </div>
-                <span class="h-1.5 w-1.5 self-center rounded-full bg-[color:color-mix(in_srgb,var(--muted)_38%,transparent)]" aria-hidden="true"></span>
-                <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
-                  <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalComments }}</strong>
-                  <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Replies</span>
+                <div class="mt-0.5 grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 border-t border-[var(--line)] pt-4 max-md:pt-3" aria-label="Event stats">
+                  <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
+                    <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ activeRoom.predictions.length }}</strong>
+                    <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Predictions</span>
+                  </div>
+                  <span class="h-1.5 w-1.5 self-center rounded-full bg-[color:color-mix(in_srgb,var(--muted)_38%,transparent)]" aria-hidden="true"></span>
+                  <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
+                    <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalLikes }}</strong>
+                    <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Likes</span>
+                  </div>
+                  <span class="h-1.5 w-1.5 self-center rounded-full bg-[color:color-mix(in_srgb,var(--muted)_38%,transparent)]" aria-hidden="true"></span>
+                  <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
+                    <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalComments }}</strong>
+                    <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Replies</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Transition>
 
             <p
               class="mt-1 text-center text-[15px] leading-[1.45] font-medium text-[var(--muted)] max-md:hidden"
@@ -1978,23 +2019,27 @@ onBeforeUnmount(() => {
           ]"
           :aria-label="activeRoom.predictions.length ? `Top pick: ${activeRoom.home.code} ${activeRoom.mostBacked.home}, ${activeRoom.away.code} ${activeRoom.mostBacked.away}` : 'No top pick yet'"
         >
-          <span class="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-            <span class="text-[10px] font-black uppercase leading-none tracking-[0.08em]" :class="activeRoom.predictions.length ? 'text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))]' : 'text-[var(--muted)]'">Top pick</span>
-            <span class="text-[var(--muted)]">·</span>
-            <span v-if="activeRoom.predictions.length" class="truncate text-[12px] font-[650] leading-tight text-[var(--muted)]">{{ activeRoom.mostBacked.margin }}</span>
-            <span v-else class="truncate text-[12px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--muted)_72%,transparent)]">No top pick yet</span>
-          </span>
+          <Transition name="room-surface" mode="out-in">
+            <div :key="`mobile-top-pick-${activeRoom.id}`" class="flex w-full items-center justify-between gap-3">
+              <span class="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+                <span class="text-[10px] font-black uppercase leading-none tracking-[0.08em]" :class="activeRoom.predictions.length ? 'text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))]' : 'text-[var(--muted)]'">Top pick</span>
+                <span class="text-[var(--muted)]">·</span>
+                <span v-if="activeRoom.predictions.length" class="truncate text-[12px] font-[650] leading-tight text-[var(--muted)]">{{ activeRoom.mostBacked.margin }}</span>
+                <span v-else class="truncate text-[12px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--muted)_72%,transparent)]">No top pick yet</span>
+              </span>
 
-          <span v-if="activeRoom.predictions.length" class="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap [font-variant-numeric:tabular-nums]">
-            <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.home.code }}</span>
-            <span class="text-[19px] font-black leading-none text-[var(--text)]">{{ activeRoom.mostBacked.home }}</span>
-            <span class="text-[13px] font-black leading-none text-[var(--accent)]">-</span>
-            <span class="text-[19px] font-black leading-none text-[var(--text)]">{{ activeRoom.mostBacked.away }}</span>
-            <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.away.code }}</span>
-          </span>
-          <span v-else class="shrink-0 text-[10px] font-black uppercase tracking-[0.06em] text-[color:color-mix(in_srgb,var(--muted)_62%,transparent)]">
-            {{ activeRoomPredictionsClosed ? 'closed' : 'waiting' }}
-          </span>
+              <span v-if="activeRoom.predictions.length" class="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap [font-variant-numeric:tabular-nums]">
+                <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.home.code }}</span>
+                <span class="text-[19px] font-black leading-none text-[var(--text)]">{{ activeRoom.mostBacked.home }}</span>
+                <span class="text-[13px] font-black leading-none text-[var(--accent)]">-</span>
+                <span class="text-[19px] font-black leading-none text-[var(--text)]">{{ activeRoom.mostBacked.away }}</span>
+                <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.away.code }}</span>
+              </span>
+              <span v-else class="shrink-0 text-[10px] font-black uppercase tracking-[0.06em] text-[color:color-mix(in_srgb,var(--muted)_62%,transparent)]">
+                {{ activeRoomPredictionsClosed ? 'closed' : 'waiting' }}
+              </span>
+            </div>
+          </Transition>
         </section>
 
         <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 shadow-[var(--card-shadow)] md:hidden" aria-label="Mobile chat rooms">
@@ -2007,14 +2052,39 @@ onBeforeUnmount(() => {
               </svg>
               <h2 class="m-0 text-base font-[760] leading-tight text-[var(--text)]">Chat rooms</h2>
             </div>
-            <span class="text-[11px] font-bold text-[var(--muted)]">{{ rooms.length }} rooms</span>
+            <div v-if="roomPageCount > 1" class="inline-flex items-center gap-1 text-[var(--muted)]" aria-label="Room pages">
+              <button
+                class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
+                type="button"
+                aria-label="Previous rooms"
+                :disabled="roomPage === 0"
+                @click="previousRoomPage"
+              >
+                <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
+                  <path d="M160 48 80 128l80 80"></path>
+                </svg>
+              </button>
+              <span class="min-w-[30px] text-center text-[10px] font-black tabular-nums text-[var(--muted)]">{{ roomPageLabel }}</span>
+              <button
+                class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
+                type="button"
+                aria-label="Next rooms"
+                :disabled="roomPage >= roomPageCount - 1"
+                @click="nextRoomPage"
+              >
+                <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
+                  <path d="m96 48 80 80-80 80"></path>
+                </svg>
+              </button>
+            </div>
+            <span v-else class="text-[11px] font-bold text-[var(--muted)]">{{ rooms.length }} rooms</span>
           </div>
 
-          <div class="-mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-1" aria-label="Match rooms for the current cycle">
+          <div class="grid grid-cols-2 gap-2" aria-label="Match rooms for the current cycle">
             <button
-              v-for="room in orderedRooms"
+              v-for="room in visibleRooms"
               :key="room.id"
-              class="grid min-h-[66px] min-w-[218px] snap-start grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-2 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
+              class="grid min-h-[82px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-2 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
               :class="[
                 room.id === activeRoomId ? 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))]' : 'border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_46%,transparent)]',
                 effectiveRoomMatchStatus(room) === 'finished' ? 'opacity-80' : '',
@@ -2023,20 +2093,24 @@ onBeforeUnmount(() => {
               type="button"
               @click="setActiveRoom(room.id)"
             >
-              <span class="grid min-w-0 content-center gap-1.5 self-center">
-                <span class="grid min-w-0 grid-cols-[28px_3ch_auto_28px_3ch] items-center gap-1.5 text-[12px] font-[820] leading-none text-[var(--text)]">
-                  <span v-if="hasSpriteFlag(room.home)" :class="['mobile-room-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
-                  <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
-                  <span>{{ room.home.code }}</span>
-                  <span class="ref-versus justify-self-center">v</span>
-                  <span v-if="hasSpriteFlag(room.away)" :class="['mobile-room-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
-                  <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
-                  <span>{{ room.away.code }}</span>
+              <span class="grid min-w-0 content-center gap-1 self-center">
+                <span class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1.5">
+                  <span class="grid min-w-0 justify-items-center gap-1">
+                    <span v-if="hasSpriteFlag(room.home)" :class="['mobile-room-flag', flagClass(room.home)]" :aria-label="`${room.home.name} flag`"></span>
+                    <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.home.name} flag`">{{ room.home.flag || room.home.code }}</span>
+                    <span class="text-[10px] font-black uppercase leading-none text-[var(--text)]">{{ room.home.code }}</span>
+                  </span>
+                  <span class="ref-versus mt-1.5 justify-self-center text-[12px] leading-none">v</span>
+                  <span class="grid min-w-0 justify-items-center gap-1">
+                    <span v-if="hasSpriteFlag(room.away)" :class="['mobile-room-flag', flagClass(room.away)]" :aria-label="`${room.away.name} flag`"></span>
+                    <span v-else class="mobile-room-flag flag-fallback flag-fallback-inline" :aria-label="`${room.away.name} flag`">{{ room.away.flag || room.away.code }}</span>
+                    <span class="text-[10px] font-black uppercase leading-none text-[var(--text)]">{{ room.away.code }}</span>
+                  </span>
                 </span>
               </span>
 
               <span
-                class="grid min-w-[48px] content-center justify-items-center gap-1 justify-self-end self-center rounded-md border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_62%,transparent)] px-1.5 py-1 text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))]"
+                class="grid min-w-[36px] content-center justify-items-center gap-1 justify-self-end self-center px-0.5 text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))]"
                 :aria-label="roomStatusLabel(room)"
               >
                 <span v-if="showsLiveRoomIcon(room)" class="grid justify-items-center gap-1">
@@ -2154,39 +2228,38 @@ onBeforeUnmount(() => {
                 <div v-if="leadComment(item)" class="grid gap-1">
                   <form
                     v-if="editingPredictionId === item.id"
-                    class="grid gap-2"
+                    class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto]"
                     @submit.prevent="submitPredictionEdit(item)"
                   >
-                    <textarea
+                    <input
                       :data-edit-key="item.id"
                       v-model="editDrafts[item.id]"
-                      class="min-h-16 w-full resize-none rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 py-2 text-sm text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ease)] focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)] disabled:cursor-wait disabled:opacity-70"
+                      class="min-h-9 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ease)] focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)] disabled:cursor-wait disabled:opacity-70"
                       maxlength="280"
                       aria-label="Edit prediction text"
                       :disabled="isEditSubmitting(item.id)"
-                    ></textarea>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <button
-                        class="inline-flex min-h-8 items-center justify-center rounded-md bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
-                        type="submit"
-                        :disabled="!canSubmitEdit(item.id, MIN_PREDICTION_COMMENT_LENGTH)"
-                      >
-                        {{ isEditSubmitting(item.id) ? 'Editing' : 'Edit' }}
-                      </button>
-                      <button
-                        class="inline-flex min-h-8 items-center justify-center rounded-md px-2.5 text-xs font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px"
-                        type="button"
-                        :disabled="isEditSubmitting(item.id)"
-                        @click="cancelEdit(item.id)"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    <p v-if="editErrors[item.id]" class="m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[item.id] }}</p>
+                    />
+                    <button
+                      class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
+                      type="submit"
+                      :disabled="!canSubmitEdit(item.id, MIN_PREDICTION_COMMENT_LENGTH)"
+                    >
+                      {{ isEditSubmitting(item.id) ? 'saving' : 'Edit' }}
+                    </button>
+                    <button
+                      class="inline-flex min-h-9 items-center justify-center rounded-lg px-2.5 text-xs font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
+                      type="button"
+                      :disabled="isEditSubmitting(item.id)"
+                      @click="cancelEdit(item.id)"
+                    >
+                      Cancel
+                    </button>
+                    <p v-if="editErrors[item.id]" class="col-span-full m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[item.id] }}</p>
                   </form>
                   <div v-else class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                     <p data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-[15px]">
                       {{ leadComment(item)?.text }}
+                      <span v-if="isEditSubmitting(item.id)" class="ml-1 text-[10px] font-black uppercase text-[var(--accent)]">saving</span>
                       <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
                     </p>
                     <button
@@ -2231,7 +2304,7 @@ onBeforeUnmount(() => {
                           type="submit"
                           :disabled="!canSubmitEdit(reply.id)"
                         >
-                          {{ isEditSubmitting(reply.id) ? 'Editing' : 'Edit' }}
+                          {{ isEditSubmitting(reply.id) ? 'saving' : 'Edit' }}
                         </button>
                         <button
                           class="inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
@@ -2246,6 +2319,7 @@ onBeforeUnmount(() => {
                       <span v-else>
                         <strong>{{ reply.name }}:</strong> {{ reply.text }}
                         <span v-if="isOptimisticReply(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">sending</span>
+                        <span v-if="isEditSubmitting(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">saving</span>
                         <span v-if="reply.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
                         <button
                           v-if="canEditReply(reply)"
@@ -2276,7 +2350,11 @@ onBeforeUnmount(() => {
                   </p>
                 </div>
 
-                <Transition name="reply-composer" @after-enter="focusReplyComposer">
+                <Transition
+                  name="reply-composer"
+                  @after-enter="focusReplyComposer"
+                  @after-leave="leadComment(item) && finishReplyComposerClose(item.id, leadComment(item)!.id)"
+                >
                   <form
                     v-if="leadComment(item) && isReplying(item.id, leadComment(item)!.id)"
                     data-reply-composer
@@ -2310,7 +2388,7 @@ onBeforeUnmount(() => {
                       type="submit"
                       :disabled="!canSubmitReply(leadComment(item)!.id)"
                     >
-                      <span>{{ isReplySubmitting(leadComment(item)!.id) ? 'Sending' : 'Reply' }}</span>
+                      <span>{{ isReplySubmitting(leadComment(item)!.id) ? 'sending' : 'Reply' }}</span>
                     </button>
                     <p
                       v-if="replyErrors[leadComment(item)!.id]"
