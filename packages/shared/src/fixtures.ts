@@ -46,6 +46,12 @@ export type MatchCycleWindow = {
 
 export const DEFAULT_MATCH_CYCLE_START_HOUR_UTC = 4
 export const MATCH_LIVE_DURATION_MS = 2 * 60 * 60 * 1000
+const FLAG_ICON_SUBDIVISION_CODES = new Map<string, string>([
+  ['England', 'gb-eng'],
+  ['Northern Ireland', 'gb-nir'],
+  ['Scotland', 'gb-sct'],
+  ['Wales', 'gb-wls'],
+])
 
 function slugify(value: string): string {
   return value
@@ -100,7 +106,7 @@ function buildKnownTeams(): Map<string, Team> {
   return new Map(
     (teamJson as RawTeam[]).map((raw) => {
       const flag = decodeFlagUnicode(raw.flag_unicode)
-      const iso2 = emojiFlagToIso2(flag)
+      const iso2 = FLAG_ICON_SUBDIVISION_CODES.get(raw.name) ?? emojiFlagToIso2(flag)
       return [
         raw.name,
         {

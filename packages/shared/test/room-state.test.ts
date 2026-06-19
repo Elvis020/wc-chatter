@@ -3,6 +3,7 @@ import {
   compareRoomsForSwitcher,
   effectiveRoomMatchStatus,
   isRoomLocked,
+  loadFixtures,
   matchStatusFromKickoff,
   roomKickoffTime,
   type Room,
@@ -69,5 +70,12 @@ describe('room state', () => {
 
   test('formats kickoff time consistently', () => {
     expect(roomKickoffTime(baseRoom)).toBe('16:00')
+  })
+
+  test('maps UK subdivision teams to flag-icons sprite codes', () => {
+    const scotlandMatch = loadFixtures().find((match) => match.home.code === 'SCO' || match.away.code === 'SCO')
+    const scotland = scotlandMatch?.home.code === 'SCO' ? scotlandMatch.home : scotlandMatch?.away
+
+    expect(scotland?.iso2).toBe('gb-sct')
   })
 })
