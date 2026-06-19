@@ -50,8 +50,8 @@ const comment = defineModel<string>('comment', { required: true })
 
           <div class="mt-2.5 grid gap-2">
             <div class="grid gap-1.5">
-              <label class="text-xs font-bold text-[var(--muted)]" for="take">Comment</label>
-              <textarea id="take" v-model="comment" class="max-h-20 min-h-16 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 max-md:min-h-14" rows="2" minlength="4" placeholder="Add a little confidence..." :disabled="submitting || closed"></textarea>
+              <label class="text-xs font-bold text-[var(--muted)]" for="take">Comment <span class="font-semibold text-[var(--muted)] opacity-70">(optional)</span></label>
+              <textarea id="take" v-model="comment" class="max-h-20 min-h-16 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 max-md:min-h-14" rows="2" maxlength="280" placeholder="Add a little confidence..." :disabled="submitting || closed"></textarea>
             </div>
             <button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,transform,opacity] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:active:translate-y-0 md:min-h-11" type="submit" :disabled="submitting || !canSubmit">
               <svg v-if="submitting" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">

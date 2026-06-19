@@ -76,4 +76,38 @@ describe('supabase store hydration', () => {
       },
     ])
   })
+
+  test('hydrates predictions without comments as empty threads', () => {
+    const byRoom = mapPredictions(
+      [
+        {
+          id: 'prediction-blank',
+          room_id: 'room-1',
+          author_id: 'user-1',
+          author_name: 'Elvi',
+          home_score: 1,
+          away_score: 0,
+          take: null,
+          created_at: '2026-06-19T10:00:00.000Z',
+          edited_at: null,
+        },
+      ],
+      [],
+      [],
+      [],
+    )
+
+    expect(byRoom.get('room-1')).toEqual([
+      {
+        id: 'prediction-blank',
+        authorId: 'user-1',
+        name: 'Elvi',
+        homeScore: 1,
+        awayScore: 0,
+        likes: 0,
+        createdAt: '2026-06-19T10:00:00.000Z',
+        comments: [],
+      },
+    ])
+  })
 })

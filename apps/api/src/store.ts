@@ -71,6 +71,7 @@ export function createStore() {
       if (!room) return null
       assertRoomWritable(room)
 
+      const comment = payload.comment?.trim()
       const prediction: Prediction = {
         id: `prediction-${roomId}-${Date.now()}`,
         authorId: payload.authorId,
@@ -79,14 +80,16 @@ export function createStore() {
         awayScore: payload.awayScore,
         likes: 0,
         createdAt: new Date().toISOString(),
-        comments: [
-          {
-            id: `comment-${roomId}-${Date.now()}`,
-            authorId: payload.authorId,
-            text: payload.comment?.trim() || 'Fresh from the confidence department.',
-            replies: [],
-          },
-        ],
+        comments: comment
+          ? [
+              {
+                id: `comment-${roomId}-${Date.now()}`,
+                authorId: payload.authorId,
+                text: comment,
+                replies: [],
+              },
+            ]
+          : [],
       }
 
       room.predictions.unshift(prediction)

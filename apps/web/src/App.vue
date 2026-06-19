@@ -166,7 +166,7 @@ const totalComments = computed(
 const canSaveUsername = computed(() => !username.value && usernameDraft.value.trim().length > 0)
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
 const activeRoomPredictionsClosed = computed(() => !!activeRoom.value && isRoomLockedByState(activeRoom.value, { fixtureKickoffs }))
-const canSubmitPrediction = computed(() => !activeRoomPredictionsClosed.value && predictionForm.comment.trim().length >= MIN_PREDICTION_COMMENT_LENGTH)
+const canSubmitPrediction = computed(() => !activeRoomPredictionsClosed.value)
 const userPrediction = computed(() => activeRoom.value?.predictions.find((prediction) => prediction.authorId === userId) ?? null)
 const hasUserPredicted = computed(() => !!userPrediction.value)
 const scoreCtaLabel = computed(() => {
@@ -613,7 +613,7 @@ async function submitPrediction() {
     name: username.value,
     homeScore: predictionForm.homeScore,
     awayScore: predictionForm.awayScore,
-    comment: submittedComment,
+    comment: submittedComment || undefined,
   }
   const optimisticPrediction: Prediction = {
     id: `optimistic-prediction-${roomId}-${Date.now()}`,
@@ -623,14 +623,16 @@ async function submitPrediction() {
     awayScore: predictionForm.awayScore,
     likes: 0,
     createdAt: new Date().toISOString(),
-    comments: [
-      {
-        id: `optimistic-comment-${roomId}-${Date.now()}`,
-        authorId: userId,
-        text: submittedComment || 'Fresh from the confidence department.',
-        replies: [],
-      },
-    ],
+    comments: submittedComment
+      ? [
+          {
+            id: `optimistic-comment-${roomId}-${Date.now()}`,
+            authorId: userId,
+            text: submittedComment,
+            replies: [],
+          },
+        ]
+      : [],
   }
 
   submittingPrediction.value = true
@@ -2419,8 +2421,9 @@ onBeforeUnmount(() => {
                   class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] active:translate-y-px max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
                   :class="leadComment(item) && isReplying(item.id, leadComment(item)!.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
                   type="button"
+                  :disabled="!leadComment(item)"
                   :aria-expanded="leadComment(item) ? String(isReplying(item.id, leadComment(item)!.id)) : 'false'"
-                  :aria-label="`Reply to ${item.name}. ${predictionCommentTotal(item)} comments and replies`"
+                  :aria-label="leadComment(item) ? `Reply to ${item.name}. ${predictionCommentTotal(item)} comments and replies` : `${item.name} did not add a comment`"
                   @click="leadComment(item) && toggleReply(item.id, leadComment(item)!.id)"
                 >
                   <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">

@@ -599,7 +599,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       if (!room) return null
       assertRoomWritable(room)
 
-      const take = payload.comment?.trim() || 'Fresh from the confidence department.'
+      const take = payload.comment?.trim() || null
       const { data: prediction, error } = await supabase
         .from('predictions')
         .insert({
@@ -618,14 +618,16 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       }
       if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction.', 500)
 
-      const { error: commentError } = await supabase.from('comments').insert({
-        prediction_id: prediction.id,
-        author_id: payload.authorId,
-        author_name: payload.name,
-        text: take,
-      })
+      if (take) {
+        const { error: commentError } = await supabase.from('comments').insert({
+          prediction_id: prediction.id,
+          author_id: payload.authorId,
+          author_name: payload.name,
+          text: take,
+        })
 
-      if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
+        if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
+      }
       return hydrateRoom(room.id)
     },
     async setPredictionLike(predictionId: string, userId: string, liked: boolean) {
