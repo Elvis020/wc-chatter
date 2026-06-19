@@ -1,5 +1,4 @@
 import {
-  CONTENT_EDIT_WINDOW_MS,
   mockThemes,
   type ApiEvent,
   type CreatePredictionInput,
@@ -36,12 +35,6 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
 function assertRoomWritable(room: Room) {
   if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
     throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
-  }
-}
-
-function assertEditable(createdAt: string) {
-  if (Date.now() - Date.parse(createdAt) > CONTENT_EDIT_WINDOW_MS) {
-    throw new ApiError('FORBIDDEN', 'The edit window has closed.', 403)
   }
 }
 
@@ -134,8 +127,6 @@ export function createStore() {
       if (prediction.authorId !== payload.userId) {
         throw new ApiError('FORBIDDEN', 'You can only edit your own prediction.', 403)
       }
-      assertEditable(prediction.createdAt)
-
       const editedAt = new Date().toISOString()
       prediction.editedAt = editedAt
       const [leadComment] = prediction.comments
@@ -186,7 +177,6 @@ export function createStore() {
           if (reply.authorId !== payload.userId) {
             throw new ApiError('FORBIDDEN', 'You can only edit your own reply.', 403)
           }
-          assertEditable(reply.createdAt)
           reply.text = payload.text.trim()
           reply.editedAt = new Date().toISOString()
           return cloneRoom(room)

@@ -1,6 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
-  CONTENT_EDIT_WINDOW_MS,
   loadFixtures,
   matchStatusFromKickoff,
   matchKickoffUtc,
@@ -557,12 +556,6 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     }
   }
 
-  function assertEditable(createdAt: string) {
-    if (Date.now() - Date.parse(createdAt) > CONTENT_EDIT_WINDOW_MS) {
-      throw new ApiError('FORBIDDEN', 'The edit window has closed.', 403)
-    }
-  }
-
   async function getPredictionOwner(predictionId: string) {
     const { data, error } = await supabase
       .from('predictions')
@@ -664,8 +657,6 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       if (prediction.author_id !== payload.userId) {
         throw new ApiError('FORBIDDEN', 'You can only edit your own prediction.', 403)
       }
-      assertEditable(prediction.created_at)
-
       const room = await getRoomRow(prediction.room_id)
       if (!room) return null
       assertRoomWritable(room)
@@ -743,8 +734,6 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       if (replyRow.author_id !== payload.userId) {
         throw new ApiError('FORBIDDEN', 'You can only edit your own reply.', 403)
       }
-      assertEditable(replyRow.created_at)
-
       const { data: comment, error: commentError } = await supabase
         .from('comments')
         .select('prediction_id')

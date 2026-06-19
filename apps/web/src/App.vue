@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { CONTENT_EDIT_WINDOW_MS, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
+import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId } from '@wc-chatter/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
@@ -134,10 +134,15 @@ const totalComments = computed(
 )
 const canSaveUsername = computed(() => !username.value && usernameDraft.value.trim().length > 0)
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
-const canSubmitPrediction = computed(() => predictionForm.comment.trim().length >= MIN_PREDICTION_COMMENT_LENGTH)
+const activeRoomPredictionsClosed = computed(() => !!activeRoom.value && isRoomLockedByState(activeRoom.value, { fixtureKickoffs }))
+const canSubmitPrediction = computed(() => !activeRoomPredictionsClosed.value && predictionForm.comment.trim().length >= MIN_PREDICTION_COMMENT_LENGTH)
 const userPrediction = computed(() => activeRoom.value?.predictions.find((prediction) => prediction.authorId === userId) ?? null)
 const hasUserPredicted = computed(() => !!userPrediction.value)
-const scoreCtaLabel = computed(() => (hasUserPredicted.value ? 'Pick locked' : 'Drop your score'))
+const scoreCtaLabel = computed(() => {
+  if (activeRoomPredictionsClosed.value) return 'Predictions closed'
+  return hasUserPredicted.value ? 'Already predicted' : 'Drop your score'
+})
+const scoreCtaDisabled = computed(() => hasUserPredicted.value || activeRoomPredictionsClosed.value)
 const isNotFound = computed(() => routePath.value !== '/')
 const orderedRooms = computed(() =>
   [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { fixtureKickoffs })),
@@ -246,7 +251,7 @@ function requireUsername(message = 'Set your username first.', action?: PendingI
 }
 
 function openPredictionModal() {
-  if (hasUserPredicted.value) return
+  if (scoreCtaDisabled.value) return
   if (!requireUsername('Set your username before posting.', { type: 'prediction' })) return
   predictionModalOpen.value = true
 }
@@ -428,17 +433,12 @@ function roomAllowsTextEditing() {
   return !!activeRoom.value && effectiveRoomMatchStatus(activeRoom.value) !== 'finished' && activeRoom.value.roomStatus === 'open'
 }
 
-function isInsideEditWindow(createdAt: string) {
-  const createdMs = Date.parse(createdAt)
-  return Number.isFinite(createdMs) && Date.now() - createdMs <= CONTENT_EDIT_WINDOW_MS
-}
-
 function canEditPrediction(prediction: Prediction) {
-  return prediction.authorId === userId && roomAllowsTextEditing() && isInsideEditWindow(prediction.createdAt) && !prediction.id.startsWith('optimistic-')
+  return prediction.authorId === userId && roomAllowsTextEditing() && !prediction.id.startsWith('optimistic-')
 }
 
 function canEditReply(reply: Reply) {
-  return reply.authorId === userId && roomAllowsTextEditing() && isInsideEditWindow(reply.createdAt) && !reply.id.startsWith('optimistic-')
+  return reply.authorId === userId && roomAllowsTextEditing() && !reply.id.startsWith('optimistic-')
 }
 
 function canSubmitEdit(contentId: string, minLength = 1) {
@@ -476,6 +476,10 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
 async function submitPrediction() {
   if (submittingPrediction.value) return
   if (!activeRoom.value || !requireUsername('Set your username before posting.')) return
+  if (activeRoomPredictionsClosed.value) {
+    closePredictionModal()
+    return
+  }
   if (!canSubmitPrediction.value) return
 
   const roomId = activeRoom.value.id
@@ -751,7 +755,7 @@ async function submitReply(commentId: string) {
 
 async function submitPredictionEdit(prediction: Prediction) {
   const text = (editDrafts[prediction.id] || '').trim()
-  if (!text || text.length < MIN_PREDICTION_COMMENT_LENGTH || isEditSubmitting(prediction.id)) return
+  if (!text || text.length < MIN_PREDICTION_COMMENT_LENGTH || isEditSubmitting(prediction.id) || !canEditPrediction(prediction)) return
 
   const previousPrediction = structuredClone(prediction)
   const editedAt = new Date().toISOString()
@@ -784,7 +788,7 @@ async function submitPredictionEdit(prediction: Prediction) {
 
 async function submitReplyEdit(reply: Reply) {
   const text = (editDrafts[reply.id] || '').trim()
-  if (!text || isEditSubmitting(reply.id)) return
+  if (!text || isEditSubmitting(reply.id) || !canEditReply(reply)) return
 
   const previousReply = structuredClone(reply)
   const editedAt = new Date().toISOString()
@@ -1536,14 +1540,14 @@ onBeforeUnmount(() => {
         <button
           v-if="sortedPredictions.length"
           class="hidden items-center justify-center gap-2 transition-[background-color,border-color,color,transform] duration-150 ease-[var(--ease)] active:translate-y-px disabled:cursor-default disabled:active:translate-y-0 max-md:inline-flex"
-          :class="hasUserPredicted
+          :class="scoreCtaDisabled
             ? 'mx-auto min-h-9 w-fit rounded-full border border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_82%,var(--accent)_8%)] px-3.5 text-[11px] font-black uppercase text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))] shadow-none'
             : 'min-h-12 w-full rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)] shadow-[0_12px_26px_color-mix(in_srgb,var(--accent)_18%,transparent)]'"
           type="button"
-          :disabled="hasUserPredicted"
+          :disabled="scoreCtaDisabled"
           @click="openPredictionModal"
         >
-          <svg v-if="hasUserPredicted" class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="24">
+          <svg v-if="scoreCtaDisabled" class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="24">
             <path d="m40 132 58 58L216 72"></path>
           </svg>
           <span>{{ scoreCtaLabel }}</span>
@@ -1630,7 +1634,7 @@ onBeforeUnmount(() => {
             <span class="text-[12px] font-black uppercase leading-none text-[color:color-mix(in_srgb,var(--text)_80%,var(--muted))]">{{ activeRoom.away.code }}</span>
           </span>
           <span v-else class="shrink-0 text-[10px] font-black uppercase tracking-[0.06em] text-[color:color-mix(in_srgb,var(--muted)_62%,transparent)]">
-            waiting
+            {{ activeRoomPredictionsClosed ? 'closed' : 'waiting' }}
           </span>
         </section>
 
@@ -1750,7 +1754,7 @@ onBeforeUnmount(() => {
             <button
               class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0"
               type="button"
-              :disabled="hasUserPredicted"
+              :disabled="scoreCtaDisabled"
               @click="openPredictionModal"
             >
               {{ scoreCtaLabel }}
@@ -1801,7 +1805,7 @@ onBeforeUnmount(() => {
                         type="submit"
                         :disabled="!canSubmitEdit(item.id, MIN_PREDICTION_COMMENT_LENGTH)"
                       >
-                        {{ isEditSubmitting(item.id) ? 'Saving' : 'Save' }}
+                        {{ isEditSubmitting(item.id) ? 'Editing' : 'Edit' }}
                       </button>
                       <button
                         class="inline-flex min-h-8 items-center justify-center rounded-md px-2.5 text-xs font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px"
@@ -1814,18 +1818,20 @@ onBeforeUnmount(() => {
                     </div>
                     <p v-if="editErrors[item.id]" class="m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[item.id] }}</p>
                   </form>
-                  <p v-else data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-base">
-                    {{ leadComment(item)?.text }}
-                    <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
-                  </p>
-                  <button
-                    v-if="editingPredictionId !== item.id && canEditPrediction(item)"
-                    class="inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
-                    type="button"
-                    @click="startEditingPrediction(item)"
-                  >
-                    Edit
-                  </button>
+                  <div v-else class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                    <p data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-base">
+                      {{ leadComment(item)?.text }}
+                      <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
+                    </p>
+                    <button
+                      v-if="canEditPrediction(item)"
+                      class="inline-flex min-h-7 shrink-0 items-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
+                      type="button"
+                      @click="startEditingPrediction(item)"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
 
                 <div v-if="leadComment(item)?.replies.length" data-reply-thread class="grid gap-2 pt-1 pl-3">
@@ -1859,7 +1865,7 @@ onBeforeUnmount(() => {
                           type="submit"
                           :disabled="!canSubmitEdit(reply.id)"
                         >
-                          {{ isEditSubmitting(reply.id) ? 'Saving' : 'Save' }}
+                          {{ isEditSubmitting(reply.id) ? 'Editing' : 'Edit' }}
                         </button>
                         <button
                           class="inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
@@ -2007,7 +2013,7 @@ onBeforeUnmount(() => {
               <span class="min-w-0 overflow-hidden text-right text-ellipsis whitespace-nowrap text-xs font-extrabold uppercase text-[var(--muted)]">{{ activeRoom.away.name }}</span>
             </div>
 
-            <button class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0" type="button" :disabled="hasUserPredicted" @click="openPredictionModal">{{ scoreCtaLabel }}</button>
+            <button class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0" type="button" :disabled="scoreCtaDisabled" @click="openPredictionModal">{{ scoreCtaLabel }}</button>
           </div>
         </section>
 
@@ -2177,6 +2183,7 @@ onBeforeUnmount(() => {
       :room="activeRoom"
       :submitting="submittingPrediction"
       :can-submit="canSubmitPrediction"
+      :closed="activeRoomPredictionsClosed"
       @close="closePredictionModal"
       @submit="submitPrediction"
     />

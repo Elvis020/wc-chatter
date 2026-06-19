@@ -6,6 +6,7 @@ defineProps<{
   room: Room | null
   submitting: boolean
   canSubmit: boolean
+  closed: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,28 +34,31 @@ const comment = defineModel<string>('comment', { required: true })
         </div>
 
         <form class="sheet-stagger" style="--sheet-index: 1" :aria-busy="submitting" @submit.prevent="emit('submit')">
+          <p v-if="closed" class="mb-3 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-3 py-2 text-sm font-bold leading-snug text-[color:color-mix(in_srgb,var(--accent)_74%,var(--text))]">
+            Predictions are closed for this room.
+          </p>
           <div class="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="home-score">{{ room.home.name }}</label>
-              <input id="home-score" v-model.number="homeScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submitting" required />
+              <input id="home-score" v-model.number="homeScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submitting || closed" required />
             </div>
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="away-score">{{ room.away.name }}</label>
-              <input id="away-score" v-model.number="awayScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submitting" required />
+              <input id="away-score" v-model.number="awayScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submitting || closed" required />
             </div>
           </div>
 
           <div class="mt-2.5 grid gap-2">
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="take">Comment</label>
-              <textarea id="take" v-model="comment" class="max-h-20 min-h-16 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 max-md:min-h-14" rows="2" minlength="4" placeholder="Add a little confidence..." :disabled="submitting"></textarea>
+              <textarea id="take" v-model="comment" class="max-h-20 min-h-16 w-full resize-none overflow-y-auto rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 py-2.5 text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 max-md:min-h-14" rows="2" minlength="4" placeholder="Add a little confidence..." :disabled="submitting || closed"></textarea>
             </div>
             <button class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,transform,opacity] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:active:translate-y-0 md:min-h-11" type="submit" :disabled="submitting || !canSubmit">
               <svg v-if="submitting" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true" fill="none">
                 <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"></circle>
                 <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path>
               </svg>
-              <span>{{ submitting ? 'Posting...' : 'Post prediction' }}</span>
+              <span>{{ closed ? 'Predictions closed' : submitting ? 'Posting...' : 'Post prediction' }}</span>
             </button>
           </div>
         </form>

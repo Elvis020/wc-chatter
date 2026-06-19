@@ -115,8 +115,6 @@ export type ApiEvent =
   | { type: 'bootstrap'; room: Room }
   | { type: 'room.updated'; room: Room }
 
-export const CONTENT_EDIT_WINDOW_MS = 5 * 60 * 1000
-
 export const mockThemes: ThemeOption[] = [
   { id: 'paper', label: 'Paper Notes' },
   { id: 'desk', label: 'Sky Desk' },
