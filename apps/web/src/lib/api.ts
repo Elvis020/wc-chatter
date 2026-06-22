@@ -1,7 +1,36 @@
-import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@turntabl-score-room/shared'
+import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdateReplyInput } from '@turntabl-score-room/shared'
 
-const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8787'
-const wsBaseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8787/ws'
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, '')
+}
+
+export function resolveApiBaseUrl(explicitApiUrl?: string) {
+  if (explicitApiUrl) {
+    return trimTrailingSlash(explicitApiUrl)
+  }
+
+  if (typeof window !== 'undefined') {
+    return trimTrailingSlash(window.location.origin)
+  }
+
+  return 'http://localhost:8787'
+}
+
+export function resolveWsBaseUrl(explicitWsUrl?: string, apiUrl = resolveApiBaseUrl(import.meta.env.VITE_API_URL)) {
+  if (explicitWsUrl) {
+    return trimTrailingSlash(explicitWsUrl)
+  }
+
+  const wsUrl = new URL(apiUrl)
+  wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+  wsUrl.pathname = `${wsUrl.pathname.replace(/\/+$/, '')}/ws`
+  wsUrl.search = ''
+  wsUrl.hash = ''
+  return trimTrailingSlash(wsUrl.toString())
+}
+
+const apiBaseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_URL)
+const wsBaseUrl = resolveWsBaseUrl(import.meta.env.VITE_WS_URL, apiBaseUrl)
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -28,6 +57,10 @@ export async function fetchPrizeDeskEntries() {
   return parseResponse<{ entries: PrizeDeskEntry[] }>(await fetch(`${apiBaseUrl}/api/admin/prize-claims`))
 }
 
+export async function fetchRoom(roomId: string) {
+  return parseResponse<{ room: Room }>(await fetch(`${apiBaseUrl}/api/rooms/${roomId}`))
+}
+
 export async function createPrediction(roomId: string, payload: CreatePredictionInput) {
   return parseResponse<{ room: Room }>(
     await fetch(`${apiBaseUrl}/api/rooms/${roomId}/predictions`, {
@@ -41,16 +74,6 @@ export async function createPrediction(roomId: string, payload: CreatePrediction
 export async function togglePredictionLike(predictionId: string, payload: ToggleLikeInput) {
   return parseResponse<{ room: Room }>(
     await fetch(`${apiBaseUrl}/api/predictions/${predictionId}/likes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
-  )
-}
-
-export async function updatePredictionText(predictionId: string, payload: UpdatePredictionInput) {
-  return parseResponse<{ room: Room }>(
-    await fetch(`${apiBaseUrl}/api/predictions/${predictionId}/edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

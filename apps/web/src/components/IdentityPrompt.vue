@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps<{
   open: boolean
   canSave: boolean
   error: string
   message: string
+  hasSavedUsername: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,10 +22,80 @@ const input = ref<HTMLInputElement | null>(null)
 const prizeQuestionInput = ref<HTMLInputElement | null>(null)
 const mobileStep = ref<1 | 2>(1)
 const isMobile = ref(false)
+const touched = reactive({
+  username: false,
+  question: false,
+  answer: false,
+})
 
-const usernameReady = computed(() =>
-  USERNAME_PATTERN.test(usernameDraft.value.normalize('NFKC').replace(/\s+/g, ' ').trim()),
-)
+function normalize(value: string) {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim()
+}
+
+function validateUsername(value: string) {
+  const normalized = normalize(value)
+  if (normalized.length < 2) {
+    return { valid: false, message: "Use 2-24 chars: letters, numbers, spaces, . ' -" }
+  }
+  if (normalized.length > 24 || !USERNAME_PATTERN.test(normalized)) {
+    return { valid: false, message: "Use 2-24 chars: letters, numbers, spaces, . ' -" }
+  }
+  return { valid: true, message: 'Looks good. 2-24 supported characters.' }
+}
+
+function validatePrizeQuestion(value: string) {
+  const normalized = normalize(value)
+  if (normalized.length < 4) {
+    return { valid: false, message: 'Admin will ask this if your prediction wins.' }
+  }
+  if (normalized.length > 280) {
+    return { valid: false, message: 'Keep it under 280 characters.' }
+  }
+  return { valid: true, message: 'Good. Admin can ask this at pickup.' }
+}
+
+function validatePrizeAnswer(value: string) {
+  const normalized = normalize(value)
+  if (normalized.length < 2) {
+    return { valid: false, message: 'Your private reply for claiming a prize.' }
+  }
+  if (normalized.length > 280) {
+    return { valid: false, message: 'Keep it under 280 characters.' }
+  }
+  return { valid: true, message: 'Good. Keep this answer private.' }
+}
+
+const usernameValidation = computed(() => validateUsername(usernameDraft.value))
+const prizeQuestionValidation = computed(() => validatePrizeQuestion(prizeQuestionDraft.value))
+const prizeAnswerValidation = computed(() => validatePrizeAnswer(prizeAnswerDraft.value))
+const usernameReady = computed(() => usernameValidation.value.valid)
+
+function fieldHintClass(valid: boolean, wasTouched: boolean) {
+  if (!wasTouched) return 'text-[var(--muted)]'
+  return valid ? 'text-[var(--accent)]' : 'text-[var(--danger)]'
+}
+
+function fieldInputClass(valid: boolean, wasTouched: boolean) {
+  if (!wasTouched) {
+    return 'border-[var(--control-border)] bg-[var(--control-bg)] text-[var(--text)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]'
+  }
+
+  if (valid) {
+    return 'border-[color:color-mix(in_srgb,var(--accent)_62%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--control-bg))] text-[var(--accent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_16%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_72%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_14%,transparent)]'
+  }
+
+  return 'border-[color:color-mix(in_srgb,var(--danger)_60%,var(--line))] bg-[color:color-mix(in_srgb,var(--danger)_5%,var(--control-bg))] text-[var(--danger)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_12%,transparent)] focus:border-[color:color-mix(in_srgb,var(--danger)_72%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_12%,transparent)]'
+}
+
+function markTouched(field: keyof typeof touched) {
+  touched[field] = true
+}
+
+function resetTouched() {
+  touched.username = false
+  touched.question = false
+  touched.answer = false
+}
 
 function syncViewport() {
   isMobile.value = window.matchMedia('(max-width: 767px)').matches
@@ -44,6 +115,7 @@ function focusCurrentStep() {
 }
 
 function nextStep() {
+  touched.username = true
   if (!usernameReady.value) return
   mobileStep.value = 2
 }
@@ -55,11 +127,17 @@ function previousStep() {
 watch(() => props.open, (value) => {
   if (!value) {
     mobileStep.value = 1
+    resetTouched()
     return
   }
 
   if (!isMobile.value) return
-  mobileStep.value = usernameReady.value ? 2 : 1
+  mobileStep.value = props.hasSavedUsername ? 2 : 1
+})
+
+watch(() => props.hasSavedUsername, (hasSavedUsername) => {
+  if (!props.open || !isMobile.value || hasSavedUsername) return
+  mobileStep.value = 1
 })
 
 watch(mobileStep, () => {
@@ -97,14 +175,46 @@ defineExpose({ focus })
         </div>
 
         <form class="sheet-stagger mt-2 grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--card-soft)] p-3" style="--sheet-index: 1" @submit.prevent="emit('save')">
-          <p class="m-0 rounded-md border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_34%,transparent)] px-3 py-2 text-xs leading-[1.35] text-[var(--soft)]">
-            Some predictions have prizes, so this helps confirm winners at pickup.
-          </p>
+          <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] px-3 py-2.5">
+            <span class="mt-0.5 inline-grid h-6 w-6 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]" aria-hidden="true">
+              <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8"></path>
+                <path d="M5.5 8h9v7h-9z"></path>
+              </svg>
+            </span>
+            <p class="m-0 text-xs leading-[1.35] text-[var(--soft)]">
+              Your room name stays on this browser. Use the same device when claiming prizes.
+            </p>
+          </div>
+
+          <div class="grid gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_46%,transparent)] px-3 py-2.5">
+            <div class="flex items-center gap-2">
+              <span class="inline-grid h-6 w-6 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)]" aria-hidden="true">
+                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 8.5a5 5 0 0 1 10 0c0 3.5-5 6.5-5 6.5s-5-3-5-6.5Z"></path>
+                  <path d="M8.5 8.5h3"></path>
+                  <path d="M10 7v3"></path>
+                </svg>
+              </span>
+              <p class="m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Why pickup check exists</p>
+            </div>
+            <p class="m-0 text-xs leading-[1.4] text-[var(--soft)]">
+              Some chat-room predictions may win prizes. If yours wins, admin asks your pickup question, then you give the saved answer to claim the prize.
+            </p>
+            <div class="grid gap-1.5 text-[11px] leading-[1.25] text-[var(--muted)] sm:grid-cols-2">
+              <span class="rounded-md bg-[color:color-mix(in_srgb,var(--chip-bg)_56%,transparent)] px-2 py-1"><strong class="text-[var(--text)]">Question:</strong> what admin asks you.</span>
+              <span class="rounded-md bg-[color:color-mix(in_srgb,var(--chip-bg)_56%,transparent)] px-2 py-1"><strong class="text-[var(--text)]">Answer:</strong> what only you should know.</span>
+            </div>
+          </div>
 
           <div v-if="isMobile" class="grid gap-3">
             <div class="grid grid-cols-2 gap-2 rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_42%,transparent)] p-1.5">
               <div class="rounded-md px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-[0.08em]" :class="mobileStep === 1 ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--muted)]'">Room name</div>
-              <div class="rounded-md px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-[0.08em]" :class="mobileStep === 2 ? 'bg-[var(--accent)] text-[var(--accent-text)]' : 'text-[var(--muted)]'">Pickup check</div>
+              <div
+                class="rounded-md px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-[0.08em]"
+                :class="mobileStep === 2 ? 'bg-[var(--accent)] text-[var(--accent-text)]' : usernameReady ? 'text-[var(--muted)]' : 'text-[color:color-mix(in_srgb,var(--muted)_52%,transparent)]'"
+                :aria-disabled="String(!usernameReady)"
+              >Pickup check</div>
             </div>
 
             <div v-if="mobileStep === 1" class="grid gap-2">
@@ -112,45 +222,66 @@ defineExpose({ focus })
                 <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-username">Username</label>
                 <span class="text-[11px] font-semibold text-[var(--muted)]">Shown in room</span>
               </div>
+              <p
+                id="identity-prompt-help"
+                class="m-0 text-xs leading-[1.35] transition-colors duration-150"
+                :class="fieldHintClass(usernameValidation.valid, touched.username)"
+              >{{ usernameValidation.message }}</p>
               <input
                 id="prompt-username"
                 ref="input"
                 v-model="usernameDraft"
-                class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+                class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                :class="fieldInputClass(usernameValidation.valid, touched.username)"
                 autocomplete="nickname"
                 maxlength="24"
                 placeholder="Your name"
                 aria-describedby="identity-prompt-help identity-prompt-error"
+                :aria-invalid="touched.username && !usernameValidation.valid"
+                @blur="markTouched('username')"
               />
-              <p id="identity-prompt-help" class="m-0 text-xs leading-[1.4] text-[var(--muted)]">2-24 chars: letters, numbers, space, . ' -</p>
             </div>
 
             <div v-else class="grid gap-3">
               <div class="grid gap-2">
                 <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-question">Pickup question</label>
+                <p
+                  id="pickup-question-help"
+                  class="m-0 text-xs leading-[1.35] transition-colors duration-150"
+                  :class="fieldHintClass(prizeQuestionValidation.valid, touched.question)"
+                >{{ prizeQuestionValidation.message }}</p>
                 <input
                   id="prompt-prize-question"
                   ref="prizeQuestionInput"
                   v-model="prizeQuestionDraft"
-                  class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+                  class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                  :class="fieldInputClass(prizeQuestionValidation.valid, touched.question)"
                   maxlength="280"
-                  placeholder="Example: Last three digits?"
+                  placeholder="Example: What are my last three digits?"
                   aria-describedby="pickup-question-help identity-prompt-error"
+                  :aria-invalid="touched.question && !prizeQuestionValidation.valid"
+                  @blur="markTouched('question')"
                 />
-                <p id="pickup-question-help" class="m-0 text-xs leading-[1.4] text-[var(--muted)]">What admin asks before pickup.</p>
               </div>
 
               <div class="grid gap-2">
                 <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-answer">Pickup answer</label>
+                <p
+                  id="pickup-answer-help"
+                  class="m-0 text-xs leading-[1.35] transition-colors duration-150"
+                  :class="fieldHintClass(prizeAnswerValidation.valid, touched.answer)"
+                >{{ prizeAnswerValidation.message }}</p>
                 <input
                   id="prompt-prize-answer"
                   v-model="prizeAnswerDraft"
-                  class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+                  class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                  :class="fieldInputClass(prizeAnswerValidation.valid, touched.answer)"
                   maxlength="280"
                   placeholder="Example: 184"
                   aria-describedby="pickup-answer-help identity-prompt-error"
+                  :aria-invalid="touched.answer && !prizeAnswerValidation.valid"
+                  @blur="markTouched('answer')"
                 />
-                <p id="pickup-answer-help" class="m-0 text-xs leading-[1.4] text-[var(--muted)]">Stored for pickup only.</p>
               </div>
             </div>
           </div>
@@ -161,44 +292,65 @@ defineExpose({ focus })
                 <label class="text-[10px] font-extrabold uppercase text-[var(--muted)]" for="prompt-username">Username</label>
                 <span class="text-[10px] font-semibold text-[var(--muted)]">Shown in room</span>
               </div>
+              <p
+                id="identity-prompt-help"
+                class="m-0 text-[11px] leading-[1.3] transition-colors duration-150"
+                :class="fieldHintClass(usernameValidation.valid, touched.username)"
+              >{{ usernameValidation.message }}</p>
               <input
                 id="prompt-username"
                 ref="input"
                 v-model="usernameDraft"
-                class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                :class="fieldInputClass(usernameValidation.valid, touched.username)"
                 autocomplete="nickname"
                 maxlength="24"
                 placeholder="Your name"
                 aria-describedby="identity-prompt-help identity-prompt-error"
+                :aria-invalid="touched.username && !usernameValidation.valid"
+                @blur="markTouched('username')"
               />
-              <p id="identity-prompt-help" class="m-0 text-[11px] leading-[1.3] text-[var(--muted)]">2-24 chars: letters, numbers, space, . ' -</p>
             </div>
 
             <div class="grid gap-2">
               <label class="text-[10px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-question">Pickup question</label>
+              <p
+                id="pickup-question-help"
+                class="m-0 text-[11px] leading-[1.3] transition-colors duration-150"
+                :class="fieldHintClass(prizeQuestionValidation.valid, touched.question)"
+              >{{ prizeQuestionValidation.message }}</p>
               <input
                 id="prompt-prize-question"
                 ref="prizeQuestionInput"
                 v-model="prizeQuestionDraft"
-                class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                :class="fieldInputClass(prizeQuestionValidation.valid, touched.question)"
                 maxlength="280"
-                placeholder="Example: Last three digits?"
+                placeholder="Example: What are my last three digits?"
                 aria-describedby="pickup-question-help identity-prompt-error"
+                :aria-invalid="touched.question && !prizeQuestionValidation.valid"
+                @blur="markTouched('question')"
               />
-              <p id="pickup-question-help" class="m-0 text-[11px] leading-[1.3] text-[var(--muted)]">What admin asks before pickup.</p>
             </div>
 
             <div class="grid gap-2">
               <label class="text-[10px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-answer">Pickup answer</label>
+              <p
+                id="pickup-answer-help"
+                class="m-0 text-[11px] leading-[1.3] transition-colors duration-150"
+                :class="fieldHintClass(prizeAnswerValidation.valid, touched.answer)"
+              >{{ prizeAnswerValidation.message }}</p>
               <input
                 id="prompt-prize-answer"
                 v-model="prizeAnswerDraft"
-                class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_56%,var(--line))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)]"
+                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                :class="fieldInputClass(prizeAnswerValidation.valid, touched.answer)"
                 maxlength="280"
                 placeholder="Example: 184"
                 aria-describedby="pickup-answer-help identity-prompt-error"
+                :aria-invalid="touched.answer && !prizeAnswerValidation.valid"
+                @blur="markTouched('answer')"
               />
-              <p id="pickup-answer-help" class="m-0 text-[11px] leading-[1.3] text-[var(--muted)]">Stored for pickup only.</p>
             </div>
           </div>
 

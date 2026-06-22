@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
+import { DEFAULT_MATCH_CYCLE_START_HOUR_UTC, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
-import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
+import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, fetchRoom, togglePredictionLike, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
 import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
@@ -29,7 +29,7 @@ import {
 const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const MIN_PREDICTION_COMMENT_LENGTH = 4
 const COMMENT_PREVIEW_LIMIT = 3
-const ROOM_PAGE_SIZE = 4
+const ACTIVE_ROOM_POLL_MS = 3_500
 const ROOM_REFRESH_MS = 60_000
 const ADMIN_PRIZE_PAGE_SIZE = 6
 const TYPING_IDLE_MS = 1800
@@ -65,6 +65,12 @@ type TypingState = {
   targetId: string
   expiresAt: number
 }
+type RoomDayBucket = {
+  key: string
+  label: string
+  startMs: number
+  rooms: Room[]
+}
 type TopPickInsight = {
   key: string
   icon: string
@@ -72,7 +78,7 @@ type TopPickInsight = {
   value: string
   detail: string
   caption: string
-  tone: 'hot' | 'calm' | 'split' | 'sharp' | 'empty'
+  tone: 'hot' | 'calm' | 'split' | 'sharp' | 'empty' | 'winner'
   crowd?: {
     pickCount: number
     total: number
@@ -90,6 +96,11 @@ type TopPickInsight = {
     away: number
     homeLabel: string
     awayLabel: string
+  }
+  winners?: {
+    count: number
+    names: string[]
+    score: string
   }
 }
 
@@ -133,7 +144,7 @@ const selectedTheme = ref<ThemeId>(getStoredTheme() as ThemeId)
 const themePreview = ref<ThemeId | null>(null)
 const highlightedThemeIndex = ref(0)
 const feedSortMode = ref<FeedSortMode>('likes')
-const roomPage = ref(0)
+const selectedRoomBucketKey = ref('')
 const likedPredictions = ref(getStoredLikes())
 const activeReplyTarget = ref<{ predictionId: string; targetId: string } | null>(null)
 const closingReplyTargets = ref(new Set<string>())
@@ -151,7 +162,6 @@ const themeOptionRefs = ref<HTMLButtonElement[]>([])
 const ws = ref<WebSocket | null>(null)
 const submittingReplies = ref(new Set<string>())
 const submittingEdits = ref(new Set<string>())
-const editingPredictionId = ref('')
 const editingReplyId = ref('')
 const replyErrors = reactive<Record<string, string>>({})
 const editDrafts = reactive<Record<string, string>>({})
@@ -164,6 +174,7 @@ const roomSwitchDirection = ref<'forward' | 'backward'>('forward')
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
+let activeRoomPollTimer: ReturnType<typeof window.setInterval> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 let topPickCarouselTimer: ReturnType<typeof window.setInterval> | null = null
 let themePreviewTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -176,6 +187,7 @@ let lastFocusedElement: HTMLElement | null = null
 let reconnectAttempt = 0
 let socketToken = 0
 let roomsRefreshInFlight = false
+let activeRoomRefreshInFlight = false
 const avatarCache = new Map<string, string>()
 const typingStopTimers = new Map<string, ReturnType<typeof window.setTimeout>>()
 const lastTypingSentAt = new Map<string, number>()
@@ -233,10 +245,23 @@ const exactPickPreview = computed(() => {
 const topPickInsights = computed<TopPickInsight[]>(() => buildTopPickInsights(activeRoom.value))
 const activeTopPickInsight = computed(() => topPickInsights.value[activeTopPickIndex.value % Math.max(1, topPickInsights.value.length)] ?? null)
 const hasPrizeVerification = computed(() => prizeQuestion.value.trim().length >= 4 && prizeAnswer.value.trim().length >= 2)
+const hasIdentitySetup = computed(() => !!username.value && hasPrizeVerification.value)
+const usernameConflictRoom = computed(() => {
+  const result = validateUsername(usernameDraft.value)
+  return result.ok ? findRoomUsernameConflict(result.value) : null
+})
+const usernameConflictMessage = computed(() => {
+  const room = usernameConflictRoom.value
+  if (!room) return ''
+  const result = validateUsername(usernameDraft.value)
+  if (!result.ok) return ''
+  return `${result.value} is already in use in ${roomLabel(room)}. Pick another name for this room.`
+})
 const canSaveUsername = computed(() =>
   usernameDraft.value.trim().length > 0 &&
   prizeQuestionDraft.value.trim().length >= 4 &&
   prizeAnswerDraft.value.trim().length >= 2 &&
+  !usernameConflictRoom.value &&
   (!username.value || !hasPrizeVerification.value),
 )
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
@@ -246,9 +271,10 @@ const userPrediction = computed(() => activeRoom.value?.predictions.find((predic
 const hasUserPredicted = computed(() => !!userPrediction.value)
 const scoreCtaLabel = computed(() => {
   if (activeRoomPredictionsClosed.value) return 'Predictions closed'
+  if (!hasIdentitySetup.value) return 'Finish setup'
   return hasUserPredicted.value ? 'Already predicted' : 'Drop your score'
 })
-const scoreCtaDisabled = computed(() => hasUserPredicted.value || activeRoomPredictionsClosed.value)
+const scoreCtaDisabled = computed(() => !hasIdentitySetup.value || hasUserPredicted.value || activeRoomPredictionsClosed.value)
 const isAdminRoute = computed(() => routePath.value === ADMIN_ROUTE)
 const isNotFound = computed(() => routePath.value !== '/' && !isAdminRoute.value)
 const showMobileAdminMessage = computed(() => isAdminRoute.value && isMobileViewportState.value)
@@ -262,12 +288,44 @@ const shouldAutoPromptUsername = computed(() =>
 const orderedRooms = computed(() =>
   [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { fixtureKickoffs })),
 )
-const roomPageCount = computed(() => Math.max(1, Math.ceil(orderedRooms.value.length / ROOM_PAGE_SIZE)))
-const visibleRooms = computed(() => {
-  const start = roomPage.value * ROOM_PAGE_SIZE
-  return orderedRooms.value.slice(start, start + ROOM_PAGE_SIZE)
+const currentRoomCycleKey = computed(() => roomCycleDateKey(Date.now()))
+const roomDayBuckets = computed<RoomDayBucket[]>(() => {
+  const buckets = new Map<string, Room[]>()
+
+  for (const room of orderedRooms.value) {
+    const key = roomCycleDateKey(roomKickoffMs(room))
+    buckets.set(key, [...(buckets.get(key) ?? []), room])
+  }
+
+  return [...buckets.entries()]
+    .map(([key, bucketRooms]) => ({
+      key,
+      label: roomBucketLabel(key, currentRoomCycleKey.value),
+      startMs: roomCycleStartMs(key),
+      rooms: bucketRooms,
+    }))
+    .sort((left, right) => right.startMs - left.startMs)
 })
-const roomPageLabel = computed(() => `${roomPage.value + 1}/${roomPageCount.value}`)
+const selectedRoomBucketIndex = computed(() =>
+  roomDayBuckets.value.findIndex((bucket) => bucket.key === selectedRoomBucketKey.value),
+)
+const currentRoomBucket = computed(() => {
+  const index = selectedRoomBucketIndex.value
+  return index >= 0 ? roomDayBuckets.value[index] : roomDayBuckets.value[0] ?? null
+})
+const leftRoomBucket = computed(() => {
+  const index = selectedRoomBucketIndex.value
+  return index > 0 ? roomDayBuckets.value[index - 1] : null
+})
+const rightRoomBucket = computed(() => {
+  const index = selectedRoomBucketIndex.value
+  return index >= 0 && index < roomDayBuckets.value.length - 1 ? roomDayBuckets.value[index + 1] : null
+})
+const visibleRooms = computed(() => {
+  return currentRoomBucket.value?.rooms ?? []
+})
+const roomPageCount = computed(() => Math.max(1, roomDayBuckets.value.length))
+const roomPageLabel = computed(() => `${Math.max(1, selectedRoomBucketIndex.value + 1)}/${roomPageCount.value}`)
 const statusNotice = computed(() => {
   if (mutationError.value) return mutationError.value
   if (refreshingRooms.value) return 'Refreshing rooms...'
@@ -347,11 +405,19 @@ watch(adminPrizePageCount, (pageCount) => {
   }
 })
 
-watch(rooms, () => {
-  if (roomPage.value >= roomPageCount.value) {
-    roomPage.value = roomPageCount.value - 1
+watch(roomDayBuckets, (buckets) => {
+  if (!buckets.length) {
+    selectedRoomBucketKey.value = ''
+    return
   }
-})
+
+  if (buckets.some((bucket) => bucket.key === selectedRoomBucketKey.value)) return
+
+  selectedRoomBucketKey.value =
+    buckets.find((bucket) => bucket.key === currentRoomCycleKey.value)?.key ??
+    buckets.find((bucket) => bucket.startMs > roomCycleStartMs(currentRoomCycleKey.value))?.key ??
+    buckets[0].key
+}, { immediate: true })
 
 watch(username, (value) => {
   if (value) usernameDraft.value = value
@@ -411,10 +477,52 @@ function validateUsername(value: string) {
   return { ok: true, value: normalized, message: '' }
 }
 
+function usernameKey(value: string) {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase()
+}
+
+function roomLabel(room: Room) {
+  return `${room.home.code} vs ${room.away.code}`
+}
+
+function findRoomUsernameConflict(name: string) {
+  const room = activeRoom.value
+  if (!room) return null
+
+  const target = usernameKey(name)
+  if (!target) return null
+
+  for (const prediction of room.predictions) {
+    if (prediction.authorId && prediction.authorId !== userId && usernameKey(prediction.name) === target) {
+      return room
+    }
+
+    for (const comment of prediction.comments) {
+      if (comment.authorId && comment.authorId !== userId && usernameKey(comment.name) === target) {
+        return room
+      }
+
+      for (const reply of comment.replies) {
+        if (reply.authorId !== userId && usernameKey(reply.name) === target) {
+          return room
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 function saveUsername() {
   const result = validateUsername(usernameDraft.value)
   if (!result.ok) {
     usernameError.value = result.message
+    return
+  }
+
+  const conflictRoom = findRoomUsernameConflict(result.value)
+  if (conflictRoom) {
+    usernameError.value = `${result.value} is already in use in ${roomLabel(conflictRoom)}. Pick another name for this room.`
     return
   }
 
@@ -711,6 +819,12 @@ function scorelineCount(room: Room, homeScore: number, awayScore: number) {
   return room.predictions.filter((prediction) => scoreKey(prediction.homeScore, prediction.awayScore) === key).length
 }
 
+function formatWinnerNames(names: string[]) {
+  const visible = names.slice(0, 4)
+  const remaining = names.length - visible.length
+  return `${visible.join(' · ')}${remaining > 0 ? ` · +${remaining} more` : ''}`
+}
+
 function roomSplit(room: Room) {
   return room.predictions.reduce(
     (split, prediction) => {
@@ -827,6 +941,28 @@ function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
       ? `${topPickPredictors[0]} predicted it`
       : 'Someone predicted it'
   const { counts: split, percentages } = roomSplitPercentages(room)
+  const finalScore = finalScoreForRoom(room)
+  const winners = finalScore
+    ? room.predictions.filter((prediction) => isExactPick(prediction, finalScore))
+    : []
+  const winnerNames = [...new Set(winners.map((prediction) => prediction.name.trim()).filter(Boolean))]
+  const winnerInsight: TopPickInsight | null = finalScore && winnerNames.length
+    ? {
+        key: 'winners',
+        icon: '🏆',
+        label: winnerNames.length === 1 ? 'Winner' : 'Winners',
+        value: winnerNames.length === 1 ? `${winnerNames[0]} nailed it` : `${winnerNames.length} nailed it`,
+        detail: formatWinnerNames(winnerNames),
+        caption: `Exact on ${scoreLabel(room, finalScore.home, finalScore.away)}`,
+        tone: 'winner',
+        winners: {
+          count: winnerNames.length,
+          names: winnerNames,
+          score: scoreLabel(room, finalScore.home, finalScore.away),
+        },
+      }
+    : null
+
   return [
     {
       key: 'crowd',
@@ -843,6 +979,7 @@ function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
         predictorLabel: topPickPredictorLabel,
       },
     },
+    ...(winnerInsight ? [winnerInsight] : []),
     {
       key: 'split',
       icon: '⚖️',
@@ -940,6 +1077,28 @@ function replySubmitLabel(prediction: Prediction) {
 
 function roomKickoffMs(room: Room) {
   return roomKickoffMsByState(room, fixtureKickoffs)
+}
+
+function roomCycleDateKey(kickoffMs: number, cycleStartHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC) {
+  const shifted = new Date(kickoffMs - cycleStartHourUtc * 60 * 60 * 1000)
+  return shifted.toISOString().slice(0, 10)
+}
+
+function roomCycleStartMs(cycleKey: string, cycleStartHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC) {
+  const [year, month, day] = cycleKey.split('-').map(Number)
+  return Date.UTC(year, (month || 1) - 1, day || 1, cycleStartHourUtc, 0, 0)
+}
+
+function roomBucketLabel(cycleKey: string, currentCycleKey: string) {
+  const dayDelta = Math.round((roomCycleStartMs(cycleKey) - roomCycleStartMs(currentCycleKey)) / (24 * 60 * 60 * 1000))
+  if (dayDelta === 1) return 'Tomorrow'
+  if (dayDelta === 0) return 'Today'
+  if (dayDelta === -1) return 'Yesterday'
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(`${cycleKey}T12:00:00.000Z`))
 }
 
 function effectiveRoomMatchStatus(room: Room) {
@@ -1094,10 +1253,6 @@ function roomAllowsTextEditing() {
   return !!activeRoom.value && effectiveRoomMatchStatus(activeRoom.value) !== 'finished' && activeRoom.value.roomStatus === 'open'
 }
 
-function canEditPrediction(prediction: Prediction) {
-  return prediction.authorId === userId && roomAllowsTextEditing() && !prediction.id.startsWith('optimistic-')
-}
-
 function canEditReply(reply: Reply) {
   return reply.authorId === userId && roomAllowsTextEditing() && !reply.id.startsWith('optimistic-')
 }
@@ -1112,22 +1267,40 @@ function setActiveRoom(roomId: string) {
   if (currentIndex !== -1 && nextIndex !== -1 && currentIndex !== nextIndex) {
     roomSwitchDirection.value = nextIndex > currentIndex ? 'forward' : 'backward'
   }
+  const room = orderedRooms.value.find((item) => item.id === roomId)
+  if (room) {
+    selectedRoomBucketKey.value = roomCycleDateKey(roomKickoffMs(room))
+  }
   activeRoomId.value = roomId
   activeReplyTarget.value = null
   closingReplyTargets.value = new Set()
   expandedCommentCards.value = new Set()
   fastCollapsingCommentCards.value = new Set()
-  editingPredictionId.value = ''
   editingReplyId.value = ''
   clearTypingState()
 }
 
+function selectRoomBucket(bucketKey: string) {
+  const bucket = roomDayBuckets.value.find((item) => item.key === bucketKey)
+  if (!bucket) return
+
+  selectedRoomBucketKey.value = bucket.key
+  if (bucket.rooms.some((room) => room.id === activeRoomId.value)) return
+
+  const nextRoom = bucket.rooms.find((room) => room.isFeatured) ?? bucket.rooms[0]
+  if (nextRoom) {
+    setActiveRoom(nextRoom.id)
+  }
+}
+
 function previousRoomPage() {
-  roomPage.value = Math.max(0, roomPage.value - 1)
+  if (!leftRoomBucket.value) return
+  selectRoomBucket(leftRoomBucket.value.key)
 }
 
 function nextRoomPage() {
-  roomPage.value = Math.min(roomPageCount.value - 1, roomPage.value + 1)
+  if (!rightRoomBucket.value) return
+  selectRoomBucket(rightRoomBucket.value.key)
 }
 
 function toggleFeedSort() {
@@ -1238,7 +1411,6 @@ async function submitLike(predictionId: string, authorId?: string) {
 
 function openReplyComposer(predictionId: string, targetId: string) {
   fastCollapsingCommentCards.value = new Set()
-  editingPredictionId.value = ''
   editingReplyId.value = ''
   finishReplyComposerClose(predictionId, targetId)
   activeReplyTarget.value = { predictionId, targetId }
@@ -1253,21 +1425,9 @@ function closeReplyComposer(targetId: string) {
   activeReplyTarget.value = null
 }
 
-function startEditingPrediction(prediction: Prediction) {
-  const comment = leadComment(prediction)
-  if (!comment || !canEditPrediction(prediction)) return
-  activeReplyTarget.value = null
-  editingReplyId.value = ''
-  editingPredictionId.value = prediction.id
-  editDrafts[prediction.id] = comment.text
-  editErrors[prediction.id] = ''
-  nextTick(() => focusEditInput(prediction.id))
-}
-
 function startEditingReply(reply: Reply) {
   if (!canEditReply(reply)) return
   activeReplyTarget.value = null
-  editingPredictionId.value = ''
   editingReplyId.value = reply.id
   editDrafts[reply.id] = reply.text
   editErrors[reply.id] = ''
@@ -1275,7 +1435,6 @@ function startEditingReply(reply: Reply) {
 }
 
 function cancelEdit(contentId: string) {
-  if (editingPredictionId.value === contentId) editingPredictionId.value = ''
   if (editingReplyId.value === contentId) editingReplyId.value = ''
   editErrors[contentId] = ''
 }
@@ -1616,44 +1775,11 @@ async function submitReply(targetId: string) {
   }
 }
 
-async function submitPredictionEdit(prediction: Prediction) {
-  const text = (editDrafts[prediction.id] || '').trim()
-  if (!text || text.length < MIN_PREDICTION_COMMENT_LENGTH || isEditSubmitting(prediction.id) || !canEditPrediction(prediction)) return
-
-  const previousPrediction = structuredClone(prediction)
-  const editedAt = new Date().toISOString()
-  const nextSubmitting = new Set(submittingEdits.value)
-  nextSubmitting.add(prediction.id)
-  submittingEdits.value = nextSubmitting
-  editErrors[prediction.id] = ''
-  updateLocalPrediction(prediction.id, (item) => ({
-    ...item,
-    editedAt,
-    comments: item.comments.map((comment, index) => index === 0 ? { ...comment, text, editedAt } : comment),
-  }))
-  editingPredictionId.value = ''
-
-  try {
-    const response = await updatePredictionText(prediction.id, { userId, comment: text })
-    patchRoom(response.room)
-  } catch (error) {
-    updateLocalPrediction(prediction.id, () => previousPrediction)
-    editingPredictionId.value = prediction.id
-    editDrafts[prediction.id] = text
-    editErrors[prediction.id] = errorText(error, 'Prediction edit did not save. Try again.')
-    showMutationError(editErrors[prediction.id])
-  } finally {
-    const next = new Set(submittingEdits.value)
-    next.delete(prediction.id)
-    submittingEdits.value = next
-  }
-}
-
 async function submitReplyEdit(reply: Reply) {
   const text = (editDrafts[reply.id] || '').trim()
   if (!text || isEditSubmitting(reply.id) || !canEditReply(reply)) return
 
-  const previousReply = structuredClone(reply)
+  const previousReply: Reply = { ...reply }
   const editedAt = new Date().toISOString()
   const nextSubmitting = new Set(submittingEdits.value)
   nextSubmitting.add(reply.id)
@@ -2094,6 +2220,11 @@ function handleRouteChange() {
   }
 }
 
+function handleResumeRealtime() {
+  if (document.hidden || isNotFound.value || isAdminRoute.value) return
+  void refreshActiveRoom()
+}
+
 function handleSocketEvent(event: MessageEvent<string>) {
   if (event.data === 'pong') return
   let payload: ApiEvent
@@ -2271,6 +2402,24 @@ async function refreshRooms(options: { preserveActiveRoom?: boolean; silent?: bo
   }
 }
 
+async function refreshActiveRoom() {
+  const roomId = activeRoomId.value
+  if (!roomId || activeRoomRefreshInFlight || isNotFound.value || isAdminRoute.value || document.hidden) return false
+  activeRoomRefreshInFlight = true
+
+  try {
+    const response = await fetchRoom(roomId)
+    patchRoom(response.room)
+    errorMessage.value = ''
+    return true
+  } catch (error) {
+    console.warn(errorText(error, 'Unable to refresh active room'))
+    return false
+  } finally {
+    activeRoomRefreshInFlight = false
+  }
+}
+
 async function bootstrap() {
   return refreshRooms()
 }
@@ -2294,6 +2443,8 @@ onMounted(async () => {
   window.addEventListener('resize', syncViewportState)
   window.addEventListener('resize', positionThemeMenu)
   window.addEventListener('resize', updateFeedNavMode)
+  window.addEventListener('online', handleResumeRealtime)
+  document.addEventListener('visibilitychange', handleResumeRealtime)
   window.addEventListener('scroll', positionThemeMenu, { passive: true })
   window.addEventListener('scroll', updateFeedNavMode, { passive: true })
   if (!username.value && shouldAutoPromptUsername.value) {
@@ -2305,6 +2456,9 @@ onMounted(async () => {
     if (isNotFound.value || isAdminRoute.value || document.hidden) return
     void refreshRooms({ preserveActiveRoom: true, silent: true })
   }, ROOM_REFRESH_MS)
+  activeRoomPollTimer = window.setInterval(() => {
+    void refreshActiveRoom()
+  }, ACTIVE_ROOM_POLL_MS)
   topPickCarouselTimer = window.setInterval(() => {
     const count = topPickInsights.value.length
     if (count <= 1 || isNotFound.value || isAdminRoute.value || document.hidden) return
@@ -2321,6 +2475,9 @@ onBeforeUnmount(() => {
   }
   if (reconnectTimer) {
     window.clearTimeout(reconnectTimer)
+  }
+  if (activeRoomPollTimer) {
+    window.clearInterval(activeRoomPollTimer)
   }
   if (roomRefreshTimer) {
     window.clearInterval(roomRefreshTimer)
@@ -2351,6 +2508,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', syncViewportState)
   window.removeEventListener('resize', positionThemeMenu)
   window.removeEventListener('resize', updateFeedNavMode)
+  window.removeEventListener('online', handleResumeRealtime)
+  document.removeEventListener('visibilitychange', handleResumeRealtime)
   window.removeEventListener('scroll', positionThemeMenu)
   window.removeEventListener('scroll', updateFeedNavMode)
 })
@@ -2365,14 +2524,14 @@ onBeforeUnmount(() => {
       class="mb-[34px] flex items-center justify-between gap-4"
       :class="isNotFound ? 'mx-auto mb-4 w-[min(1180px,calc(100%-32px))] max-md:mb-3 max-md:w-[min(100%,calc(100%-24px))]' : ''"
     >
-      <div class="flex items-center">
-        <div class="inline-flex items-baseline gap-2 whitespace-nowrap text-[clamp(22px,2.2vw,30px)] leading-none font-black text-[var(--accent)]" aria-label="Turntabl Score Room">turntabl <span class="font-[750] text-[var(--text)]">score room</span></div>
+      <div class="min-w-0 flex items-center">
+        <div class="inline-flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[clamp(20px,2.2vw,30px)] leading-none font-black text-[var(--accent)] max-[380px]:text-[18px]" aria-label="Turntabl Score Room">turntabl <span class="truncate font-[750] text-[var(--text)] max-[430px]:hidden">score room</span></div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex shrink-0 items-center gap-2">
         <div
           v-if="username"
-          class="hidden min-h-10 max-w-[180px] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] px-2.5 text-[12px] font-bold text-[var(--text)] sm:inline-flex"
+          class="inline-flex min-h-[46px] max-w-[116px] items-center gap-2 rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] px-2 text-[11px] font-bold text-[var(--text)] sm:min-h-10 sm:max-w-[180px] sm:rounded-lg sm:px-2.5 sm:text-[12px]"
           aria-label="Current username"
         >
           <img class="h-6 w-6 rounded-full" :src="predictionAvatar(username)" alt="" decoding="async" />
@@ -3190,7 +3349,7 @@ onBeforeUnmount(() => {
         </div>
 
         <section
-          class="hidden min-h-11 items-center justify-between gap-3 rounded-[10px] border bg-[color:color-mix(in_srgb,var(--panel)_68%,transparent)] px-3.5 py-2.5 text-left max-md:flex"
+          class="top-pick-shell-mobile hidden min-h-11 items-center justify-between gap-3 rounded-[10px] border bg-[color:color-mix(in_srgb,var(--panel)_68%,transparent)] px-3.5 py-2.5 text-left max-md:flex"
           :class="[
             activeRoom.predictions.length ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))]' : 'border-dashed border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))]',
             isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : '',
@@ -3244,29 +3403,47 @@ onBeforeUnmount(() => {
               </svg>
               <h2 class="m-0 text-base font-[760] leading-tight text-[var(--text)]">Chat rooms</h2>
             </div>
-            <div v-if="roomPageCount > 1" class="inline-flex items-center gap-1 text-[var(--muted)]" aria-label="Room pages">
+            <div v-if="roomDayBuckets.length > 1" class="grid justify-items-end gap-1 text-[var(--muted)]" aria-label="Room day navigation">
+              <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-1.5">
+                <button
+                  class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                  type="button"
+                  aria-label="Show newer room day"
+                  :disabled="!leftRoomBucket"
+                  @click="previousRoomPage"
+                >
+                  <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
+                    <path d="M160 48 80 128l80 80"></path>
+                  </svg>
+                </button>
+                <span class="min-w-[56px] truncate text-right text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--muted)]">
+                  {{ leftRoomBucket?.label ?? '' }}
+                </span>
+                <span class="min-w-[56px] truncate text-center text-[12px] font-black text-[var(--text)]">
+                  {{ currentRoomBucket?.label ?? 'Today' }}
+                </span>
+                <span class="min-w-[56px] truncate text-left text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--muted)]">
+                  {{ rightRoomBucket?.label ?? '' }}
+                </span>
+                <button
+                  class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                  type="button"
+                  aria-label="Show older room day"
+                  :disabled="!rightRoomBucket"
+                  @click="nextRoomPage"
+                >
+                  <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
+                    <path d="m96 48 80 80-80 80"></path>
+                  </svg>
+                </button>
+              </div>
               <button
-                class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
+                v-if="showGoToCurrentDay"
+                class="text-[10px] font-semibold text-[var(--accent)] transition-opacity duration-150 ease-[var(--ease)] hover:opacity-80"
                 type="button"
-                aria-label="Previous rooms"
-                :disabled="roomPage === 0"
-                @click="previousRoomPage"
+                @click="goToCurrentRoomDay"
               >
-                <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
-                  <path d="M160 48 80 128l80 80"></path>
-                </svg>
-              </button>
-            <span class="min-w-[34px] text-center text-[11px] font-black tabular-nums text-[var(--muted)]">{{ roomPageLabel }}</span>
-              <button
-                class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
-                type="button"
-                aria-label="Next rooms"
-                :disabled="roomPage >= roomPageCount - 1"
-                @click="nextRoomPage"
-              >
-                <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
-                  <path d="m96 48 80 80-80 80"></path>
-                </svg>
+                Go to current day
               </button>
             </div>
             <span v-else class="text-[11px] font-bold text-[var(--muted)]">{{ rooms.length }} rooms</span>
@@ -3442,51 +3619,10 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div v-if="leadComment(item)" class="grid gap-1">
-                  <form
-                    v-if="editingPredictionId === item.id"
-                    class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto]"
-                    @submit.prevent="submitPredictionEdit(item)"
-                  >
-                    <input
-                      :data-edit-key="item.id"
-                      v-model="editDrafts[item.id]"
-                      class="min-h-9 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm text-[var(--text)] outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ease)] focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)] disabled:cursor-wait disabled:opacity-70"
-                      maxlength="280"
-                      aria-label="Edit prediction text"
-                      :disabled="isEditSubmitting(item.id)"
-                    />
-                    <button
-                      class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
-                      type="submit"
-                      :disabled="!canSubmitEdit(item.id, MIN_PREDICTION_COMMENT_LENGTH)"
-                    >
-                      {{ isEditSubmitting(item.id) ? 'saving' : 'Edit' }}
-                    </button>
-                    <button
-                      class="inline-flex min-h-9 items-center justify-center rounded-lg px-2.5 text-xs font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
-                      type="button"
-                      :disabled="isEditSubmitting(item.id)"
-                      @click="cancelEdit(item.id)"
-                    >
-                      Cancel
-                    </button>
-                    <p v-if="editErrors[item.id]" class="col-span-full m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[item.id] }}</p>
-                  </form>
-                  <div v-else class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                    <p data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-[15px]">
-                      {{ leadComment(item)?.text }}
-                      <span v-if="isEditSubmitting(item.id)" class="ml-1 text-[10px] font-black uppercase text-[var(--accent)]">saving</span>
-                      <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
-                    </p>
-                    <button
-                      v-if="canEditPrediction(item)"
-                      class="inline-flex min-h-7 shrink-0 items-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
-                      type="button"
-                      @click="startEditingPrediction(item)"
-                    >
-                      Edit
-                    </button>
-                  </div>
+                  <p data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-[15px]">
+                    {{ leadComment(item)?.text }}
+                    <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
+                  </p>
                 </div>
 
                 <div v-if="threadEntries(item).length" data-reply-thread class="grid gap-2 pt-1 pl-3">
@@ -3520,7 +3656,7 @@ onBeforeUnmount(() => {
                           type="submit"
                           :disabled="!canSubmitEdit(entry.id)"
                         >
-                          {{ isEditSubmitting(entry.id) ? 'saving' : 'Edit' }}
+                          {{ isEditSubmitting(entry.id) ? 'Saving' : 'Save' }}
                         </button>
                         <button
                           class="inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
@@ -3536,7 +3672,15 @@ onBeforeUnmount(() => {
                         <strong>{{ entry.name }}:</strong> {{ entry.text }}
                         <span v-if="entry.type === 'reply' && isOptimisticReply(entry.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">sending</span>
                         <span v-if="entry.type === 'reply' && isEditSubmitting(entry.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">saving</span>
-                        <span v-if="entry.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
+                        <span v-if="entry.editedAt" class="ml-2 text-[9px] font-bold text-[color:color-mix(in_srgb,var(--muted)_82%,var(--text))]">Edited</span>
+                        <button
+                          v-if="entry.type === 'reply' && replyById(item, entry.id) && canEditReply(replyById(item, entry.id)!)"
+                          class="ml-3 inline-flex rounded px-1 text-[9px] font-black uppercase tracking-[0.08em] text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
+                          type="button"
+                          @click="startEditingReply(replyById(item, entry.id)!)"
+                        >
+                          EDIT
+                        </button>
                       </span>
                     </div>
                   </TransitionGroup>
@@ -3711,6 +3855,28 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
 
+                  <div v-else-if="activeTopPickInsight.winners" class="winner-readout">
+                    <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
+                      <span class="top-pick-emoji text-[22px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
+                      <span>{{ activeTopPickInsight.label }}</span>
+                    </span>
+                    <div class="grid gap-2 text-center">
+                      <strong class="winner-readout-value font-black leading-none text-[var(--text)]">{{ activeTopPickInsight.value }}</strong>
+                      <span class="winner-readout-score">{{ activeTopPickInsight.caption }}</span>
+                    </div>
+                    <div class="winner-readout-names" :aria-label="`Exact score ${activeTopPickInsight.label.toLowerCase()}`">
+                      <span
+                        v-for="name in activeTopPickInsight.winners.names.slice(0, 4)"
+                        :key="`winner-${activeRoom.id}-${name}`"
+                      >
+                        {{ name }}
+                      </span>
+                      <span v-if="activeTopPickInsight.winners.names.length > 4">
+                        +{{ activeTopPickInsight.winners.names.length - 4 }} more
+                      </span>
+                    </div>
+                  </div>
+
                   <div v-else-if="activeTopPickInsight.weather" class="banter-weather-readout">
                     <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
                       <span class="top-pick-emoji text-[22px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
@@ -3785,7 +3951,7 @@ onBeforeUnmount(() => {
                   </div>
 
                   <p
-                    v-if="activeTopPickInsight.key !== 'crowd' && !activeTopPickInsight.weather"
+                    v-if="activeTopPickInsight.key !== 'crowd' && !activeTopPickInsight.weather && !activeTopPickInsight.winners"
                     class="room-split-subtitle m-0 text-center text-xs font-[650] leading-snug text-[var(--muted)]"
                   >
                     {{ activeTopPickInsight.caption }}
@@ -3883,34 +4049,43 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <div v-if="roomPageCount > 1" class="flex items-center justify-between border-t border-[var(--line)] pt-2">
-            <button
-              class="inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
-              type="button"
-              aria-label="Previous rooms"
-              :disabled="roomPage === 0"
-              @click="previousRoomPage"
-            >
-              <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
-                <path d="M160 48 80 128l80 80"></path>
-              </svg>
-            </button>
-            <span class="text-[11px] font-bold text-[var(--muted)]">{{ roomPageLabel }}</span>
-            <button
-              class="inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
-              type="button"
-              aria-label="Next rooms"
-              :disabled="roomPage >= roomPageCount - 1"
-              @click="nextRoomPage"
-            >
-              <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
-                <path d="m96 48 80 80-80 80"></path>
-              </svg>
-            </button>
+          <div v-if="roomDayBuckets.length > 1" class="flex items-center justify-between border-t border-[var(--line)] pt-2 text-[var(--muted)]" aria-label="Room pages">
+              <button
+                class="inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                type="button"
+                aria-label="Previous rooms"
+                :disabled="!leftRoomBucket"
+                @click="previousRoomPage"
+              >
+                <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
+                  <path d="M160 48 80 128l80 80"></path>
+                </svg>
+              </button>
+              <span class="text-[11px] font-bold text-[var(--muted)]">{{ roomPageLabel }}</span>
+              <button
+                class="inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                type="button"
+                aria-label="Next rooms"
+                :disabled="!rightRoomBucket"
+                @click="nextRoomPage"
+              >
+                <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="22">
+                  <path d="m96 48 80 80-80 80"></path>
+                </svg>
+              </button>
           </div>
 
           <form class="grid gap-2 pt-1" @submit.prevent="openIdentityPrompt('Set your room name and pickup verification before posting.')">
             <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="username">Username</label>
+            <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] px-3 py-2">
+              <span class="mt-0.5 inline-grid h-5 w-5 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]" aria-hidden="true">
+                <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8"></path>
+                  <path d="M5.5 8h9v7h-9z"></path>
+                </svg>
+              </span>
+              <p class="m-0 text-[11px] leading-[1.35] text-[var(--soft)]">Your room name stays on this browser. Use the same device when claiming prizes.</p>
+            </div>
             <div class="grid items-center gap-2" :class="username ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_auto]'">
               <input
                 id="username"
@@ -3947,7 +4122,7 @@ onBeforeUnmount(() => {
               class="flex min-h-0 items-center justify-between gap-2 text-[11px] leading-tight"
               :class="usernameError ? 'text-[var(--danger)]' : 'text-[var(--muted)]'"
             >
-              <span>{{ usernameError || (username ? 'Saved locally for this browser' : '') }}</span>
+              <span>{{ usernameError || usernameConflictMessage || (username ? 'Saved locally for this browser' : '') }}</span>
               <button
                 v-if="username && showUsernameReset"
                 class="text-[11px] font-bold text-[var(--accent)] transition-[color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,black)] active:translate-y-px"
@@ -3967,7 +4142,8 @@ onBeforeUnmount(() => {
       v-model:prize-answer-draft="prizeAnswerDraft"
       :open="identityPromptOpen"
       :can-save="canSaveUsername"
-      :error="usernameError"
+      :has-saved-username="!!username"
+      :error="usernameError || usernameConflictMessage"
       :message="identityPromptMessage"
       @close="closeIdentityPrompt"
       @save="saveUsername"
