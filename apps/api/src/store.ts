@@ -83,6 +83,10 @@ export function createStore() {
     getRooms(): Room[] {
       return rooms.map(cloneRoom)
     },
+    getRoom(roomId: string): Room | null {
+      const room = rooms.find((item) => item.id === roomId)
+      return room ? cloneRoom(room) : null
+    },
     getThemes(): ThemeOption[] {
       return mockThemes
     },

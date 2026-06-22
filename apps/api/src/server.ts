@@ -32,6 +32,10 @@ function getRooms(store: ApiStore) {
   return Promise.resolve(store.getRooms())
 }
 
+function getRoom(store: ApiStore, roomId: string) {
+  return Promise.resolve(store.getRoom(roomId))
+}
+
 function enforceMutationRateLimit(userId: string, action: string) {
   const now = Date.now()
   const key = `${action}:${userId}`
@@ -206,6 +210,22 @@ app.get('/api/bootstrap', async (c) => {
       themes: store.getThemes(),
       generatedAt: new Date().toISOString(),
     })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
+app.get('/api/rooms/:roomId', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const room = await getRoom(store, c.req.param('roomId'))
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Room not found.', 404)
+    }
+
+    return c.json({ room })
   } catch (error) {
     const response = errorResponse(error)
     return c.json(response.body, response.status)
