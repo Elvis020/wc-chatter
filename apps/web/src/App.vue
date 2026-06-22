@@ -271,10 +271,9 @@ const userPrediction = computed(() => activeRoom.value?.predictions.find((predic
 const hasUserPredicted = computed(() => !!userPrediction.value)
 const scoreCtaLabel = computed(() => {
   if (activeRoomPredictionsClosed.value) return 'Predictions closed'
-  if (!hasIdentitySetup.value) return 'Finish setup'
   return hasUserPredicted.value ? 'Already predicted' : 'Drop your score'
 })
-const scoreCtaDisabled = computed(() => !hasIdentitySetup.value || hasUserPredicted.value || activeRoomPredictionsClosed.value)
+const scoreCtaDisabled = computed(() => hasUserPredicted.value || activeRoomPredictionsClosed.value)
 const isAdminRoute = computed(() => routePath.value === ADMIN_ROUTE)
 const isNotFound = computed(() => routePath.value !== '/' && !isAdminRoute.value)
 const showMobileAdminMessage = computed(() => isAdminRoute.value && isMobileViewportState.value)
@@ -423,6 +422,11 @@ watch(username, (value) => {
   if (value) usernameDraft.value = value
 })
 
+watch(usernameDraft, (value) => {
+  const limited = value.slice(0, 24)
+  if (value !== limited) usernameDraft.value = limited
+}, { flush: 'sync' })
+
 watch(() => predictionForm.comment, (comment) => {
   const roomId = activeRoom.value?.id
   if (!roomId) return
@@ -470,7 +474,7 @@ function validateUsername(value: string) {
     return {
       ok: false,
       value: normalized,
-      message: "Use 2-24 chars: letters, numbers, spaces, . ' -",
+      message: 'Use 2-24 chars',
     }
   }
 
@@ -2517,9 +2521,30 @@ onBeforeUnmount(() => {
 
 <template>
   <main
-    class="px-0 pt-6 pb-[42px] max-md:pt-[18px] max-md:pb-[calc(96px+env(safe-area-inset-bottom))]"
-    :class="isNotFound ? 'grid h-svh w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden pb-0 max-md:pb-0' : 'mx-auto w-[min(1180px,calc(100%-32px))] max-md:w-[min(100%,calc(100%-24px))]'"
+    class="px-0 pt-0 pb-[42px] max-md:pb-[calc(96px+env(safe-area-inset-bottom))]"
+    :class="isNotFound ? 'grid h-svh w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden pb-0 max-md:pb-0' : ''"
   >
+    <section
+      v-if="!isNotFound && !isAdminRoute"
+      class="border-y border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))]"
+      aria-label="Local profile notice"
+    >
+      <div class="mx-auto flex w-full max-w-[1180px] items-center justify-center gap-2 px-4 py-2 text-center text-[13px] font-[750] leading-[1.35] text-[var(--soft)] max-md:px-3 max-md:py-1.5 max-md:text-[11px]">
+        <span class="inline-grid h-5 w-5 shrink-0 place-items-center text-[var(--accent)] max-md:h-4 max-md:w-4" aria-hidden="true">
+          <svg class="h-3.5 w-3.5 max-md:h-3 max-md:w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8"></path>
+            <path d="M5.5 8h9v7h-9z"></path>
+          </svg>
+        </span>
+        <p class="m-0">
+          Your room name stays on this browser. Use the same device when claiming prizes.
+        </p>
+      </div>
+    </section>
+
+    <div
+      :class="isNotFound ? '' : 'mx-auto w-[min(1180px,calc(100%-32px))] pt-6 max-md:w-[min(100%,calc(100%-24px))] max-md:pt-[18px]'"
+    >
     <header
       class="mb-[34px] flex items-center justify-between gap-4"
       :class="isNotFound ? 'mx-auto mb-4 w-[min(1180px,calc(100%-32px))] max-md:mb-3 max-md:w-[min(100%,calc(100%-24px))]' : ''"
@@ -3257,7 +3282,7 @@ onBeforeUnmount(() => {
 
         <div class="match-stage-sticky">
           <section
-            class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:p-4"
+            class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:min-h-0 max-md:rounded-[10px] max-md:border-transparent max-md:p-4"
             :class="isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : ''"
           >
             <Transition name="room-surface" mode="out-in">
@@ -3349,7 +3374,7 @@ onBeforeUnmount(() => {
         </div>
 
         <section
-          class="top-pick-shell-mobile hidden min-h-11 items-center justify-between gap-3 rounded-[10px] border bg-[color:color-mix(in_srgb,var(--panel)_68%,transparent)] px-3.5 py-2.5 text-left max-md:flex"
+          class="top-pick-shell-mobile hidden min-h-11 items-center justify-between gap-3 rounded-[10px] border bg-[color:color-mix(in_srgb,var(--panel)_68%,transparent)] px-3.5 py-2.5 text-left max-md:flex max-md:border-transparent"
           :class="[
             activeRoom.predictions.length ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))]' : 'border-dashed border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))]',
             isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : '',
@@ -3393,7 +3418,7 @@ onBeforeUnmount(() => {
           </Transition>
         </section>
 
-        <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 md:hidden" aria-label="Mobile chat rooms">
+        <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 md:hidden max-md:border-transparent" aria-label="Mobile chat rooms">
           <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <svg class="ph-icon h-4 w-4 text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
@@ -4077,15 +4102,6 @@ onBeforeUnmount(() => {
 
           <form class="grid gap-2 pt-1" @submit.prevent="openIdentityPrompt('Set your room name and pickup verification before posting.')">
             <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="username">Username</label>
-            <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] px-3 py-2">
-              <span class="mt-0.5 inline-grid h-5 w-5 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]" aria-hidden="true">
-                <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8"></path>
-                  <path d="M5.5 8h9v7h-9z"></path>
-                </svg>
-              </span>
-              <p class="m-0 text-[11px] leading-[1.35] text-[var(--soft)]">Your room name stays on this browser. Use the same device when claiming prizes.</p>
-            </div>
             <div class="grid items-center gap-2" :class="username ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_auto]'">
               <input
                 id="username"
@@ -4162,5 +4178,6 @@ onBeforeUnmount(() => {
       @close="closePredictionModal"
       @submit="submitPrediction"
     />
+    </div>
   </main>
 </template>

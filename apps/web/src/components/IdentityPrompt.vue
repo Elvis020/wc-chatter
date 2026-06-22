@@ -32,13 +32,17 @@ function normalize(value: string) {
   return value.normalize('NFKC').replace(/\s+/g, ' ').trim()
 }
 
+function limitUsernameDraft(value: string) {
+  return value.slice(0, 24)
+}
+
 function validateUsername(value: string) {
   const normalized = normalize(value)
   if (normalized.length < 2) {
-    return { valid: false, message: "Use 2-24 chars: letters, numbers, spaces, . ' -" }
+    return { valid: false, message: 'Use 2-24 chars' }
   }
   if (normalized.length > 24 || !USERNAME_PATTERN.test(normalized)) {
-    return { valid: false, message: "Use 2-24 chars: letters, numbers, spaces, . ' -" }
+    return { valid: false, message: 'Use 2-24 chars' }
   }
   return { valid: true, message: 'Looks good. 2-24 supported characters.' }
 }
@@ -98,7 +102,7 @@ function resetTouched() {
 }
 
 function syncViewport() {
-  isMobile.value = window.matchMedia('(max-width: 767px)').matches
+  isMobile.value = window.matchMedia('(max-width: 980px)').matches
 }
 
 function focus() {
@@ -139,6 +143,11 @@ watch(() => props.hasSavedUsername, (hasSavedUsername) => {
   if (!props.open || !isMobile.value || hasSavedUsername) return
   mobileStep.value = 1
 })
+
+watch(usernameDraft, (value) => {
+  const limited = limitUsernameDraft(value)
+  if (value !== limited) usernameDraft.value = limited
+}, { flush: 'sync' })
 
 watch(mobileStep, () => {
   if (!props.open) return
@@ -286,7 +295,7 @@ defineExpose({ focus })
             </div>
           </div>
 
-          <div v-else class="grid gap-3 min-[760px]:grid-cols-[minmax(190px,0.82fr)_minmax(260px,1.28fr)_minmax(180px,0.9fr)] min-[760px]:items-start">
+          <div v-else class="grid gap-3 min-[981px]:grid-cols-[minmax(190px,0.82fr)_minmax(260px,1.28fr)_minmax(180px,0.9fr)] min-[981px]:items-start">
             <div class="grid gap-2">
               <div class="flex items-baseline justify-between gap-3">
                 <label class="text-[10px] font-extrabold uppercase text-[var(--muted)]" for="prompt-username">Username</label>
@@ -365,7 +374,7 @@ defineExpose({ focus })
               >Back</button>
               <button
                 v-if="isMobile && mobileStep === 1"
-                class="inline-flex min-h-10 min-w-[118px] items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_40%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] px-3.5 text-xs font-[760] leading-none text-[var(--accent)] transition-[transform,background-color,border-color,box-shadow,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_54%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0 max-sm:w-full"
+                class="inline-flex min-h-10 min-w-[118px] items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_72%,black)] bg-[var(--accent)] px-3.5 text-xs font-[760] leading-none text-[var(--accent-text)] shadow-[0_6px_16px_color-mix(in_srgb,var(--accent)_16%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[transform,background-color,border-color,box-shadow,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--accent)_88%,black)] hover:shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_18%,transparent),inset_0_1px_0_rgba(255,255,255,0.18)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0 max-sm:w-full"
                 type="button"
                 :disabled="!usernameReady"
                 @click="nextStep"
