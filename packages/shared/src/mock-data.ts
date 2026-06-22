@@ -74,14 +74,25 @@ function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
   const predictions = seedPredictions(match)
   const [topPrediction] = predictions
   const matchStatus = matchStatusAt(match, now)
+  const kickoffAt = matchKickoffUtc(match)
 
   return {
     id: match.id,
     status: roomStatus(match, now),
     matchStatus,
     roomStatus: 'open',
-    kickoffAt: matchKickoffUtc(match),
+    kickoffAt,
     isFeatured: matchStatus === 'live',
+    currentScore: matchStatus === 'finished' && match.result
+      ? {
+          home: match.result.homeGoals,
+          away: match.result.awayGoals,
+          status: 'finished',
+          clock: match.result.status,
+          provider: 'fixture seed',
+          updatedAt: kickoffAt,
+        }
+      : undefined,
     home: match.home,
     away: match.away,
     mostBacked: {

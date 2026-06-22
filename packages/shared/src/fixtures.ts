@@ -53,6 +53,45 @@ const FLAG_ICON_SUBDIVISION_CODES = new Map<string, string>([
   ['Wales', 'gb-wls'],
 ])
 
+const SEEDED_RESULTS = [
+  { date: '2026-06-11', team1: 'Mexico', team2: 'South Africa', g1: 2, g2: 0 },
+  { date: '2026-06-11', team1: 'South Korea', team2: 'Czech Republic', g1: 2, g2: 1 },
+  { date: '2026-06-18', team1: 'Czech Republic', team2: 'South Africa', g1: 1, g2: 1 },
+  { date: '2026-06-18', team1: 'Mexico', team2: 'South Korea', g1: 1, g2: 0 },
+  { date: '2026-06-12', team1: 'Canada', team2: 'Bosnia & Herzegovina', g1: 1, g2: 1 },
+  { date: '2026-06-13', team1: 'Qatar', team2: 'Switzerland', g1: 1, g2: 1 },
+  { date: '2026-06-18', team1: 'Switzerland', team2: 'Bosnia & Herzegovina', g1: 4, g2: 1 },
+  { date: '2026-06-18', team1: 'Canada', team2: 'Qatar', g1: 6, g2: 0 },
+  { date: '2026-06-13', team1: 'Brazil', team2: 'Morocco', g1: 1, g2: 1 },
+  { date: '2026-06-13', team1: 'Haiti', team2: 'Scotland', g1: 0, g2: 1 },
+  { date: '2026-06-19', team1: 'Scotland', team2: 'Morocco', g1: 0, g2: 1 },
+  { date: '2026-06-19', team1: 'Brazil', team2: 'Haiti', g1: 3, g2: 0 },
+  { date: '2026-06-12', team1: 'USA', team2: 'Paraguay', g1: 4, g2: 1 },
+  { date: '2026-06-13', team1: 'Australia', team2: 'Turkey', g1: 2, g2: 0 },
+  { date: '2026-06-19', team1: 'USA', team2: 'Australia', g1: 2, g2: 0 },
+  { date: '2026-06-19', team1: 'Turkey', team2: 'Paraguay', g1: 0, g2: 1 },
+  { date: '2026-06-14', team1: 'Germany', team2: 'Curaçao', g1: 7, g2: 1 },
+  { date: '2026-06-14', team1: 'Ivory Coast', team2: 'Ecuador', g1: 1, g2: 0 },
+  { date: '2026-06-20', team1: 'Germany', team2: 'Ivory Coast', g1: 2, g2: 1 },
+  { date: '2026-06-20', team1: 'Ecuador', team2: 'Curaçao', g1: 0, g2: 0 },
+  { date: '2026-06-14', team1: 'Netherlands', team2: 'Japan', g1: 2, g2: 2 },
+  { date: '2026-06-14', team1: 'Sweden', team2: 'Tunisia', g1: 5, g2: 1 },
+  { date: '2026-06-20', team1: 'Netherlands', team2: 'Sweden', g1: 5, g2: 1 },
+  { date: '2026-06-20', team1: 'Tunisia', team2: 'Japan', g1: 0, g2: 4 },
+  { date: '2026-06-15', team1: 'Belgium', team2: 'Egypt', g1: 1, g2: 1 },
+  { date: '2026-06-15', team1: 'Iran', team2: 'New Zealand', g1: 2, g2: 2 },
+  { date: '2026-06-15', team1: 'Spain', team2: 'Cape Verde', g1: 0, g2: 0 },
+  { date: '2026-06-15', team1: 'Saudi Arabia', team2: 'Uruguay', g1: 1, g2: 1 },
+  { date: '2026-06-16', team1: 'France', team2: 'Senegal', g1: 3, g2: 1 },
+  { date: '2026-06-16', team1: 'Iraq', team2: 'Norway', g1: 1, g2: 4 },
+  { date: '2026-06-16', team1: 'Argentina', team2: 'Algeria', g1: 3, g2: 0 },
+  { date: '2026-06-16', team1: 'Austria', team2: 'Jordan', g1: 3, g2: 1 },
+  { date: '2026-06-17', team1: 'Portugal', team2: 'DR Congo', g1: 1, g2: 1 },
+  { date: '2026-06-17', team1: 'Uzbekistan', team2: 'Colombia', g1: 1, g2: 3 },
+  { date: '2026-06-17', team1: 'England', team2: 'Croatia', g1: 4, g2: 2 },
+  { date: '2026-06-17', team1: 'Ghana', team2: 'Panama', g1: 1, g2: 0 },
+]
+
 export function subdivisionFlagIso2(name: string, code?: string): string {
   const fromName = FLAG_ICON_SUBDIVISION_CODES.get(name)
   if (fromName) return fromName
@@ -74,6 +113,24 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function resultKey(date: string, home: string, away: string): string {
+  return `${date}:${slugify(home)}:${slugify(away)}`
+}
+
+const seededResultsByFixture = new Map(
+  SEEDED_RESULTS.map((result) => [resultKey(result.date, result.team1, result.team2), result]),
+)
+
+export function seededResultForFixture(date: string, homeName: string, awayName: string) {
+  const seed = seededResultsByFixture.get(resultKey(date, homeName, awayName))
+  if (!seed) return undefined
+  return {
+    homeGoals: seed.g1,
+    awayGoals: seed.g2,
+    status: 'FT' as const,
+  }
 }
 
 function titleCaseToken(token: string): string {
@@ -151,7 +208,7 @@ function toMatchId(raw: RawFixture, index: number): string {
 }
 
 function parseResult(raw: RawFixture): FixtureMatch['result'] | undefined {
-  if (!raw.score?.ft) return undefined
+  if (!raw.score?.ft) return seededResultForFixture(raw.date, raw.team1, raw.team2)
   return {
     homeGoals: raw.score.ft[0],
     awayGoals: raw.score.ft[1],
@@ -202,8 +259,6 @@ export function matchKickoffUtcMs(match: Pick<FixtureMatch, 'date' | 'time'>): n
 }
 
 export function matchStatusAt(match: FixtureMatch, now = new Date()): MatchStatus {
-  if (match.result?.status === 'FT') return 'finished'
-
   const kickoffMs = matchKickoffUtcMs(match)
   const nowMs = now.getTime()
   if (nowMs < kickoffMs) return 'upcoming'
@@ -242,7 +297,7 @@ export function matchCycleWindowForKickoff(
 export function upcomingMatches(matches: FixtureMatch[], now = new Date()): FixtureMatch[] {
   const nowMs = now.getTime()
   return matches
-    .filter((match) => match.result?.status !== 'FT' && matchKickoffUtcMs(match) >= nowMs)
+    .filter((match) => matchKickoffUtcMs(match) >= nowMs)
     .sort((left, right) => matchKickoffUtcMs(left) - matchKickoffUtcMs(right))
 }
 

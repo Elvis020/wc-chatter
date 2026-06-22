@@ -28,8 +28,10 @@ export interface Reply {
 export interface Comment {
   id: string
   authorId?: string
+  name: string
   text: string
   replies: Reply[]
+  createdAt: string
   editedAt?: string
 }
 
@@ -103,7 +105,38 @@ export interface PrizeClaim {
   createdAt: string
 }
 
+export type PrizeDeskResult = 'winner' | 'miss' | 'pending'
+
+export interface PrizeDeskEntry {
+  id: string
+  roomId: string
+  roomTitle: string
+  matchStatus: MatchStatus
+  home: Team
+  away: Team
+  finalScore?: RoomCurrentScore
+  predictionId: string
+  authorId?: string
+  authorName: string
+  predictedHomeScore: number
+  predictedAwayScore: number
+  createdAt: string
+  result: PrizeDeskResult
+  pickup?: {
+    claimId: string
+    question: string
+    answer: string
+    createdAt: string
+  }
+}
+
 export interface ReplyInput {
+  authorId: string
+  name: string
+  text: string
+}
+
+export interface PredictionCommentInput {
   authorId: string
   name: string
   text: string
@@ -159,6 +192,7 @@ export {
   matchKickoffUtcMs,
   matchStatusAt,
   nextCycleMatches,
+  seededResultForFixture,
   subdivisionFlagIso2,
   upcomingMatches,
   MATCH_LIVE_DURATION_MS,
