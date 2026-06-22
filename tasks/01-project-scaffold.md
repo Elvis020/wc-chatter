@@ -2,7 +2,7 @@
 
 ## Goal
 
-Create the production project structure for the WC Chatter app.
+Create the production project structure for the Turntabl Score Room app.
 
 ## Scope
 
@@ -17,7 +17,7 @@ Set up:
 ## Suggested Structure
 
 ```text
-wc-chatter/
+turntabl-score-room/
   apps/
     web/
       src/
@@ -64,4 +64,3 @@ PORT=8787
 - A developer can clone the repo, copy `.env.example` to `.env`, install dependencies, and run the app locally.
 - Frontend can call backend health check.
 - Backend exposes `GET /health` returning `{ "ok": true }`.
-

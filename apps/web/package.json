@@ -1,5 +1,5 @@
 {
-  "name": "@wc-chatter/web",
+  "name": "@turntabl-score-room/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@wc-chatter/shared": "workspace:*",
+    "@turntabl-score-room/shared": "workspace:*",
     "flag-icons": "^7.5.0",
     "vue": "^3.5.18"
   },

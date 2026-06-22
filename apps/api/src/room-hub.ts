@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
-import type { ApiEvent, TypingEvent } from '@wc-chatter/shared'
+import type { ApiEvent, TypingEvent } from '@turntabl-score-room/shared'
 
 function typingEventFromMessage(message: string): TypingEvent | null {
   let payload: unknown

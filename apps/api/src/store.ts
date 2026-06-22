@@ -12,8 +12,8 @@ import {
   type ThemeOption,
   type UpdatePredictionInput,
   type UpdateReplyInput,
-} from '@wc-chatter/shared'
-import { createMockRooms } from '@wc-chatter/shared/mock-data'
+} from '@turntabl-score-room/shared'
+import { createMockRooms } from '@turntabl-score-room/shared/mock-data'
 import { ApiError } from './errors.js'
 
 type WebSocketLike = {

@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono'
-import type { ApiEvent, CreatePredictionInput, PredictionCommentInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
+import type { ApiEvent, CreatePredictionInput, PredictionCommentInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@turntabl-score-room/shared'
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'

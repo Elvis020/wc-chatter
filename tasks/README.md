@@ -1,4 +1,4 @@
-# WC Chatter Implementation Tasks
+# Turntabl Score Room Implementation Tasks
 
 This folder breaks the match prediction app into small implementation tasks for junior developers.
 
@@ -26,7 +26,7 @@ Junior developers should not provision Cloudflare or Supabase. They should imple
 
 ## Product Scope
 
-WC Chatter is a lightweight internal match-room app where users can:
+Turntabl Score Room is a lightweight internal match-room app where users can:
 
 - Choose a browser-local username.
 - Submit one score prediction per room.

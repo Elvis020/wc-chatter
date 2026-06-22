@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@wc-chatter/shared'
+import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
@@ -2366,7 +2366,7 @@ onBeforeUnmount(() => {
       :class="isNotFound ? 'mx-auto mb-4 w-[min(1180px,calc(100%-32px))] max-md:mb-3 max-md:w-[min(100%,calc(100%-24px))]' : ''"
     >
       <div class="flex items-center">
-        <div class="inline-flex items-baseline gap-2 whitespace-nowrap text-[clamp(22px,2.2vw,30px)] leading-none font-black text-[var(--accent)]" aria-label="turntabl score room">turntabl <span class="font-[750] text-[var(--text)]">score room</span></div>
+        <div class="inline-flex items-baseline gap-2 whitespace-nowrap text-[clamp(22px,2.2vw,30px)] leading-none font-black text-[var(--accent)]" aria-label="Turntabl Score Room">turntabl <span class="font-[750] text-[var(--text)]">score room</span></div>
       </div>
 
       <div class="flex items-center gap-2">
@@ -2480,7 +2480,7 @@ onBeforeUnmount(() => {
         <div class="grid gap-1">
           <p class="m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Admin</p>
           <h1 id="admin-title" class="m-0 text-2xl font-black leading-tight text-[var(--text)]">Configurations</h1>
-          <p class="m-0 text-sm leading-snug text-[var(--muted)]">Manage the parts of the score room that need owner attention.</p>
+          <p class="m-0 text-sm leading-snug text-[var(--muted)]">Manage the parts of Turntabl Score Room that need owner attention.</p>
         </div>
         <span class="rounded-md border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--accent)]">Hidden route</span>
       </div>
@@ -2862,7 +2862,7 @@ onBeforeUnmount(() => {
         <div class="grid max-w-[1120px] justify-items-center gap-5 text-center">
           <div class="grid gap-2">
             <p class="m-0 text-xs font-extrabold uppercase tracking-[0.12em] text-[var(--accent)]">404 · full time</p>
-            <h1 id="not-found-title" class="m-0 text-[clamp(22px,2.4vw,30px)] font-black leading-[1.02] text-[var(--text)] min-[981px]:whitespace-nowrap">That link does not match any active score room.</h1>
+            <h1 id="not-found-title" class="m-0 text-[clamp(22px,2.4vw,30px)] font-black leading-[1.02] text-[var(--text)] min-[981px]:whitespace-nowrap">That link does not match any active Turntabl Score Room.</h1>
             <p class="m-0 mx-auto max-w-[58ch] text-[clamp(14px,1.05vw,16px)] leading-[1.55] text-[var(--soft)] min-[981px]:whitespace-nowrap">Jump back to the room list and pick a fixture that is actually on the board.</p>
           </div>
 
@@ -2883,7 +2883,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-else-if="loading" class="grid max-h-[calc(100svh-118px)] items-start gap-[18px] overflow-hidden min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)] max-md:max-h-[calc(100svh-96px)]" aria-label="Loading score room">
+    <section v-else-if="loading" class="grid max-h-[calc(100svh-118px)] items-start gap-[18px] overflow-hidden min-[981px]:grid-cols-[minmax(0,1fr)_minmax(320px,30%)] max-md:max-h-[calc(100svh-96px)]" aria-label="Loading Turntabl Score Room">
       <div class="grid gap-[18px] max-md:gap-3">
         <div class="match-stage-sticky">
           <section class="match-stage relative overflow-hidden rounded-xl border border-[var(--line)] p-7 max-md:rounded-[10px]">

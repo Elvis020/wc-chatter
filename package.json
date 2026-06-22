@@ -1,20 +1,20 @@
 {
-  "name": "wc-chatter",
+  "name": "turntabl-score-room",
   "private": true,
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,api -c cyan,yellow \"bun --filter @wc-chatter/web dev\" \"bun --filter @wc-chatter/api dev\"",
+    "dev": "concurrently -n web,api -c cyan,yellow \"bun --filter @turntabl-score-room/web dev\" \"bun --filter @turntabl-score-room/api dev\"",
     "build": "bun run build:shared && bun run build:api && bun run build:web",
-    "build:shared": "bun --filter @wc-chatter/shared build",
-    "build:web": "bun --filter @wc-chatter/web build",
-    "build:api": "bun --filter @wc-chatter/api build",
+    "build:shared": "bun --filter @turntabl-score-room/shared build",
+    "build:web": "bun --filter @turntabl-score-room/web build",
+    "build:api": "bun --filter @turntabl-score-room/api build",
     "typecheck": "bun run typecheck:shared && bun run typecheck:api && bun run typecheck:web",
-    "typecheck:shared": "bun --filter @wc-chatter/shared typecheck",
-    "typecheck:web": "bun --filter @wc-chatter/web typecheck",
-    "typecheck:api": "bun --filter @wc-chatter/api typecheck",
+    "typecheck:shared": "bun --filter @turntabl-score-room/shared typecheck",
+    "typecheck:web": "bun --filter @turntabl-score-room/web typecheck",
+    "typecheck:api": "bun --filter @turntabl-score-room/api typecheck",
     "test": "bun test"
   },
   "devDependencies": {

@@ -1,6 +1,17 @@
-import type { ThemeId } from '@wc-chatter/shared'
+import type { ThemeId } from '@turntabl-score-room/shared'
 
 const STORAGE_KEYS = {
+  userId: 'turntabl-score-room-user-id',
+  username: 'turntabl-score-room-username',
+  prizeQuestion: 'turntabl-score-room-prize-question',
+  prizeAnswer: 'turntabl-score-room-prize-answer',
+  likes: 'turntabl-score-room-liked-predictions',
+  theme: 'turntabl-score-room-theme',
+  activeRoomId: 'turntabl-score-room-active-room-id',
+  predictionDrafts: 'turntabl-score-room-prediction-drafts',
+  replyDrafts: 'turntabl-score-room-reply-drafts',
+} as const
+const LEGACY_STORAGE_KEYS = {
   userId: 'wc-chatter-user-id',
   username: 'wc-chatter-username',
   prizeQuestion: 'wc-chatter-prize-question',
@@ -14,7 +25,7 @@ const STORAGE_KEYS = {
 const VALID_THEMES = new Set<ThemeId>(['paper', 'desk', 'pub', 'press'])
 const memoryStorage = new Map<string, string>()
 
-function readStorage(key: string) {
+function rawReadStorage(key: string) {
   try {
     return localStorage.getItem(key) ?? memoryStorage.get(key) ?? ''
   } catch {
@@ -31,6 +42,28 @@ function writeStorage(key: string, value: string) {
   }
 }
 
+function removeStorage(key: string) {
+  memoryStorage.delete(key)
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Ignore storage cleanup errors for restricted environments.
+  }
+}
+
+function readStorage(key: string, legacyKey?: string) {
+  const currentValue = rawReadStorage(key)
+  if (currentValue) return currentValue
+  if (!legacyKey) return ''
+
+  const legacyValue = rawReadStorage(legacyKey)
+  if (!legacyValue) return ''
+
+  writeStorage(key, legacyValue)
+  removeStorage(legacyKey)
+  return legacyValue
+}
+
 function createUserId() {
   if (globalThis.crypto?.randomUUID) {
     return `user-${globalThis.crypto.randomUUID()}`
@@ -40,7 +73,7 @@ function createUserId() {
 }
 
 export function getOrCreateUserId() {
-  const existing = readStorage(STORAGE_KEYS.userId)
+  const existing = readStorage(STORAGE_KEYS.userId, LEGACY_STORAGE_KEYS.userId)
   if (existing) return existing
 
   const next = createUserId()
@@ -49,7 +82,7 @@ export function getOrCreateUserId() {
 }
 
 export function getStoredUsername() {
-  return readStorage(STORAGE_KEYS.username)
+  return readStorage(STORAGE_KEYS.username, LEGACY_STORAGE_KEYS.username)
 }
 
 export function setStoredUsername(value: string) {
@@ -57,7 +90,7 @@ export function setStoredUsername(value: string) {
 }
 
 export function getStoredPrizeQuestion() {
-  return readStorage(STORAGE_KEYS.prizeQuestion)
+  return readStorage(STORAGE_KEYS.prizeQuestion, LEGACY_STORAGE_KEYS.prizeQuestion)
 }
 
 export function setStoredPrizeQuestion(value: string) {
@@ -65,7 +98,7 @@ export function setStoredPrizeQuestion(value: string) {
 }
 
 export function getStoredPrizeAnswer() {
-  return readStorage(STORAGE_KEYS.prizeAnswer)
+  return readStorage(STORAGE_KEYS.prizeAnswer, LEGACY_STORAGE_KEYS.prizeAnswer)
 }
 
 export function setStoredPrizeAnswer(value: string) {
@@ -74,7 +107,7 @@ export function setStoredPrizeAnswer(value: string) {
 
 export function getStoredLikes() {
   try {
-    return new Set<string>(JSON.parse(readStorage(STORAGE_KEYS.likes) || '[]'))
+    return new Set<string>(JSON.parse(readStorage(STORAGE_KEYS.likes, LEGACY_STORAGE_KEYS.likes) || '[]'))
   } catch {
     return new Set<string>()
   }
@@ -85,7 +118,7 @@ export function setStoredLikes(likes: Set<string>) {
 }
 
 export function getStoredTheme(): ThemeId {
-  const storedTheme = readStorage(STORAGE_KEYS.theme) as ThemeId
+  const storedTheme = readStorage(STORAGE_KEYS.theme, LEGACY_STORAGE_KEYS.theme) as ThemeId
   return VALID_THEMES.has(storedTheme) ? storedTheme : 'paper'
 }
 
@@ -94,16 +127,16 @@ export function setStoredTheme(value: ThemeId) {
 }
 
 export function getStoredActiveRoomId() {
-  return readStorage(STORAGE_KEYS.activeRoomId)
+  return readStorage(STORAGE_KEYS.activeRoomId, LEGACY_STORAGE_KEYS.activeRoomId)
 }
 
 export function setStoredActiveRoomId(value: string) {
   writeStorage(STORAGE_KEYS.activeRoomId, value)
 }
 
-function getStoredRecord(key: string) {
+function getStoredRecord(key: string, legacyKey?: string) {
   try {
-    const value = JSON.parse(readStorage(key) || '{}') as Record<string, string>
+    const value = JSON.parse(readStorage(key, legacyKey) || '{}') as Record<string, string>
     return value && typeof value === 'object' ? value : {}
   } catch {
     return {}
@@ -118,7 +151,7 @@ function setStoredRecord(key: string, value: Record<string, string>) {
 }
 
 export function getStoredPredictionDrafts() {
-  return getStoredRecord(STORAGE_KEYS.predictionDrafts)
+  return getStoredRecord(STORAGE_KEYS.predictionDrafts, LEGACY_STORAGE_KEYS.predictionDrafts)
 }
 
 export function setStoredPredictionDrafts(value: Record<string, string>) {
@@ -126,7 +159,7 @@ export function setStoredPredictionDrafts(value: Record<string, string>) {
 }
 
 export function getStoredReplyDrafts() {
-  return getStoredRecord(STORAGE_KEYS.replyDrafts)
+  return getStoredRecord(STORAGE_KEYS.replyDrafts, LEGACY_STORAGE_KEYS.replyDrafts)
 }
 
 export function setStoredReplyDrafts(value: Record<string, string>) {

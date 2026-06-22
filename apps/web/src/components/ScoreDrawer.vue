@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Room } from '@wc-chatter/shared'
+import type { Room } from '@turntabl-score-room/shared'
 import { ref } from 'vue'
 
 defineProps<{

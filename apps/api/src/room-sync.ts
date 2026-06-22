@@ -7,7 +7,7 @@ import {
   type FixtureMatch,
   type MatchStatus,
   type RoomInteractionStatus,
-} from '@wc-chatter/shared'
+} from '@turntabl-score-room/shared'
 import { ApiError } from './errors.js'
 
 type DbRoomStatus = 'draft' | 'live' | 'closed' | 'archived'

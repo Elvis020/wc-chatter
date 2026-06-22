@@ -8,8 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@wc-chatter/shared': fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)),
-      '@wc-chatter/shared/mock-data': fileURLToPath(new URL('../../packages/shared/src/mock-data.ts', import.meta.url)),
+      '@turntabl-score-room/shared': fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)),
+      '@turntabl-score-room/shared/mock-data': fileURLToPath(new URL('../../packages/shared/src/mock-data.ts', import.meta.url)),
     },
   },
   server: {

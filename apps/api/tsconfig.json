@@ -9,8 +9,8 @@
     "outDir": "dist",
     "types": ["bun-types"],
     "paths": {
-      "@wc-chatter/shared": ["packages/shared/src/index.ts"],
-      "@wc-chatter/shared/mock-data": ["packages/shared/src/mock-data.ts"]
+      "@turntabl-score-room/shared": ["packages/shared/src/index.ts"],
+      "@turntabl-score-room/shared/mock-data": ["packages/shared/src/mock-data.ts"]
     }
   },
   "include": ["src/**/*.ts"]

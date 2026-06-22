@@ -1,5 +1,5 @@
 {
-  "name": "@wc-chatter/api",
+  "name": "@turntabl-score-room/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
-    "@wc-chatter/shared": "workspace:*",
+    "@turntabl-score-room/shared": "workspace:*",
     "hono": "^4.9.0"
   },
   "devDependencies": {

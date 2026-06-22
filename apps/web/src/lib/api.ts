@@ -1,4 +1,4 @@
-import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
+import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@turntabl-score-room/shared'
 
 const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8787'
 const wsBaseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8787/ws'

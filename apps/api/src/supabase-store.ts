@@ -23,7 +23,7 @@ import {
   type ThemeOption,
   type UpdatePredictionInput,
   type UpdateReplyInput,
-} from '@wc-chatter/shared'
+} from '@turntabl-score-room/shared'
 import { ApiError } from './errors.js'
 
 type WebSocketLike = {

@@ -1,4 +1,4 @@
-import type { RoomScoreStatus } from '@wc-chatter/shared'
+import type { RoomScoreStatus } from '@turntabl-score-room/shared'
 
 export type LiveScoreline = {
   provider: string

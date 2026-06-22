@@ -1,4 +1,4 @@
-# WC Chatter
+# Turntabl Score Room
 
 Simple match-room app for score predictions, likes, replies, and live room switching.
 
@@ -41,9 +41,9 @@ bun run typecheck
 Useful app-specific commands:
 
 ```bash
-bun --filter @wc-chatter/web dev
-bun --filter @wc-chatter/api dev
-bun --filter @wc-chatter/api sync:rooms
+bun --filter @turntabl-score-room/web dev
+bun --filter @turntabl-score-room/api dev
+bun --filter @turntabl-score-room/api sync:rooms
 ```
 
 ## Load Testing
@@ -51,7 +51,7 @@ bun --filter @wc-chatter/api sync:rooms
 Run the local 100-user chat load test:
 
 ```bash
-bun --filter @wc-chatter/api load:test
+bun --filter @turntabl-score-room/api load:test
 ```
 
 Run it against a deployed API:
@@ -59,13 +59,13 @@ Run it against a deployed API:
 ```bash
 LOAD_TEST_API_URL=https://your-api.example.com \
 LOAD_TEST_WS_URL=wss://your-api.example.com/ws \
-bun --filter @wc-chatter/api load:test
+bun --filter @turntabl-score-room/api load:test
 ```
 
 The default audience mix tags simulated users as Ghana-heavy:
 
 ```bash
-LOAD_TEST_AUDIENCE_MIX=GH:70,UK:10,US:10,IE:10 bun --filter @wc-chatter/api load:test
+LOAD_TEST_AUDIENCE_MIX=GH:70,UK:10,US:10,IE:10 bun --filter @turntabl-score-room/api load:test
 ```
 
 Run a hotspot reply test, where many users reply under one prediction:
@@ -75,7 +75,7 @@ LOAD_TEST_USERS=300 \
 LOAD_TEST_SOCKETS=300 \
 LOAD_TEST_SCENARIO=reply-hotspot \
 LOAD_TEST_AUDIENCE_MIX=GH:70,UK:10,US:10,IE:10 \
-bun --filter @wc-chatter/api load:test
+bun --filter @turntabl-score-room/api load:test
 ```
 
 That mix is for scenario labeling only. Real regional latency must be measured by running the same deployed test from regional runners or machines near the audience, especially Ghana, UK, US, and Ireland.
