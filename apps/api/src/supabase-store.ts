@@ -115,8 +115,12 @@ const ROOM_STATUS_ORDER: Record<RoomRow['status'], number> = {
 }
 const ROOM_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, current_home_score, current_away_score, score_status, score_clock, score_provider, score_updated_at, event_date, kickoff_at, created_at'
+const ROOM_SCORE_SELECT =
+  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, current_home_score, current_away_score, score_status, score_clock, score_provider, score_updated_at, event_date, created_at'
 const ROOM_STATE_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, event_date, kickoff_at, created_at'
+const ROOM_STATE_NO_KICKOFF_SELECT =
+  'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, match_status, room_status, is_featured, event_date, created_at'
 const LEGACY_ROOM_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at'
 const SUPABASE_IN_BATCH_SIZE = 100
@@ -472,7 +476,23 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     if (isMissingColumnError(response.error)) {
       response = await supabase
         .from('rooms')
+        .select(ROOM_SCORE_SELECT)
+        .order('event_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+    }
+
+    if (isMissingColumnError(response.error)) {
+      response = await supabase
+        .from('rooms')
         .select(ROOM_STATE_SELECT)
+        .order('event_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+    }
+
+    if (isMissingColumnError(response.error)) {
+      response = await supabase
+        .from('rooms')
+        .select(ROOM_STATE_NO_KICKOFF_SELECT)
         .order('event_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false })
     }
@@ -512,7 +532,23 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     if (isMissingColumnError(response.error)) {
       response = await supabase
         .from('rooms')
+        .select(ROOM_SCORE_SELECT)
+        .eq(column, roomRef)
+        .maybeSingle()
+    }
+
+    if (isMissingColumnError(response.error)) {
+      response = await supabase
+        .from('rooms')
         .select(ROOM_STATE_SELECT)
+        .eq(column, roomRef)
+        .maybeSingle()
+    }
+
+    if (isMissingColumnError(response.error)) {
+      response = await supabase
+        .from('rooms')
+        .select(ROOM_STATE_NO_KICKOFF_SELECT)
         .eq(column, roomRef)
         .maybeSingle()
     }

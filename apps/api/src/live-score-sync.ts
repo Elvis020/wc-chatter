@@ -240,10 +240,7 @@ export async function syncLiveRoomScores(
 
   await supabase.from('rooms').update({ is_featured: false }).eq('is_featured', true)
 
-  let response: any = await supabase
-    .from('rooms')
-    .upsert(upserts, { onConflict: 'slug' })
-    .select('slug')
+  let response: any = await updateExistingRooms(supabase, upserts)
 
   if (isMissingColumnError(response.error)) {
     console.warn('Live score sync is using room-state columns without score columns. Apply the scoreline migration and reload Supabase/PostgREST schema.')

@@ -5,7 +5,7 @@ import { syncLiveRoomScores } from '../src/live-score-sync'
 const argentinaAustriaSlug = '2026-06-22-57-argentina-austria'
 
 class FakeSupabase {
-  upserts: Array<Record<string, unknown>> = []
+  updates: Array<Record<string, unknown>> = []
 
   constructor(private readonly rooms: Array<Record<string, unknown>>) {}
 
@@ -19,21 +19,20 @@ class FakeSupabase {
           error: null,
         }),
       }),
-      update: (_values: Record<string, unknown>) => ({
-        eq: () => ({
+      update: (values: Record<string, unknown>) => ({
+        eq: (column: string, value: unknown) => ({
+          select: () => {
+            const matched = this.rooms.filter((room) => room[column] === value)
+            this.updates.push(...matched.map((room) => ({ slug: room.slug, ...values })))
+            return {
+              data: matched.map((room) => ({ slug: room.slug })),
+              error: null,
+            }
+          },
           data: [],
           error: null,
         }),
       }),
-      upsert: (rows: Array<Record<string, unknown>>) => {
-        this.upserts = rows
-        return {
-          select: () => ({
-            data: rows.map((row) => ({ slug: row.slug })),
-            error: null,
-          }),
-        }
-      },
     }
   }
 }
@@ -78,7 +77,7 @@ describe('live score sync', () => {
     })
 
     expect(result.updated).toBe(1)
-    expect(supabase.upserts).toContainEqual(
+    expect(supabase.updates).toContainEqual(
       expect.objectContaining({
         slug: argentinaAustriaSlug,
         match_status: 'finished',
@@ -109,6 +108,6 @@ describe('live score sync', () => {
     })
 
     expect(result.updated).toBe(0)
-    expect(supabase.upserts).toEqual([])
+    expect(supabase.updates).toEqual([])
   })
 })
