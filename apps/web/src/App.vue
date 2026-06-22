@@ -1617,14 +1617,22 @@ function updateFeedNavMode() {
 }
 
 function scrollPredictionFeed(direction: 'up' | 'down') {
-  const target =
-    direction === 'up'
-      ? predictionFeed.value
-      : predictionFeedList.value?.lastElementChild
+  if (direction === 'up') {
+    const target = predictionFeedList.value ?? predictionFeed.value
+    if (!target) return
 
+    const top = window.scrollY + target.getBoundingClientRect().top - 12
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: 'smooth',
+    })
+    return
+  }
+
+  const target = predictionFeedList.value?.lastElementChild
   target?.scrollIntoView({
     behavior: 'smooth',
-    block: direction === 'up' ? 'start' : 'end',
+    block: 'end',
   })
 }
 
