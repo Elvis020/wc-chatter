@@ -31,7 +31,7 @@
   "env": {
     "production": {
       "vars": {
-        "APP_ORIGIN": "https://turntabl-score-room.pages.dev"
+        "APP_ORIGIN": "https://wc-chatter.pages.dev"
       },
       "durable_objects": {
         "bindings": [
