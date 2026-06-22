@@ -4,9 +4,9 @@ import { createStore } from '../src/store'
 describe('fallback store prize pickup verification', () => {
   test('saves pickup question and answer when creating a prediction', () => {
     const store = createStore()
-    const [room] = store.getRooms()
+    const room = store.getRooms().find((item) => item.matchStatus !== 'finished' && item.roomStatus === 'open')
 
-    if (!room) throw new Error('Expected at least one mock room.')
+    if (!room) throw new Error('Expected at least one writable mock room.')
 
     store.addPrediction(room.id, {
       authorId: 'user-00000000-0000-4000-8000-000000000001',
@@ -32,9 +32,9 @@ describe('fallback store prize pickup verification', () => {
 
   test('allows the first comment to be added after a score-only prediction is posted', () => {
     const store = createStore()
-    const [room] = store.getRooms()
+    const room = store.getRooms().find((item) => item.matchStatus !== 'finished' && item.roomStatus === 'open')
 
-    if (!room) throw new Error('Expected at least one mock room.')
+    if (!room) throw new Error('Expected at least one writable mock room.')
 
     const updatedRoom = store.addPrediction(room.id, {
       authorId: 'user-00000000-0000-4000-8000-000000000001',

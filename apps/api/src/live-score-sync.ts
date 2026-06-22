@@ -1,6 +1,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js'
 import {
   loadFixtures,
+  MATCH_LIVE_DURATION_MS,
   matchKickoffUtcMs,
   matchStatusAt,
   type FixtureMatch,
@@ -23,6 +24,9 @@ type ScoreRoomRow = {
   slug: string
   status: DbRoomStatus
   room_status?: RoomInteractionStatus | null
+  current_home_score?: number | null
+  current_away_score?: number | null
+  score_status?: LiveScoreline['status'] | null
 }
 
 type ScoreRoomUpdate = {
@@ -50,6 +54,7 @@ export type LiveScoreSyncResult = {
 
 const LIVE_WINDOW_BEFORE_MS = 15 * 60 * 1000
 const LIVE_WINDOW_AFTER_MS = 140 * 60 * 1000
+const FINISHED_SCORE_BACKFILL_AFTER_MS = 48 * 60 * 60 * 1000
 const LOCKED_ROOM_STATUSES = new Set<RoomInteractionStatus>(['closed', 'hidden'])
 
 function isMissingColumnError(error?: { code?: string } | null) {
@@ -74,6 +79,22 @@ function isInLiveScoreWindow(match: FixtureMatch, now: Date) {
   return nowMs >= kickoffMs - LIVE_WINDOW_BEFORE_MS && nowMs <= kickoffMs + LIVE_WINDOW_AFTER_MS
 }
 
+function isInFinishedScoreBackfillWindow(match: FixtureMatch, now: Date) {
+  const kickoffMs = matchKickoffUtcMs(match)
+  const nowMs = now.getTime()
+  return nowMs > kickoffMs + MATCH_LIVE_DURATION_MS && nowMs <= kickoffMs + FINISHED_SCORE_BACKFILL_AFTER_MS
+}
+
+function hasFinishedScore(room: ScoreRoomRow) {
+  return (
+    room.current_home_score !== undefined &&
+    room.current_home_score !== null &&
+    room.current_away_score !== undefined &&
+    room.current_away_score !== null &&
+    room.score_status === 'finished'
+  )
+}
+
 function scorelineMatch(scoreline: LiveScoreline, match: FixtureMatch) {
   const datedKey = `${scoreline.date}:${scorelineKeyForNames(scoreline.homeName, scoreline.awayName)}`
   const matchDatedKey = `${match.date}:${scorelineKeyForNames(match.homeName, match.awayName)}`
@@ -93,7 +114,7 @@ async function getExistingRooms(supabase: SupabaseClient, slugs: string[]) {
 
   let response: any = await supabase
     .from('rooms')
-    .select('slug, status, room_status')
+    .select('slug, status, room_status, current_home_score, current_away_score, score_status')
     .in('slug', slugs)
 
   if (isMissingColumnError(response.error)) {
@@ -139,7 +160,10 @@ export async function syncLiveRoomScores(
   options: { now?: Date; provider?: LiveScorelineProvider; dryRun?: boolean } = {},
 ): Promise<LiveScoreSyncResult> {
   const now = options.now ?? new Date()
-  const candidates = loadFixtures().filter((match) => isInLiveScoreWindow(match, now))
+  const liveWindowMatches = loadFixtures().filter((match) => isInLiveScoreWindow(match, now))
+  const backfillMatches = loadFixtures().filter((match) => isInFinishedScoreBackfillWindow(match, now))
+  const candidates = [...new Map([...liveWindowMatches, ...backfillMatches].map((match) => [match.id, match])).values()]
+  const liveWindowSlugs = new Set(liveWindowMatches.map((match) => match.id))
 
   if (candidates.length === 0) {
     return {
@@ -165,6 +189,9 @@ export async function syncLiveRoomScores(
     if (!room) return null
 
     const scoreline = scorelines.find((item) => scorelineMatch(item, match))
+    const isBackfillOnly = !liveWindowSlugs.has(match.id)
+    if (isBackfillOnly && (hasFinishedScore(room) || scoreline?.status !== 'finished')) return null
+
     const roomStatus = room.room_status ?? legacyRoomStatus(room.status)
     const keptRoomStatus = LOCKED_ROOM_STATUSES.has(roomStatus) ? roomStatus : 'open'
     const matchStatus = matchStatusFromScoreline(scoreline, match, now)
