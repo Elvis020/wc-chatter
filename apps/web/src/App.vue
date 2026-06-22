@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type CreatePredictionInput, type Prediction, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@wc-chatter/shared'
+import { compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@wc-chatter/shared'
 import 'flag-icons/css/flag-icons.min.css'
-import { connectRoomEvents, createPrediction, createReply, fetchBootstrap, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
+import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, togglePredictionLike, updatePredictionText, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
 import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
@@ -31,10 +31,12 @@ const MIN_PREDICTION_COMMENT_LENGTH = 4
 const COMMENT_PREVIEW_LIMIT = 3
 const ROOM_PAGE_SIZE = 4
 const ROOM_REFRESH_MS = 60_000
+const ADMIN_PRIZE_PAGE_SIZE = 6
 const TYPING_IDLE_MS = 1800
 const TYPING_THROTTLE_MS = 1400
 const TYPING_VISIBLE_MS = 3200
 const TOP_PICK_SLIDE_MS = 4400
+const ADMIN_ROUTE = '/turntabl-prize-desk'
 const fixtureKickoffs = new Map(
   loadFixtures().flatMap((match) => {
     const kickoff = matchKickoffUtc(match)
@@ -45,10 +47,11 @@ const fixtureKickoffs = new Map(
   }),
 )
 type FeedSortMode = 'likes' | 'comments'
+type AdminPrizeFilter = 'all' | 'winner' | 'pending' | 'verified' | 'missing'
 type RealtimeStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline'
 type PendingIdentityAction =
   | { type: 'like'; predictionId: string; authorId?: string }
-  | { type: 'reply'; predictionId: string; commentId: string }
+  | { type: 'reply'; predictionId: string; targetId: string }
   | { type: 'prediction' }
 type FaviconTheme = {
   accent: string
@@ -70,6 +73,17 @@ type TopPickInsight = {
   detail: string
   caption: string
   tone: 'hot' | 'calm' | 'split' | 'sharp' | 'empty'
+  crowd?: {
+    pickCount: number
+    total: number
+    share: number
+    predictorLabel: string
+  }
+  weather?: {
+    picks: number
+    comments: number
+    likes: number
+  }
   split?: {
     home: number
     draw: number
@@ -96,9 +110,15 @@ const prizeAnswer = ref(getStoredPrizeAnswer())
 const prizeAnswerDraft = ref(prizeAnswer.value)
 const usernameError = ref('')
 const rooms = ref<Room[]>([])
+const adminEntries = ref<PrizeDeskEntry[]>([])
+const adminPrizeFilter = ref<AdminPrizeFilter>('all')
+const adminPrizePage = ref(0)
+const selectedAdminEntryId = ref('')
 const activeRoomId = ref(getStoredActiveRoomId())
 const loading = ref(true)
 const refreshingRooms = ref(false)
+const adminLoading = ref(false)
+const adminError = ref('')
 const errorMessage = ref('')
 const mutationError = ref('')
 const realtimeStatus = ref<RealtimeStatus>('idle')
@@ -107,22 +127,27 @@ const predictionModalOpen = ref(false)
 const submittingPrediction = ref(false)
 const identityPromptOpen = ref(false)
 const identityPromptMessage = ref('')
+const isMobileViewportState = ref(window.matchMedia('(max-width: 767px)').matches)
 const themeMenuOpen = ref(false)
 const selectedTheme = ref<ThemeId>(getStoredTheme() as ThemeId)
 const themePreview = ref<ThemeId | null>(null)
+const highlightedThemeIndex = ref(0)
 const feedSortMode = ref<FeedSortMode>('likes')
 const roomPage = ref(0)
 const likedPredictions = ref(getStoredLikes())
-const activeReplyTarget = ref<{ predictionId: string; commentId: string } | null>(null)
+const activeReplyTarget = ref<{ predictionId: string; targetId: string } | null>(null)
 const closingReplyTargets = ref(new Set<string>())
 const expandedCommentCards = ref(new Set<string>())
 const fastCollapsingCommentCards = ref(new Set<string>())
 const pendingIdentityAction = ref<PendingIdentityAction | null>(null)
+const activeTopPickIndex = ref(0)
 const themeTrigger = ref<HTMLElement | null>(null)
 const identityPrompt = ref<InstanceType<typeof IdentityPrompt> | null>(null)
+const scoreDrawer = ref<InstanceType<typeof ScoreDrawer> | null>(null)
 const predictionFeed = ref<HTMLElement | null>(null)
 const predictionFeedList = ref<HTMLElement | null>(null)
 const themeMenuStyle = ref<Record<string, string>>({})
+const themeOptionRefs = ref<HTMLButtonElement[]>([])
 const ws = ref<WebSocket | null>(null)
 const submittingReplies = ref(new Set<string>())
 const submittingEdits = ref(new Set<string>())
@@ -136,16 +161,18 @@ const updatedPredictionIds = ref(new Set<string>())
 const typingPeople = ref(new Map<string, TypingState>())
 const feedNavMode = ref<'hidden' | 'up' | 'down'>('hidden')
 const roomSwitchDirection = ref<'forward' | 'backward'>('forward')
-const activeTopPickIndex = ref(0)
 let identityPromptTimer: ReturnType<typeof window.setTimeout> | null = null
 let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 let topPickCarouselTimer: ReturnType<typeof window.setInterval> | null = null
+let themePreviewTimer: ReturnType<typeof window.setTimeout> | null = null
+let themeTransitionTimer: ReturnType<typeof window.setTimeout> | null = null
 let fastCommentCollapseTimer: ReturnType<typeof window.setTimeout> | null = null
 let replyFocusTimers: ReturnType<typeof window.setTimeout>[] = []
 let livePulseTimer: ReturnType<typeof window.setTimeout> | null = null
 let typingCleanupTimer: ReturnType<typeof window.setTimeout> | null = null
+let lastFocusedElement: HTMLElement | null = null
 let reconnectAttempt = 0
 let socketToken = 0
 let roomsRefreshInFlight = false
@@ -222,7 +249,16 @@ const scoreCtaLabel = computed(() => {
   return hasUserPredicted.value ? 'Already predicted' : 'Drop your score'
 })
 const scoreCtaDisabled = computed(() => hasUserPredicted.value || activeRoomPredictionsClosed.value)
-const isNotFound = computed(() => routePath.value !== '/')
+const isAdminRoute = computed(() => routePath.value === ADMIN_ROUTE)
+const isNotFound = computed(() => routePath.value !== '/' && !isAdminRoute.value)
+const showMobileAdminMessage = computed(() => isAdminRoute.value && isMobileViewportState.value)
+const shouldAutoPromptUsername = computed(() =>
+  !isNotFound.value &&
+  !isAdminRoute.value &&
+  !errorMessage.value &&
+  rooms.value.length > 0 &&
+  !isMobileViewportState.value,
+)
 const orderedRooms = computed(() =>
   [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { fixtureKickoffs })),
 )
@@ -240,11 +276,44 @@ const statusNotice = computed(() => {
   if (realtimeStatus.value === 'offline') return 'Live updates are offline. Retrying...'
   return ''
 })
+const adminWinnerCount = computed(() => adminEntries.value.filter((entry) => entry.result === 'winner').length)
+const adminVerifiedCount = computed(() => adminEntries.value.filter((entry) => entry.pickup).length)
+const adminPendingCount = computed(() => adminEntries.value.filter((entry) => entry.result === 'pending').length)
+const adminMissingPickupCount = computed(() => adminEntries.value.filter((entry) => !entry.pickup).length)
+const adminFilteredEntries = computed(() => {
+  if (adminPrizeFilter.value === 'winner') return adminEntries.value.filter((entry) => entry.result === 'winner')
+  if (adminPrizeFilter.value === 'pending') return adminEntries.value.filter((entry) => entry.result === 'pending')
+  if (adminPrizeFilter.value === 'verified') return adminEntries.value.filter((entry) => entry.pickup)
+  if (adminPrizeFilter.value === 'missing') return adminEntries.value.filter((entry) => !entry.pickup)
+  return adminEntries.value
+})
+const adminPrizePageCount = computed(() => Math.max(1, Math.ceil(adminFilteredEntries.value.length / ADMIN_PRIZE_PAGE_SIZE)))
+const adminPrizeVisibleEntries = computed(() => {
+  const start = adminPrizePage.value * ADMIN_PRIZE_PAGE_SIZE
+  return adminFilteredEntries.value.slice(start, start + ADMIN_PRIZE_PAGE_SIZE)
+})
+const adminPrizeRangeLabel = computed(() => {
+  if (!adminFilteredEntries.value.length) return '0 of 0'
+  const start = adminPrizePage.value * ADMIN_PRIZE_PAGE_SIZE + 1
+  const end = Math.min(adminFilteredEntries.value.length, start + ADMIN_PRIZE_PAGE_SIZE - 1)
+  return `${start}-${end} of ${adminFilteredEntries.value.length}`
+})
+const selectedAdminEntry = computed(() =>
+  adminEntries.value.find((entry) => entry.id === selectedAdminEntryId.value) ?? null,
+)
 const effectiveTheme = computed(() => themePreview.value ?? selectedTheme.value)
 
 watch(effectiveTheme, (value) => {
+  document.body.classList.add('theme-transitioning')
+  if (themeTransitionTimer) {
+    window.clearTimeout(themeTransitionTimer)
+  }
   document.body.dataset.theme = value === 'paper' ? '' : value
   updateFavicon(value)
+  themeTransitionTimer = window.setTimeout(() => {
+    document.body.classList.remove('theme-transitioning')
+    themeTransitionTimer = null
+  }, 260)
 }, { immediate: true })
 
 watch(selectedTheme, (value) => {
@@ -266,6 +335,16 @@ watch(() => topPickInsights.value.length, () => {
 watch(activeRoomId, (roomId) => {
   if (roomId) setStoredActiveRoomId(roomId)
   connectActiveRoomEvents(roomId)
+})
+
+watch(adminPrizeFilter, () => {
+  adminPrizePage.value = 0
+})
+
+watch(adminPrizePageCount, (pageCount) => {
+  if (adminPrizePage.value >= pageCount) {
+    adminPrizePage.value = pageCount - 1
+  }
 })
 
 watch(rooms, () => {
@@ -291,6 +370,32 @@ watch(replyDrafts, () => {
 
 watch([sortedPredictions, activeRoomId], () => {
   nextTick(updateFeedNavMode)
+})
+
+watch(themeMenuOpen, (open) => {
+  if (!open) return
+  highlightedThemeIndex.value = Math.max(0, mockThemes.findIndex((theme) => theme.id === selectedTheme.value))
+  nextTick(() => {
+    positionThemeMenu()
+    focusThemeOption(highlightedThemeIndex.value)
+  })
+})
+
+watch([identityPromptOpen, predictionModalOpen, selectedAdminEntry], ([identityOpen, predictionOpen, adminEntry]) => {
+  if (identityOpen || predictionOpen || adminEntry) {
+    if (!lastFocusedElement) {
+      lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    }
+    nextTick(() => {
+      focusActiveOverlay()
+    })
+    return
+  }
+
+  if (lastFocusedElement) {
+    lastFocusedElement.focus({ preventScroll: true })
+    lastFocusedElement = null
+  }
 })
 
 function validateUsername(value: string) {
@@ -361,6 +466,9 @@ function resetUsername() {
 function openIdentityPrompt(message = 'Set your username first.', action?: PendingIdentityAction) {
   if (username.value && hasPrizeVerification.value) return true
   if (action) pendingIdentityAction.value = action
+  if (!identityPromptOpen.value) {
+    lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }
   identityPromptMessage.value = message
   usernameError.value = message
   identityPromptOpen.value = true
@@ -381,7 +489,11 @@ function requireUsername(message = 'Set your username first.', action?: PendingI
 function openPredictionModal() {
   if (scoreCtaDisabled.value) return
   if (!requireUsername('Set your username before posting.', { type: 'prediction' })) return
+  if (!predictionModalOpen.value) {
+    lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }
   predictionModalOpen.value = true
+  nextTick(() => scoreDrawer.value?.focus())
 }
 
 function closePredictionModal() {
@@ -390,6 +502,89 @@ function closePredictionModal() {
 
 function errorText(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
+}
+
+function formatAdminDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function prizeEntryScore(entry: PrizeDeskEntry) {
+  return `${entry.home.code} ${entry.predictedHomeScore}-${entry.predictedAwayScore} ${entry.away.code}`
+}
+
+function prizeEntryFinalScore(entry: PrizeDeskEntry) {
+  if (!entry.finalScore) return 'Result pending'
+  const prefix = entry.finalScore.status === 'finished' ? 'FT' : entry.finalScore.status === 'live' ? 'Live' : 'Score'
+  return `${prefix} ${entry.finalScore.home}-${entry.finalScore.away}`
+}
+
+function hasPrizeEntryFinalScore(entry: PrizeDeskEntry) {
+  return !!entry.finalScore
+}
+
+function prizeEntryStatusLabel(entry: PrizeDeskEntry) {
+  if (entry.result === 'winner') return 'Exact winner'
+  if (entry.result === 'miss') return 'Not exact'
+  return entry.matchStatus === 'live' ? 'In play' : 'Pending'
+}
+
+function adminFilterCount(filter: AdminPrizeFilter) {
+  if (filter === 'winner') return adminWinnerCount.value
+  if (filter === 'pending') return adminPendingCount.value
+  if (filter === 'verified') return adminVerifiedCount.value
+  if (filter === 'missing') return adminMissingPickupCount.value
+  return adminEntries.value.length
+}
+
+function adminFilterLabel(filter: AdminPrizeFilter) {
+  return {
+    all: 'All',
+    winner: 'Winners',
+    pending: 'Pending',
+    verified: 'Has pickup',
+    missing: 'No pickup',
+  }[filter]
+}
+
+function adminPickupLabel(entry: PrizeDeskEntry) {
+  return entry.pickup ? 'View pickup details' : 'No pickup details'
+}
+
+function adminPickupIconPath(entry: PrizeDeskEntry) {
+  return entry.pickup
+    ? 'M56 96V72a72 72 0 0 1 144 0v24M48 96h160v112H48zM128 144v24'
+    : 'M56 96V72a72 72 0 0 1 124.8-48.9M208 96v112H48V96h112M32 32l192 192'
+}
+
+function openAdminEntry(entry: PrizeDeskEntry) {
+  selectedAdminEntryId.value = entry.id
+}
+
+function closeAdminEntry() {
+  selectedAdminEntryId.value = ''
+}
+
+async function loadAdminPrizeDesk() {
+  adminLoading.value = true
+  adminError.value = ''
+
+  try {
+    const response = await fetchPrizeDeskEntries()
+    const entries = [...response.entries].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    adminEntries.value = entries
+    if (selectedAdminEntryId.value && !entries.some((entry) => entry.id === selectedAdminEntryId.value)) {
+      selectedAdminEntryId.value = ''
+    }
+  } catch (error) {
+    adminError.value = errorText(error, 'Unable to load prize desk.')
+  } finally {
+    adminLoading.value = false
+  }
 }
 
 function roomLoadReason() {
@@ -439,7 +634,59 @@ function predictionAvatar(name: string) {
 }
 
 function leadComment(prediction: Prediction) {
-  return prediction.comments[0] ?? null
+  return prediction.comments.find((comment) => comment.authorId === prediction.authorId) ?? null
+}
+
+function secondaryComments(prediction: Prediction) {
+  const ownerLead = leadComment(prediction)
+  return prediction.comments.filter((comment) => comment.id !== ownerLead?.id)
+}
+
+function threadEntries(prediction: Prediction) {
+  const ownerLead = leadComment(prediction)
+  const entries: Array<{
+    id: string
+    type: 'comment' | 'reply'
+    name: string
+    text: string
+    createdAt: string
+    editedAt?: string
+  }> = []
+
+  for (const comment of secondaryComments(prediction)) {
+    entries.push({
+      id: comment.id,
+      type: 'comment',
+      name: comment.name,
+      text: comment.text,
+      createdAt: comment.createdAt,
+      editedAt: comment.editedAt,
+    })
+
+    for (const reply of comment.replies) {
+      entries.push({
+        id: reply.id,
+        type: 'reply',
+        name: reply.name,
+        text: reply.text,
+        createdAt: reply.createdAt,
+        editedAt: reply.editedAt,
+      })
+    }
+  }
+
+  for (const reply of ownerLead?.replies ?? []) {
+    entries.push({
+      id: reply.id,
+      type: 'reply',
+      name: reply.name,
+      text: reply.text,
+      createdAt: reply.createdAt,
+      editedAt: reply.editedAt,
+    })
+  }
+
+  return entries.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
 }
 
 function predictionCommentTotal(prediction: Prediction) {
@@ -490,71 +737,12 @@ function roomSplitPercentages(room: Room) {
   }
 }
 
-function mostDiscussedPrediction(room: Room) {
-  return [...room.predictions].sort((left, right) => {
-    const commentDelta = predictionCommentTotal(right) - predictionCommentTotal(left)
-    if (commentDelta !== 0) return commentDelta
-    return right.likes - left.likes
-  })[0] ?? null
-}
-
-function roomVibeInsight(room: Room, topPickShare: number): TopPickInsight {
-  const split = roomSplit(room)
-  const strongestSide = Math.max(split.home, split.draw, split.away)
-  const strongestSideShare = percentOf(strongestSide, room.predictions.length)
-  const interactionRate = room.predictions.length ? (totalLikes.value + totalComments.value) / room.predictions.length : 0
-
-  if (topPickShare >= 55 && room.predictions.length >= 3) {
-    return {
-      key: 'vibe',
-      icon: '😤',
-      label: 'Room vibe',
-      value: 'Chest out',
-      detail: 'The room is backing one score with confidence.',
-      caption: 'Someone is saving screenshots already.',
-      tone: 'sharp',
-    }
-  }
-
-  if (strongestSideShare <= 45 && room.predictions.length >= 4) {
-    return {
-      key: 'vibe',
-      icon: '🤝',
-      label: 'Room vibe',
-      value: 'Split room',
-      detail: 'No side has fully taken over the table.',
-      caption: 'The group chat has not picked a lane.',
-      tone: 'split',
-    }
-  }
-
-  if (interactionRate >= 4) {
-    return {
-      key: 'vibe',
-      icon: '🔥',
-      label: 'Room vibe',
-      value: 'Loud table',
-      detail: 'Picks are pulling reactions and replies.',
-      caption: 'The room is doing room things.',
-      tone: 'hot',
-    }
-  }
-
-  return {
-    key: 'vibe',
-    icon: '👀',
-    label: 'Room vibe',
-    value: 'Watching closely',
-    detail: 'The room is active, but nobody is shouting yet.',
-    caption: 'Calm before someone says too much.',
-    tone: 'calm',
-  }
-}
-
 function banterWeatherInsight(room: Room): TopPickInsight {
   const talk = totalComments.value
   const likes = totalLikes.value
+  const picks = room.predictions.length
   const heat = talk * 2 + likes
+  const weather = { picks, comments: talk, likes }
 
   if (heat >= 40) {
     return {
@@ -562,9 +750,10 @@ function banterWeatherInsight(room: Room): TopPickInsight {
       icon: '🌶️',
       label: 'Banter weather',
       value: 'Spicy',
-      detail: `${talk} replies and ${likes} likes in the air.`,
+      detail: `${picks} picks · ${talk} replies · ${likes} likes`,
       caption: 'Keep water nearby.',
       tone: 'hot',
+      weather,
     }
   }
 
@@ -574,21 +763,23 @@ function banterWeatherInsight(room: Room): TopPickInsight {
       icon: '🌡️',
       label: 'Banter weather',
       value: 'Heating up',
-      detail: `${room.predictions.length} picks are starting to move the room.`,
-      caption: 'Replies are stretching.',
+      detail: `${picks} picks · ${talk} replies · ${likes} likes`,
+      caption: talk > 0 ? 'Replies are stretching.' : 'Takes are warming up.',
       tone: 'sharp',
+      weather,
     }
   }
 
-  if (room.predictions.length <= 1 && heat <= 2) {
+  if (picks <= 1 && heat <= 2) {
     return {
       key: 'weather',
       icon: '🧊',
       label: 'Banter weather',
       value: 'Cold room',
-      detail: 'Not much noise yet.',
+      detail: `${picks} picks · ${talk} replies · ${likes} likes`,
       caption: 'First bold take gets the mic.',
       tone: 'calm',
+      weather,
     }
   }
 
@@ -597,9 +788,10 @@ function banterWeatherInsight(room: Room): TopPickInsight {
     icon: '☁️',
     label: 'Banter weather',
     value: 'Calm',
-    detail: 'The room is still keeping it measured.',
+    detail: `${picks} picks · ${talk} replies · ${likes} likes`,
     caption: 'Suspiciously polite.',
     tone: 'calm',
+    weather,
   }
 }
 
@@ -621,10 +813,20 @@ function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
   const total = room.predictions.length
   const topPickCount = scorelineCount(room, room.mostBacked.home, room.mostBacked.away)
   const topPickShare = percentOf(topPickCount, total)
+  const topPickPredictors = [
+    ...new Set(
+      room.predictions
+        .filter((prediction) => prediction.homeScore === room.mostBacked.home && prediction.awayScore === room.mostBacked.away)
+        .map((prediction) => prediction.name.trim())
+        .filter(Boolean),
+    ),
+  ]
+  const topPickPredictorLabel = topPickPredictors.length > 1
+    ? `${topPickPredictors[0]} +${topPickPredictors.length - 1} predicted it`
+    : topPickPredictors[0]
+      ? `${topPickPredictors[0]} predicted it`
+      : 'Someone predicted it'
   const { counts: split, percentages } = roomSplitPercentages(room)
-  const discussed = mostDiscussedPrediction(room)
-  const discussedReplies = discussed ? predictionCommentTotal(discussed) : 0
-
   return [
     {
       key: 'crowd',
@@ -634,13 +836,19 @@ function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
       detail: `${topPickCount}/${total} picks · ${topPickShare}% of the room`,
       caption: room.mostBacked.margin,
       tone: topPickShare >= 50 ? 'sharp' : 'split',
+      crowd: {
+        pickCount: topPickCount,
+        total,
+        share: topPickShare,
+        predictorLabel: topPickPredictorLabel,
+      },
     },
     {
       key: 'split',
       icon: '⚖️',
       label: 'Room split',
       value: `${room.home.code} ${percentages.home}% · Draw ${percentages.draw}% · ${room.away.code} ${percentages.away}%`,
-      detail: `${split.home} backing ${room.home.code}, ${split.draw} draw, ${split.away} backing ${room.away.code}`,
+      detail: `${split.home} backing ${room.home.code} · ${split.draw} draw · ${split.away} backing ${room.away.code}`,
       caption: split.draw >= Math.max(split.home, split.away) ? 'The draw gang has entered the chat.' : 'The room has picked a direction.',
       tone: 'split',
       split: {
@@ -651,17 +859,7 @@ function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
         awayLabel: room.away.code,
       },
     },
-    roomVibeInsight(room, topPickShare),
     banterWeatherInsight(room),
-    {
-      key: 'noise',
-      icon: discussedReplies > 0 ? '💬' : '🤫',
-      label: 'Noise maker',
-      value: discussed ? scoreLabel(room, discussed.homeScore, discussed.awayScore) : 'No arguments yet',
-      detail: discussedReplies > 0 ? `${discussedReplies} comments around this pick` : 'No comment thread has taken over.',
-      caption: discussedReplies > 0 ? 'This score is carrying the group chat.' : 'Very polite. For now.',
-      tone: discussedReplies >= 4 ? 'hot' : 'calm',
-    },
   ]
 }
 
@@ -689,33 +887,55 @@ function isOptimisticPrediction(predictionId: string) {
   return predictionId.startsWith('optimistic-prediction-')
 }
 
-function sortedReplies(prediction: Prediction) {
-  return [...(leadComment(prediction)?.replies ?? [])].sort(
-    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-  )
-}
-
 function showsFullThread(prediction: Prediction) {
   return isCommentsExpanded(prediction.id)
 }
 
-function visibleReplies(prediction: Prediction) {
-  const replies = sortedReplies(prediction)
-  return showsFullThread(prediction) ? replies : replies.slice(0, COMMENT_PREVIEW_LIMIT)
+function visibleThreadEntries(prediction: Prediction) {
+  const entries = threadEntries(prediction)
+  return showsFullThread(prediction) ? entries : entries.slice(0, COMMENT_PREVIEW_LIMIT)
 }
 
 function hiddenReplyCount(prediction: Prediction) {
-  const replies = sortedReplies(prediction)
-  return Math.max(0, replies.length - COMMENT_PREVIEW_LIMIT)
+  const entries = threadEntries(prediction)
+  return Math.max(0, entries.length - COMMENT_PREVIEW_LIMIT)
 }
 
 function shouldShowCommentToggle(prediction: Prediction) {
-  const comment = leadComment(prediction)
-  return !!comment && !isReplying(prediction.id, comment.id) && !isReplyComposerClosing(prediction.id, comment.id) && hiddenReplyCount(prediction) > 0
+  return (
+    !isReplying(prediction.id, replyTargetIdForPrediction(prediction)) &&
+    !isReplyComposerClosing(prediction.id, replyTargetIdForPrediction(prediction)) &&
+    hiddenReplyCount(prediction) > 0
+  )
 }
 
 function shouldFadeCommentPreview(prediction: Prediction) {
   return shouldShowCommentToggle(prediction) && !isCommentsExpanded(prediction.id)
+}
+
+function replyComposerLabel(prediction: Prediction) {
+  return leadComment(prediction) ? 'Reply' : 'Add a comment'
+}
+
+function replyComposerPlaceholder(prediction: Prediction) {
+  if (leadComment(prediction)) return 'Keep it light...'
+  return threadEntries(prediction).length ? 'Join the thread...' : 'Start the thread...'
+}
+
+function replyActionLabel(prediction: Prediction) {
+  if (leadComment(prediction)) {
+    return `Reply to ${prediction.name}. ${predictionCommentTotal(prediction)} comments and replies`
+  }
+
+  if (threadEntries(prediction).length) {
+    return `Comment under ${prediction.name}'s prediction. ${predictionCommentTotal(prediction)} comments in thread.`
+  }
+
+  return `Comment on ${prediction.name}'s prediction. Start the thread.`
+}
+
+function replySubmitLabel(prediction: Prediction) {
+  return leadComment(prediction) ? 'Reply' : 'Comment'
 }
 
 function roomKickoffMs(room: Room) {
@@ -790,51 +1010,67 @@ function roomStatusClass(room: Room) {
   return 'border-[color:color-mix(in_srgb,var(--line)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_52%,transparent)] text-[var(--soft)]'
 }
 
-function isReplying(predictionId: string, commentId: string) {
+function draftTargetIdForPrediction(predictionId: string) {
+  return `prediction:${predictionId}`
+}
+
+function isPredictionDraftTarget(targetId: string) {
+  return targetId.startsWith('prediction:')
+}
+
+function predictionIdForReplyTarget(targetId: string) {
+  return isPredictionDraftTarget(targetId) ? targetId.slice('prediction:'.length) : predictionIdForComment(targetId)
+}
+
+function replyTargetIdForPrediction(prediction: Prediction) {
+  return leadComment(prediction)?.id ?? draftTargetIdForPrediction(prediction.id)
+}
+
+function isReplying(predictionId: string, targetId: string) {
   return (
     activeReplyTarget.value?.predictionId === predictionId &&
-    activeReplyTarget.value?.commentId === commentId
+    activeReplyTarget.value?.targetId === targetId
   )
 }
 
-function replyTargetKey(predictionId: string, commentId: string) {
-  return `${predictionId}:${commentId}`
+function replyTargetKey(predictionId: string, targetId: string) {
+  return `${predictionId}:${targetId}`
 }
 
-function isReplyComposerClosing(predictionId: string, commentId: string) {
-  return closingReplyTargets.value.has(replyTargetKey(predictionId, commentId))
+function isReplyComposerClosing(predictionId: string, targetId: string) {
+  return closingReplyTargets.value.has(replyTargetKey(predictionId, targetId))
 }
 
-function markReplyComposerClosing(commentId: string) {
-  const predictionId = activeReplyTarget.value?.commentId === commentId
+function markReplyComposerClosing(targetId: string) {
+  const predictionId = activeReplyTarget.value?.targetId === targetId
     ? activeReplyTarget.value.predictionId
-    : predictionIdForComment(commentId)
+    : predictionIdForReplyTarget(targetId)
 
   if (!predictionId) return
 
-  closingReplyTargets.value = new Set(closingReplyTargets.value).add(replyTargetKey(predictionId, commentId))
+  closingReplyTargets.value = new Set(closingReplyTargets.value).add(replyTargetKey(predictionId, targetId))
 }
 
-function finishReplyComposerClose(predictionId: string, commentId: string) {
+function finishReplyComposerClose(predictionId: string, targetId: string) {
   const nextClosing = new Set(closingReplyTargets.value)
-  nextClosing.delete(replyTargetKey(predictionId, commentId))
+  nextClosing.delete(replyTargetKey(predictionId, targetId))
   closingReplyTargets.value = nextClosing
 }
 
-function isReplySubmitting(commentId: string) {
-  return submittingReplies.value.has(commentId)
+function isReplySubmitting(targetId: string) {
+  return submittingReplies.value.has(targetId)
 }
 
 function isEditSubmitting(contentId: string) {
   return submittingEdits.value.has(contentId)
 }
 
-function canSubmitReply(commentId: string) {
-  return !isReplySubmitting(commentId) && !!(replyDrafts[commentId] || '').trim()
+function canSubmitReply(targetId: string) {
+  return !isReplySubmitting(targetId) && !!(replyDrafts[targetId] || '').trim()
 }
 
-function hasReplyDraft(commentId: string) {
-  return !!(replyDrafts[commentId] || '').trim()
+function hasReplyDraft(targetId: string) {
+  return !!(replyDrafts[targetId] || '').trim()
 }
 
 function typingKey(target: TypingTarget, targetId: string, id = userId) {
@@ -938,8 +1174,10 @@ async function submitPrediction() {
           {
             id: `optimistic-comment-${roomId}-${Date.now()}`,
             authorId: userId,
+            name: username.value,
             text: submittedComment,
             replies: [],
+            createdAt: new Date().toISOString(),
           },
         ]
       : [],
@@ -998,20 +1236,20 @@ async function submitLike(predictionId: string, authorId?: string) {
   }
 }
 
-function openReplyComposer(predictionId: string, commentId: string) {
+function openReplyComposer(predictionId: string, targetId: string) {
   fastCollapsingCommentCards.value = new Set()
   editingPredictionId.value = ''
   editingReplyId.value = ''
-  finishReplyComposerClose(predictionId, commentId)
-  activeReplyTarget.value = { predictionId, commentId }
+  finishReplyComposerClose(predictionId, targetId)
+  activeReplyTarget.value = { predictionId, targetId }
   nextTick(() => {
-    focusReplyInput(commentId)
+    focusReplyInput(targetId)
   })
 }
 
-function closeReplyComposer(commentId: string) {
-  stopTyping('reply', commentId)
-  markReplyComposerClosing(commentId)
+function closeReplyComposer(targetId: string) {
+  stopTyping('reply', targetId)
+  markReplyComposerClosing(targetId)
   activeReplyTarget.value = null
 }
 
@@ -1048,19 +1286,19 @@ function focusEditInput(contentId: string) {
   input?.select()
 }
 
-function toggleReply(predictionId: string, commentId: string) {
-  if (!requireUsername('Set your username before replying.', { type: 'reply', predictionId, commentId })) return
-  if (isReplying(predictionId, commentId)) {
+function toggleReply(predictionId: string, targetId: string) {
+  if (!requireUsername('Set your username before replying.', { type: 'reply', predictionId, targetId })) return
+  if (isReplying(predictionId, targetId)) {
     if (isMobileViewport()) {
-      focusReplyInput(commentId)
+      focusReplyInput(targetId)
       return
     }
 
-    closeReplyComposer(commentId)
+    closeReplyComposer(targetId)
     return
   }
 
-  openReplyComposer(predictionId, commentId)
+  openReplyComposer(predictionId, targetId)
 }
 
 function sendTyping(target: TypingTarget, targetId: string, active: boolean) {
@@ -1166,8 +1404,8 @@ function handleTypingEvent(event: TypingEvent) {
   cleanupTypingPeople()
 }
 
-function focusReplyInput(commentId: string) {
-  const input = document.querySelector<HTMLInputElement>(`input[data-reply-key="${CSS.escape(commentId)}"]`)
+function focusReplyInput(targetId: string) {
+  const input = document.querySelector<HTMLInputElement>(`input[data-reply-key="${CSS.escape(targetId)}"]`)
   focusReplyElement(input)
 }
 
@@ -1176,7 +1414,11 @@ function focusReplyComposer(element: Element) {
 }
 
 function isMobileViewport() {
-  return window.matchMedia('(max-width: 767px)').matches
+  return isMobileViewportState.value
+}
+
+function syncViewportState() {
+  isMobileViewportState.value = window.matchMedia('(max-width: 767px)').matches
 }
 
 function updateFeedNavMode() {
@@ -1280,7 +1522,7 @@ async function runPendingIdentityAction(action: PendingIdentityAction) {
   }
 
   if (action.type === 'reply') {
-    openReplyComposer(action.predictionId, action.commentId)
+    openReplyComposer(action.predictionId, action.targetId)
     return
   }
 
@@ -1304,45 +1546,72 @@ function toggleComments(predictionId: string) {
   }
 }
 
-async function submitReply(commentId: string) {
+async function submitReply(targetId: string) {
   if (!requireUsername('Set your username before replying.')) return
-  const text = (replyDrafts[commentId] || '').trim()
-  if (!text || isReplySubmitting(commentId)) return
+  const text = (replyDrafts[targetId] || '').trim()
+  if (!text || isReplySubmitting(targetId)) return
 
-  const payload: ReplyInput = {
+  const predictionId = predictionIdForReplyTarget(targetId)
+  if (!predictionId) return
+
+  const isFirstComment = isPredictionDraftTarget(targetId)
+  const payload: ReplyInput | PredictionCommentInput = {
     authorId: userId,
     name: username.value,
     text,
   }
   const optimisticReply: Reply = {
-    id: `optimistic-reply-${commentId}-${Date.now()}`,
+    id: `optimistic-reply-${targetId}-${Date.now()}`,
     authorId: userId,
     name: username.value,
     text,
     createdAt: new Date().toISOString(),
   }
+  const optimisticComment: PredictionComment = {
+    id: `optimistic-comment-${predictionId}-${Date.now()}`,
+    authorId: userId,
+    name: username.value,
+    text,
+    replies: [],
+    createdAt: new Date().toISOString(),
+  }
 
-  submittingReplies.value = new Set(submittingReplies.value).add(commentId)
-  replyErrors[commentId] = ''
-  replyDrafts[commentId] = ''
-  stopTyping('reply', commentId)
-  markReplyComposerClosing(commentId)
+  submittingReplies.value = new Set(submittingReplies.value).add(targetId)
+  replyErrors[targetId] = ''
+  replyDrafts[targetId] = ''
+  stopTyping('reply', targetId)
+  markReplyComposerClosing(targetId)
   activeReplyTarget.value = null
-  updateLocalReplyThread(commentId, (replies) => [...replies, optimisticReply])
+  if (isFirstComment) {
+    updateLocalPrediction(predictionId, (prediction) => ({
+      ...prediction,
+      comments: [optimisticComment, ...prediction.comments],
+    }))
+  } else {
+    updateLocalReplyThread(targetId, (replies) => [...replies, optimisticReply])
+  }
 
   try {
-    const response = await createReply(commentId, payload)
+    const response = isFirstComment
+      ? await createPredictionComment(predictionId, payload as PredictionCommentInput)
+      : await createReply(targetId, payload as ReplyInput)
     patchRoom(response.room)
   } catch (error) {
-    removeLocalReply(optimisticReply.id)
-    replyDrafts[commentId] = text
-    const predictionId = predictionIdForComment(commentId)
-    activeReplyTarget.value = predictionId ? { predictionId, commentId } : null
-    replyErrors[commentId] = errorText(error, 'Reply did not send. Try again.')
-    showMutationError(replyErrors[commentId])
+    if (isFirstComment) {
+      updateLocalPrediction(predictionId, (prediction) => ({
+        ...prediction,
+        comments: prediction.comments.filter((comment) => comment.id !== optimisticComment.id),
+      }))
+    } else {
+      removeLocalReply(optimisticReply.id)
+    }
+    replyDrafts[targetId] = text
+    activeReplyTarget.value = { predictionId, targetId }
+    replyErrors[targetId] = errorText(error, isFirstComment ? 'Comment did not send. Try again.' : 'Reply did not send. Try again.')
+    showMutationError(replyErrors[targetId])
   } finally {
     const nextSubmitting = new Set(submittingReplies.value)
-    nextSubmitting.delete(commentId)
+    nextSubmitting.delete(targetId)
     submittingReplies.value = nextSubmitting
   }
 }
@@ -1573,6 +1842,15 @@ function predictionIdForComment(commentId: string) {
   return ''
 }
 
+function replyById(prediction: Prediction, replyId: string) {
+  for (const comment of prediction.comments) {
+    const reply = comment.replies.find((item) => item.id === replyId)
+    if (reply) return reply
+  }
+
+  return null
+}
+
 function selectedThemeLabel() {
   return mockThemes.find((theme) => theme.id === selectedTheme.value)?.label ?? 'Paper Notes'
 }
@@ -1626,22 +1904,29 @@ function toggleThemeMenu() {
   if (!themeMenuOpen.value) {
     clearThemePreview()
   }
-  if (themeMenuOpen.value) {
-    nextTick(positionThemeMenu)
-  }
 }
 
 function applyTheme(themeId: ThemeId) {
+  clearThemePreview()
   selectedTheme.value = themeId
-  themePreview.value = null
   themeMenuOpen.value = false
+  themeTrigger.value?.focus({ preventScroll: true })
 }
 
 function previewTheme(themeId: ThemeId) {
-  themePreview.value = themeId
+  if (themePreviewTimer) {
+    window.clearTimeout(themePreviewTimer)
+  }
+  themePreviewTimer = window.setTimeout(() => {
+    themePreview.value = themeId
+  }, 90)
 }
 
 function clearThemePreview() {
+  if (themePreviewTimer) {
+    window.clearTimeout(themePreviewTimer)
+    themePreviewTimer = null
+  }
   themePreview.value = null
 }
 
@@ -1653,8 +1938,160 @@ function handleGlobalClick(event: MouseEvent) {
   }
 }
 
+function themeOptionId(index: number) {
+  return `theme-option-${index}`
+}
+
+function setThemeOptionRef(element: HTMLButtonElement | null, index: number) {
+  if (!element) return
+  themeOptionRefs.value[index] = element
+}
+
+function focusThemeOption(index: number) {
+  const nextIndex = Math.max(0, Math.min(mockThemes.length - 1, index))
+  highlightedThemeIndex.value = nextIndex
+  themeOptionRefs.value[nextIndex]?.focus()
+}
+
+function openThemeMenuWithFocus(index = highlightedThemeIndex.value) {
+  themeMenuOpen.value = true
+  highlightedThemeIndex.value = Math.max(0, Math.min(mockThemes.length - 1, index))
+}
+
+function handleThemeTriggerKeydown(event: KeyboardEvent) {
+  if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    openThemeMenuWithFocus(mockThemes.findIndex((theme) => theme.id === selectedTheme.value))
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    openThemeMenuWithFocus(mockThemes.length - 1)
+  }
+}
+
+function handleThemeOptionKeydown(event: KeyboardEvent, index: number) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    focusThemeOption((index + 1) % mockThemes.length)
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    focusThemeOption((index - 1 + mockThemes.length) % mockThemes.length)
+    return
+  }
+
+  if (event.key === 'Home') {
+    event.preventDefault()
+    focusThemeOption(0)
+    return
+  }
+
+  if (event.key === 'End') {
+    event.preventDefault()
+    focusThemeOption(mockThemes.length - 1)
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    themeMenuOpen.value = false
+    clearThemePreview()
+    themeTrigger.value?.focus({ preventScroll: true })
+  }
+}
+
+function currentOverlayElement() {
+  return document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')
+}
+
+function getFocusableElements(container: HTMLElement) {
+  return [...container.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter((element) => !element.hasAttribute('hidden') && element.offsetParent !== null)
+}
+
+function focusActiveOverlay() {
+  if (identityPromptOpen.value) {
+    identityPrompt.value?.focus()
+    return
+  }
+
+  if (predictionModalOpen.value) {
+    scoreDrawer.value?.focus()
+    return
+  }
+
+  if (selectedAdminEntry.value) {
+    const overlay = currentOverlayElement()
+    const firstFocusable = overlay ? getFocusableElements(overlay)[0] : null
+    firstFocusable?.focus()
+  }
+}
+
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    if (themeMenuOpen.value) {
+      event.preventDefault()
+      themeMenuOpen.value = false
+      clearThemePreview()
+      themeTrigger.value?.focus({ preventScroll: true })
+      return
+    }
+
+    if (selectedAdminEntry.value) {
+      event.preventDefault()
+      closeAdminEntry()
+      return
+    }
+
+    if (predictionModalOpen.value) {
+      event.preventDefault()
+      closePredictionModal()
+      return
+    }
+
+    if (identityPromptOpen.value) {
+      event.preventDefault()
+      closeIdentityPrompt()
+    }
+  }
+
+  if (event.key !== 'Tab') return
+  if (!identityPromptOpen.value && !predictionModalOpen.value && !selectedAdminEntry.value) return
+
+  const overlay = currentOverlayElement()
+  if (!overlay) return
+  const focusable = getFocusableElements(overlay)
+  if (!focusable.length) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 function handleRouteChange() {
   routePath.value = window.location.pathname
+  if (isAdminRoute.value) {
+    loading.value = false
+    if (!isMobileViewportState.value) {
+      void loadAdminPrizeDesk()
+    }
+    return
+  }
+
+  if (!isNotFound.value && !rooms.value.length) {
+    void bootstrap()
+  }
 }
 
 function handleSocketEvent(event: MessageEvent<string>) {
@@ -1839,31 +2276,38 @@ async function bootstrap() {
 }
 
 onMounted(async () => {
+  syncViewportState()
   selectedTheme.value = getStoredTheme() as ThemeId
   if (isNotFound.value) {
     loading.value = false
+  } else if (isAdminRoute.value) {
+    loading.value = false
+    if (!isMobileViewportState.value) {
+      await loadAdminPrizeDesk()
+    }
   } else {
     await bootstrap()
   }
   document.addEventListener('click', handleGlobalClick)
+  document.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('popstate', handleRouteChange)
+  window.addEventListener('resize', syncViewportState)
   window.addEventListener('resize', positionThemeMenu)
   window.addEventListener('resize', updateFeedNavMode)
   window.addEventListener('scroll', positionThemeMenu, { passive: true })
   window.addEventListener('scroll', updateFeedNavMode, { passive: true })
-  const shouldAutoPromptUsername = !window.matchMedia('(max-width: 767px)').matches
-  if (!isNotFound.value && !username.value && shouldAutoPromptUsername) {
+  if (!username.value && shouldAutoPromptUsername.value) {
     identityPromptTimer = window.setTimeout(() => {
       openIdentityPrompt('Choose a username when you are ready.')
     }, 650)
   }
   roomRefreshTimer = window.setInterval(() => {
-    if (isNotFound.value || document.hidden) return
+    if (isNotFound.value || isAdminRoute.value || document.hidden) return
     void refreshRooms({ preserveActiveRoom: true, silent: true })
   }, ROOM_REFRESH_MS)
   topPickCarouselTimer = window.setInterval(() => {
     const count = topPickInsights.value.length
-    if (count <= 1 || document.hidden) return
+    if (count <= 1 || isNotFound.value || isAdminRoute.value || document.hidden) return
     activeTopPickIndex.value = (activeTopPickIndex.value + 1) % count
   }, TOP_PICK_SLIDE_MS)
 })
@@ -1884,6 +2328,13 @@ onBeforeUnmount(() => {
   if (topPickCarouselTimer) {
     window.clearInterval(topPickCarouselTimer)
   }
+  if (themePreviewTimer) {
+    window.clearTimeout(themePreviewTimer)
+  }
+  if (themeTransitionTimer) {
+    window.clearTimeout(themeTransitionTimer)
+    document.body.classList.remove('theme-transitioning')
+  }
   if (fastCommentCollapseTimer) {
     window.clearTimeout(fastCommentCollapseTimer)
   }
@@ -1895,7 +2346,9 @@ onBeforeUnmount(() => {
   socketToken += 1
   ws.value?.close()
   document.removeEventListener('click', handleGlobalClick)
+  document.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('popstate', handleRouteChange)
+  window.removeEventListener('resize', syncViewportState)
   window.removeEventListener('resize', positionThemeMenu)
   window.removeEventListener('resize', updateFeedNavMode)
   window.removeEventListener('scroll', positionThemeMenu)
@@ -1904,8 +2357,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="mx-auto w-[min(1180px,calc(100%-32px))] px-0 pt-6 pb-[42px] max-md:w-[min(100%,calc(100%-24px))] max-md:pt-[18px] max-md:pb-[calc(96px+env(safe-area-inset-bottom))]">
-    <header class="mb-[34px] flex items-center justify-between gap-4">
+  <main
+    class="px-0 pt-6 pb-[42px] max-md:pt-[18px] max-md:pb-[calc(96px+env(safe-area-inset-bottom))]"
+    :class="isNotFound ? 'grid h-svh w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden pb-0 max-md:pb-0' : 'mx-auto w-[min(1180px,calc(100%-32px))] max-md:w-[min(100%,calc(100%-24px))]'"
+  >
+    <header
+      class="mb-[34px] flex items-center justify-between gap-4"
+      :class="isNotFound ? 'mx-auto mb-4 w-[min(1180px,calc(100%-32px))] max-md:mb-3 max-md:w-[min(100%,calc(100%-24px))]' : ''"
+    >
       <div class="flex items-center">
         <div class="inline-flex items-baseline gap-2 whitespace-nowrap text-[clamp(22px,2.2vw,30px)] leading-none font-black text-[var(--accent)]" aria-label="turntabl score room">turntabl <span class="font-[750] text-[var(--text)]">score room</span></div>
       </div>
@@ -1913,7 +2372,7 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2">
         <div
           v-if="username"
-          class="hidden min-h-10 max-w-[180px] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] px-2.5 text-[12px] font-bold text-[var(--text)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent)] sm:inline-flex"
+          class="hidden min-h-10 max-w-[180px] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] px-2.5 text-[12px] font-bold text-[var(--text)] sm:inline-flex"
           aria-label="Current username"
         >
           <img class="h-6 w-6 rounded-full" :src="predictionAvatar(username)" alt="" decoding="async" />
@@ -1927,7 +2386,10 @@ onBeforeUnmount(() => {
           type="button"
           aria-label="Choose theme"
           :aria-expanded="String(themeMenuOpen)"
+          aria-haspopup="listbox"
+          :aria-controls="themeMenuOpen ? 'theme-picker-listbox' : undefined"
           @click.stop="toggleThemeMenu"
+          @keydown="handleThemeTriggerKeydown"
         >
           <svg class="ph-icon theme-icon" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke-width="16">
             <path d="M128 36C76 36 36 75.1 36 126.3 36 170 70.5 204 116.1 204h15.6c13.7 0 20.6-16.5 10.9-26.2l-5.8-5.8c-8.6-8.6-2.5-23.3 9.7-23.3h21.2c29 0 52.3-18.7 52.3-46.6C220 62.4 181.3 36 128 36Z" stroke="currentColor"></path>
@@ -1940,22 +2402,29 @@ onBeforeUnmount(() => {
 
         <div
           v-if="themeMenuOpen"
-          class="fixed left-0 top-0 z-[var(--layer-dropdown)] grid gap-0.5 overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-1.5 shadow-[0_16px_38px_rgba(15,23,42,0.12)]"
+          id="theme-picker-listbox"
+          class="fixed left-0 top-0 z-[var(--layer-dropdown)] grid gap-0.5 overflow-auto rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] p-1.5"
           :style="themeMenuStyle"
           role="listbox"
           aria-label="Theme picker"
+          :aria-activedescendant="themeOptionId(highlightedThemeIndex)"
         >
           <button
-            v-for="theme in mockThemes"
+            v-for="(theme, index) in mockThemes"
             :key="theme.id"
+            :ref="(element) => setThemeOptionRef(element as HTMLButtonElement | null, index)"
             class="grid min-h-11 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-2.5 rounded-lg bg-transparent px-3 text-left text-[13px] font-[750] text-[var(--text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px aria-selected:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))]"
             type="button"
+            role="option"
+            :id="themeOptionId(index)"
             :aria-selected="String(selectedTheme === theme.id)"
+            :tabindex="index === highlightedThemeIndex ? 0 : -1"
             @mouseenter="previewTheme(theme.id)"
             @focus="previewTheme(theme.id)"
             @mouseleave="clearThemePreview"
             @blur="clearThemePreview"
             @click="applyTheme(theme.id)"
+            @keydown="handleThemeOptionKeydown($event, index)"
           >
             <span class="text-[var(--accent)] font-black">{{ selectedTheme === theme.id ? '✓' : '' }}</span>
             <span>{{ theme.label }}</span>
@@ -1968,18 +2437,380 @@ onBeforeUnmount(() => {
     <Transition name="status-toast">
       <div
         v-if="statusNotice"
-        class="fixed right-4 top-4 z-[900] inline-flex min-h-10 max-w-[min(420px,calc(100%-32px))] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_94%,var(--accent)_6%)] px-3.5 py-2 text-xs font-[720] text-[var(--text)] shadow-[0_12px_28px_rgba(0,0,0,0.14)] backdrop-blur-md max-md:left-3 max-md:right-3 max-md:top-3"
+        class="fixed right-4 top-4 z-[900] inline-flex min-h-10 max-w-[min(420px,calc(100%-32px))] items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_94%,var(--accent)_6%)] px-3.5 py-2 text-xs font-[720] text-[var(--text)] backdrop-blur-md max-md:left-3 max-md:right-3 max-md:top-3"
         role="status"
         aria-live="polite"
       >
-        <span class="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_12%,transparent)]" :class="refreshingRooms || realtimeStatus === 'connecting' || realtimeStatus === 'reconnecting' ? 'animate-pulse' : ''"></span>
+        <span class="h-2 w-2 rounded-full bg-[var(--accent)]" :class="refreshingRooms || realtimeStatus === 'connecting' || realtimeStatus === 'reconnecting' ? 'animate-pulse' : ''"></span>
         <span>{{ statusNotice }}</span>
       </div>
     </Transition>
 
     <section
-      v-if="isNotFound"
-      class="relative grid min-h-[calc(100svh-126px)] overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_76%,transparent)] p-[clamp(22px,5vw,64px)] max-md:min-h-[calc(100svh-100px)] max-md:rounded-[10px] max-md:p-4"
+      v-if="showMobileAdminMessage"
+      class="grid min-h-[60svh] place-items-center"
+      aria-labelledby="mobile-admin-title"
+    >
+      <div class="grid max-w-[560px] gap-4 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_90%,transparent)] p-5 text-center shadow-[var(--card-shadow)]">
+        <div class="mx-auto inline-grid h-12 w-12 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] text-[var(--accent)]">
+          <svg class="ph-icon h-6 w-6" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+            <rect x="40" y="56" width="176" height="120" rx="16"></rect>
+            <path d="M88 200h80"></path>
+            <path d="M128 176v24"></path>
+          </svg>
+        </div>
+        <div class="grid gap-2">
+          <h1 id="mobile-admin-title" class="m-0 text-[22px] font-black leading-tight text-[var(--text)]">Use a desktop for prize desk</h1>
+          <p class="m-0 text-sm leading-[1.55] text-[var(--soft)]">This admin area is desktop-only for now. Open the same link on a laptop or larger screen to review winners and pickup details comfortably.</p>
+        </div>
+        <button
+          class="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px"
+          type="button"
+          @click="showHome"
+        >Back to rooms</button>
+      </div>
+    </section>
+
+    <section
+      v-else-if="isAdminRoute"
+      class="grid gap-4"
+      aria-labelledby="admin-title"
+    >
+      <div class="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4">
+        <div class="grid gap-1">
+          <p class="m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Admin</p>
+          <h1 id="admin-title" class="m-0 text-2xl font-black leading-tight text-[var(--text)]">Configurations</h1>
+          <p class="m-0 text-sm leading-snug text-[var(--muted)]">Manage the parts of the score room that need owner attention.</p>
+        </div>
+        <span class="rounded-md border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--accent)]">Hidden route</span>
+      </div>
+
+      <section class="grid gap-2.5 md:grid-cols-3" aria-label="Admin configuration areas">
+        <article class="grid gap-2 rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] p-4">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="m-0 text-base font-black text-[var(--text)]">Prize desk</h2>
+            <span class="rounded-md bg-[var(--accent)] px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[var(--accent-text)]">Live</span>
+          </div>
+          <p class="m-0 text-sm leading-[1.45] text-[var(--soft)]">Review prediction outcomes and pickup verification.</p>
+          <p class="m-0 text-xs font-bold text-[var(--muted)]">{{ adminEntries.length }} predictions tracked</p>
+        </article>
+
+        <article class="grid gap-2 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="m-0 text-base font-black text-[var(--text)]">Room board</h2>
+            <span class="rounded-md border border-[var(--line)] px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Next</span>
+          </div>
+          <p class="m-0 text-sm leading-[1.45] text-[var(--soft)]">Create, close, archive, and refresh match rooms from the admin surface.</p>
+        </article>
+
+        <article class="grid gap-2 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="m-0 text-base font-black text-[var(--text)]">Visibility</h2>
+            <span class="rounded-md border border-[var(--line)] px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Next</span>
+          </div>
+          <p class="m-0 text-sm leading-[1.45] text-[var(--soft)]">Control what is public, draft, hidden, or ready for match-day traffic.</p>
+        </article>
+      </section>
+
+      <section class="grid gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4" aria-labelledby="prize-desk-title">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div class="grid gap-1">
+            <p class="m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Configuration</p>
+            <h2 id="prize-desk-title" class="m-0 text-xl font-black leading-tight text-[var(--text)]">Prize desk</h2>
+            <p class="m-0 text-sm leading-snug text-[var(--muted)]">Map predictions to final scores, then use pickup checks for exact winners.</p>
+          </div>
+          <button
+            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-3.5 text-xs font-extrabold text-[var(--accent)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] active:translate-y-px disabled:cursor-wait disabled:opacity-70 disabled:active:translate-y-0"
+            type="button"
+            :disabled="adminLoading"
+            @click="loadAdminPrizeDesk"
+          >
+            <svg class="ph-icon h-4 w-4" :class="adminLoading ? 'animate-spin' : ''" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+              <path d="M200 72v48h-48"></path>
+              <path d="M56 184v-48h48"></path>
+              <path d="M185.8 112A64 64 0 0 0 77 82.2L56 104"></path>
+              <path d="M70.2 144A64 64 0 0 0 179 173.8L200 152"></path>
+            </svg>
+            <span>{{ adminLoading ? 'Refreshing' : 'Refresh desk' }}</span>
+          </button>
+        </div>
+
+        <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_24%,transparent)] p-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="px-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Filter predictions</span>
+            <div class="flex flex-wrap items-center gap-1" aria-label="Prize desk filters">
+              <button
+                v-for="filter in (['all', 'winner', 'pending', 'verified', 'missing'] as AdminPrizeFilter[])"
+                :key="filter"
+                class="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-extrabold transition-[background-color,border-color,color] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                :class="adminPrizeFilter === filter ? 'border-[color:color-mix(in_srgb,var(--accent)_46%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))] text-[var(--accent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_16%,transparent)]' : 'border-transparent bg-transparent text-[var(--soft)] hover:border-[var(--line)] hover:bg-[var(--panel)] hover:text-[var(--text)]'"
+                type="button"
+                @click="adminPrizeFilter = filter"
+              >
+                <span>{{ adminFilterLabel(filter) }}</span>
+                <span class="min-w-5 rounded-md px-1.5 py-0.5 text-center text-[10px] leading-none" :class="adminPrizeFilter === filter ? 'bg-[color:color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]' : 'bg-[color:color-mix(in_srgb,var(--text)_7%,transparent)] text-[var(--muted)]'">{{ adminFilterCount(filter) }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="adminLoading && !adminEntries.length" class="grid gap-2.5" aria-label="Loading prize desk">
+          <div v-for="item in 3" :key="item" class="grid gap-2 rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_40%,transparent)] p-3">
+            <div class="skeleton-pulse h-4 w-36 rounded-full"></div>
+            <div class="grid gap-2 min-[720px]:grid-cols-3">
+              <div class="skeleton-pulse h-10 rounded-lg"></div>
+              <div class="skeleton-pulse h-10 rounded-lg"></div>
+              <div class="skeleton-pulse h-10 rounded-lg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="adminError" class="grid gap-3 rounded-lg border border-[color:color-mix(in_srgb,#d14343_28%,var(--line))] bg-[color:color-mix(in_srgb,#d14343_7%,var(--panel))] p-4 text-sm text-[var(--text)]">
+          <strong class="text-[var(--danger)]">Could not load prize desk</strong>
+          <p class="m-0 text-[var(--soft)]">{{ adminError }}</p>
+        </div>
+
+        <div v-else-if="!adminEntries.length" class="grid min-h-[220px] place-items-center rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_36%,transparent)] p-8 text-center">
+          <div class="grid max-w-[420px] gap-2">
+            <h3 class="m-0 text-lg font-black text-[var(--text)]">No predictions yet</h3>
+            <p class="m-0 text-sm leading-[1.5] text-[var(--muted)]">Every submitted prediction will appear here with result status and pickup verification.</p>
+          </div>
+        </div>
+
+        <div v-else-if="!adminFilteredEntries.length" class="grid min-h-[160px] place-items-center rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_30%,transparent)] p-6 text-center">
+          <div class="grid gap-1">
+            <h3 class="m-0 text-base font-black text-[var(--text)]">No rows for this filter</h3>
+            <p class="m-0 text-sm text-[var(--muted)]">Try another filter to continue reviewing predictions.</p>
+          </div>
+        </div>
+
+        <div v-else class="overflow-hidden rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_22%,transparent)]" aria-label="Prize desk predictions">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[920px] border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_62%,transparent)] text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">
+                  <th class="px-3 py-2.5">User</th>
+                  <th class="px-3 py-2.5">Match</th>
+                  <th class="px-3 py-2.5">Prediction</th>
+                  <th class="px-3 py-2.5">Actual</th>
+                  <th class="px-3 py-2.5">Result</th>
+                  <th class="px-3 py-2.5">Pickup</th>
+                  <th class="px-3 py-2.5">Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="entry in adminPrizeVisibleEntries"
+                  :key="entry.id"
+                  class="h-[76px] border-b border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] last:border-b-0 hover:bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)]"
+                >
+                  <td class="px-3 py-3 align-middle">
+                    <strong class="text-[13px] leading-tight text-[var(--text)]">{{ entry.authorName }}</strong>
+                  </td>
+                  <td class="px-3 py-3 align-middle">
+                    <div class="inline-grid grid-cols-[52px_auto_52px] items-start gap-2" :aria-label="`${entry.home.name} versus ${entry.away.name}`">
+                      <div class="grid justify-items-center gap-1">
+                        <span v-if="hasSpriteFlag(entry.home)" :class="flagClass(entry.home)" class="!h-7 !w-10 rounded-[4px]" :title="entry.home.name" aria-hidden="true"></span>
+                        <span v-else class="text-xs font-black text-[var(--text)]">{{ entry.home.code }}</span>
+                        <span class="max-w-[52px] truncate text-center text-[10px] font-bold leading-tight text-[var(--muted)]">{{ entry.home.name }}</span>
+                      </div>
+                      <span class="pt-2 text-[10px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">vs</span>
+                      <div class="grid justify-items-center gap-1">
+                        <span v-if="hasSpriteFlag(entry.away)" :class="flagClass(entry.away)" class="!h-7 !w-10 rounded-[4px]" :title="entry.away.name" aria-hidden="true"></span>
+                        <span v-else class="text-xs font-black text-[var(--text)]">{{ entry.away.code }}</span>
+                        <span class="max-w-[52px] truncate text-center text-[10px] font-bold leading-tight text-[var(--muted)]">{{ entry.away.name }}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-3 py-3 align-middle font-semibold text-[var(--text)]">{{ prizeEntryScore(entry) }}</td>
+                  <td class="px-3 py-3 align-middle">
+                    <span
+                      class="inline-flex rounded-md px-2 py-1 text-xs font-extrabold"
+                      :class="hasPrizeEntryFinalScore(entry) ? 'bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)] text-[var(--text)]' : 'bg-[color:color-mix(in_srgb,var(--muted)_9%,transparent)] text-[var(--muted)]'"
+                    >
+                      {{ prizeEntryFinalScore(entry) }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 align-middle">
+                    <span
+                      v-if="entry.result === 'pending'"
+                      class="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--muted)]"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full bg-[color:color-mix(in_srgb,var(--muted)_58%,transparent)]" aria-hidden="true"></span>
+                      Open
+                    </span>
+                    <span
+                      v-else-if="entry.result === 'winner'"
+                      class="inline-grid h-8 w-8 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)] shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_20%,transparent)]"
+                      :aria-label="prizeEntryStatusLabel(entry)"
+                      role="img"
+                    >
+                      <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m5 10.5 3.2 3.1L15.5 6"></path>
+                      </svg>
+                    </span>
+                    <span
+                      v-else
+                      class="inline-grid h-8 w-8 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))] bg-transparent text-[color:color-mix(in_srgb,var(--muted)_86%,var(--text))]"
+                      :aria-label="prizeEntryStatusLabel(entry)"
+                      role="img"
+                    >
+                      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                        <path d="M6 6l8 8M14 6l-8 8"></path>
+                      </svg>
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 align-middle">
+                    <button
+                      v-if="entry.result === 'winner'"
+                      class="inline-grid h-9 w-9 place-items-center rounded-lg border transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px"
+                      :class="entry.pickup ? 'border-[color:color-mix(in_srgb,#15803d_30%,var(--line))] bg-[color:color-mix(in_srgb,#15803d_8%,var(--panel))] text-[#166534]' : 'border-[var(--line)] text-[var(--muted)]'"
+                      type="button"
+                      :aria-label="adminPickupLabel(entry)"
+                      @click="openAdminEntry(entry)"
+                    >
+                      <svg class="h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+                        <path :d="adminPickupIconPath(entry)"></path>
+                      </svg>
+                    </button>
+                    <span v-else class="text-sm font-bold text-[var(--muted)]">-</span>
+                  </td>
+                  <td class="px-3 py-3 align-middle text-xs font-bold text-[var(--muted)]">{{ formatAdminDate(entry.createdAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_46%,transparent)] px-3 py-2">
+            <span class="text-xs font-bold text-[var(--muted)]">{{ adminPrizeRangeLabel }}</span>
+            <div class="flex items-center gap-1.5">
+              <button
+                class="inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] transition-[background-color,border-color,color] duration-100 hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"
+                type="button"
+                :disabled="adminPrizePage === 0"
+                @click="adminPrizePage = Math.max(0, adminPrizePage - 1)"
+              >
+                Prev
+              </button>
+              <span class="min-w-14 text-center text-xs font-extrabold text-[var(--muted)]">{{ adminPrizePage + 1 }}/{{ adminPrizePageCount }}</span>
+              <button
+                class="inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] transition-[background-color,border-color,color] duration-100 hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"
+                type="button"
+                :disabled="adminPrizePage >= adminPrizePageCount - 1"
+                @click="adminPrizePage = Math.min(adminPrizePageCount - 1, adminPrizePage + 1)"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Transition
+        enter-active-class="transition-opacity duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        leave-active-class="transition-opacity duration-150 ease-[cubic-bezier(0.4,0,1,1)]"
+        enter-from-class="opacity-0"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="selectedAdminEntry"
+          class="fixed inset-0 z-[1250] bg-black/35"
+          role="presentation"
+          @click.self="closeAdminEntry"
+        >
+          <Transition
+            appear
+            enter-active-class="transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            leave-active-class="transition-transform duration-200 ease-[cubic-bezier(0.4,0,1,1)]"
+            enter-from-class="translate-x-full"
+            leave-to-class="translate-x-full"
+          >
+            <aside class="ml-auto flex h-full w-[min(420px,calc(100%-24px))] flex-col border-l border-[var(--line-strong)] bg-[var(--panel)] p-4 shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" aria-labelledby="pickup-detail-title">
+              <div class="flex items-start justify-between gap-3 border-b border-[var(--line)] pb-3">
+                <div class="grid gap-1">
+                  <p class="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Pickup detail</p>
+                  <h3 id="pickup-detail-title" class="m-0 text-xl font-black leading-tight text-[var(--text)]">{{ selectedAdminEntry.authorName }}</h3>
+                  <p class="m-0 text-xs font-bold text-[var(--muted)]">{{ selectedAdminEntry.roomTitle }}</p>
+                </div>
+                <button class="inline-grid h-10 w-10 place-items-center rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] text-[var(--text)] hover:border-[var(--line-strong)]" type="button" aria-label="Close pickup detail" @click="closeAdminEntry">
+                  <svg class="h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round">
+                    <path d="M72 72l112 112M184 72 72 184"></path>
+                  </svg>
+                </button>
+              </div>
+
+              <div class="grid gap-3 overflow-auto py-4">
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_28%,transparent)] p-3">
+                    <span class="block text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Prediction</span>
+                    <strong class="mt-1 block text-sm text-[var(--text)]">{{ prizeEntryScore(selectedAdminEntry) }}</strong>
+                  </div>
+                  <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_28%,transparent)] p-3">
+                    <span class="block text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Actual</span>
+                    <strong class="mt-1 block text-sm text-[var(--text)]">{{ prizeEntryFinalScore(selectedAdminEntry) }}</strong>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_22%,transparent)] p-3">
+                  <span class="mb-2 inline-flex items-center gap-2 text-xs font-bold text-[var(--soft)]">
+                    <span
+                      v-if="selectedAdminEntry.result === 'winner'"
+                      class="inline-grid h-7 w-7 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)]"
+                      aria-hidden="true"
+                    >
+                      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m5 10.5 3.2 3.1L15.5 6"></path>
+                      </svg>
+                    </span>
+                    <span
+                      v-else-if="selectedAdminEntry.result === 'miss'"
+                      class="inline-grid h-7 w-7 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))] text-[var(--muted)]"
+                      aria-hidden="true"
+                    >
+                      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                        <path d="M6 6l8 8M14 6l-8 8"></path>
+                      </svg>
+                    </span>
+                    <span
+                      v-else
+                      class="inline-block h-2 w-2 rounded-full bg-[color:color-mix(in_srgb,var(--muted)_58%,transparent)]"
+                      aria-hidden="true"
+                    ></span>
+                    {{ prizeEntryStatusLabel(selectedAdminEntry) }}
+                  </span>
+                  <div class="grid gap-1 text-sm text-[var(--soft)]">
+                    <p class="m-0"><strong class="text-[var(--text)]">Match:</strong> {{ selectedAdminEntry.home.name }} vs {{ selectedAdminEntry.away.name }}</p>
+                    <p class="m-0"><strong class="text-[var(--text)]">Score provider:</strong> {{ selectedAdminEntry.finalScore?.provider || 'No score provider yet' }}</p>
+                    <p class="m-0"><strong class="text-[var(--text)]">Submitted:</strong> {{ formatAdminDate(selectedAdminEntry.createdAt) }}</p>
+                  </div>
+                </div>
+
+                <div class="grid gap-2 rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] p-3">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Question and answer</span>
+                    <span class="rounded-md px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em]" :class="selectedAdminEntry.pickup ? 'bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)]' : 'bg-[color:color-mix(in_srgb,var(--muted)_10%,transparent)] text-[var(--muted)]'">{{ selectedAdminEntry.pickup ? 'Provided' : 'Missing' }}</span>
+                  </div>
+                  <template v-if="selectedAdminEntry.pickup">
+                    <div class="grid gap-1">
+                      <span class="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Question</span>
+                      <p class="m-0 text-sm font-bold leading-snug text-[var(--text)]">{{ selectedAdminEntry.pickup.question }}</p>
+                    </div>
+                    <div class="grid gap-1">
+                      <span class="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Answer</span>
+                      <p class="m-0 text-sm leading-snug text-[var(--soft)]">{{ selectedAdminEntry.pickup.answer }}</p>
+                    </div>
+                  </template>
+                  <p v-else class="m-0 text-sm leading-snug text-[var(--muted)]">This prediction has no pickup question saved, so admin cannot verify prize pickup from this browser setup.</p>
+                </div>
+              </div>
+            </aside>
+          </Transition>
+        </div>
+      </Transition>
+    </section>
+
+    <section
+      v-else-if="isNotFound"
+      class="relative grid h-full min-h-0 overflow-hidden border-y border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_76%,transparent)] px-[clamp(22px,5vw,64px)] py-[clamp(20px,3vw,32px)] max-md:px-4 max-md:py-4"
       aria-labelledby="not-found-title"
     >
       <div class="pointer-events-none absolute inset-0 opacity-60" aria-hidden="true">
@@ -1988,8 +2819,8 @@ onBeforeUnmount(() => {
         <div class="absolute inset-x-[clamp(24px,8vw,120px)] top-1/2 h-px bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)]"></div>
       </div>
 
-      <div class="relative mx-auto grid h-full w-full max-w-[1040px] content-center justify-items-center gap-[clamp(22px,4vw,42px)]">
-        <div class="relative overflow-hidden rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] p-[clamp(20px,3vw,34px)] shadow-[0_24px_58px_color-mix(in_srgb,var(--accent)_11%,transparent)]">
+      <div class="relative mx-auto grid h-full w-full max-w-[1180px] content-center justify-items-center gap-[clamp(22px,4vw,42px)]">
+        <div class="relative overflow-hidden rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] p-[clamp(20px,3vw,34px)]">
           <div class="absolute inset-0 opacity-[0.42]" aria-hidden="true">
             <div class="absolute left-1/2 top-[-40%] h-[180%] w-px bg-[color:color-mix(in_srgb,var(--accent)_20%,transparent)]"></div>
             <div class="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,transparent)]"></div>
@@ -2004,7 +2835,7 @@ onBeforeUnmount(() => {
 
             <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center justify-center gap-4 text-center">
               <div class="grid justify-items-center gap-2">
-                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_10%,transparent)]">4</div>
+                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)]">4</div>
                 <span class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Home</span>
               </div>
               <div class="inline-flex items-center gap-[clamp(8px,1.6vw,18px)] [font-variant-numeric:tabular-nums]">
@@ -2015,7 +2846,7 @@ onBeforeUnmount(() => {
                 <span class="text-[clamp(76px,10vw,148px)] font-black leading-none text-[var(--text)]">4</span>
               </div>
               <div class="grid justify-items-center gap-2">
-                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_10%,transparent)]">4</div>
+                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)]">4</div>
                 <span class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Away</span>
               </div>
             </div>
@@ -2028,11 +2859,11 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="grid max-w-[760px] justify-items-center gap-5 text-center">
+        <div class="grid max-w-[1120px] justify-items-center gap-5 text-center">
           <div class="grid gap-2">
             <p class="m-0 text-xs font-extrabold uppercase tracking-[0.12em] text-[var(--accent)]">404 · full time</p>
-            <h1 id="not-found-title" class="m-0 text-[clamp(48px,7vw,96px)] font-black leading-[0.92] text-[var(--text)]">No room on this pitch</h1>
-            <p class="m-0 mx-auto max-w-[52ch] text-[clamp(15px,1.35vw,18px)] leading-[1.55] text-[var(--soft)]">That link does not match any active score room. Jump back to the room list and pick a fixture that is actually on the board.</p>
+            <h1 id="not-found-title" class="m-0 text-[clamp(22px,2.4vw,30px)] font-black leading-[1.02] text-[var(--text)] min-[981px]:whitespace-nowrap">That link does not match any active score room.</h1>
+            <p class="m-0 mx-auto max-w-[58ch] text-[clamp(14px,1.05vw,16px)] leading-[1.55] text-[var(--soft)] min-[981px]:whitespace-nowrap">Jump back to the room list and pick a fixture that is actually on the board.</p>
           </div>
 
           <button
@@ -2090,7 +2921,7 @@ onBeforeUnmount(() => {
             <article
               v-for="item in 2"
               :key="item"
-              class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] max-md:rounded-[10px] max-md:p-3.5"
+              class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 max-md:rounded-[10px] max-md:p-3.5"
             >
               <div class="skeleton-pulse h-12 w-12 rounded-full"></div>
               <div class="grid min-w-0 gap-2.5">
@@ -2114,7 +2945,7 @@ onBeforeUnmount(() => {
       </div>
 
       <aside class="grid max-h-[calc(100svh-118px)] gap-3 overflow-hidden min-[981px]:sticky min-[981px]:top-4">
-        <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] shadow-[var(--card-shadow)] max-md:rounded-[10px]">
+        <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] max-md:rounded-[10px]">
           <div class="grid gap-[14px] pt-[22px]">
             <div class="skeleton-pulse h-3 w-32 rounded-full"></div>
             <div class="grid grid-cols-[auto_auto_auto] items-center justify-center gap-[clamp(14px,3vw,28px)] py-3">
@@ -2126,7 +2957,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="grid gap-[14px] rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] max-md:rounded-[10px]">
+        <section class="grid gap-[14px] rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 max-md:rounded-[10px]">
           <div class="skeleton-pulse h-6 w-36 rounded-full"></div>
           <div class="grid gap-2.5">
             <div v-for="item in 4" :key="item" class="grid min-h-[62px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-t-[color:color-mix(in_srgb,var(--line)_86%,transparent)] p-3 first:border-t-0 first:pt-0.5">
@@ -2146,7 +2977,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="relative mx-auto grid h-full w-full max-w-[1040px] content-center justify-items-center gap-[clamp(22px,4vw,42px)]">
-        <div class="relative overflow-hidden rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] p-[clamp(20px,3vw,34px)] shadow-[0_24px_58px_color-mix(in_srgb,var(--accent)_11%,transparent)]">
+        <div class="relative overflow-hidden rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_5%,var(--panel))] p-[clamp(20px,3vw,34px)]">
           <div class="absolute inset-0 opacity-[0.42]" aria-hidden="true">
             <div class="absolute left-1/2 top-[-40%] h-[180%] w-px bg-[color:color-mix(in_srgb,var(--accent)_20%,transparent)]"></div>
             <div class="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,transparent)]"></div>
@@ -2161,7 +2992,7 @@ onBeforeUnmount(() => {
 
             <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center justify-center gap-4 text-center">
               <div class="grid justify-items-center gap-2">
-                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_10%,transparent)]">?</div>
+                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)]">?</div>
                 <span class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Rooms</span>
               </div>
               <div class="inline-flex items-center gap-[clamp(8px,1.6vw,18px)] [font-variant-numeric:tabular-nums]">
@@ -2170,7 +3001,7 @@ onBeforeUnmount(() => {
                 <span class="text-[clamp(76px,10vw,148px)] font-black leading-none text-[var(--text)]">0</span>
               </div>
               <div class="grid justify-items-center gap-2">
-                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_10%,transparent)]">?</div>
+                <div class="grid h-[clamp(60px,6vw,88px)] w-[clamp(60px,6vw,88px)] place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[var(--panel)] text-[clamp(30px,3vw,46px)] font-black leading-none text-[var(--accent)]">?</div>
                 <span class="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Board</span>
               </div>
             </div>
@@ -2216,7 +3047,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </section>
-    <section v-else-if="!rooms.length" class="grid min-h-[420px] place-items-center rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-8 text-center shadow-[var(--card-shadow)]">
+    <section v-else-if="!rooms.length" class="grid min-h-[420px] place-items-center rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-8 text-center">
       <div class="grid max-w-[480px] justify-items-center gap-3">
         <div class="inline-grid h-14 w-14 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] text-[var(--accent)]">
           <svg class="ph-icon h-7 w-7" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
@@ -2254,7 +3085,7 @@ onBeforeUnmount(() => {
           class="hidden items-center justify-center gap-2 transition-[background-color,border-color,color,transform] duration-150 ease-[var(--ease)] active:translate-y-px disabled:cursor-default disabled:active:translate-y-0 max-md:inline-flex"
           :class="scoreCtaDisabled
             ? 'mx-auto min-h-9 w-fit rounded-full border border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_82%,var(--accent)_8%)] px-3.5 text-[11px] font-black uppercase text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))] shadow-none'
-            : 'min-h-12 w-full rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)] shadow-[0_12px_26px_color-mix(in_srgb,var(--accent)_18%,transparent)]'"
+            : 'min-h-12 w-full rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)]'"
           type="button"
           :disabled="scoreCtaDisabled"
           @click="openPredictionModal"
@@ -2361,7 +3192,7 @@ onBeforeUnmount(() => {
         <section
           class="hidden min-h-11 items-center justify-between gap-3 rounded-[10px] border bg-[color:color-mix(in_srgb,var(--panel)_68%,transparent)] px-3.5 py-2.5 text-left max-md:flex"
           :class="[
-            activeRoom.predictions.length ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))] shadow-[0_10px_24px_color-mix(in_srgb,var(--text)_5%,transparent)]' : 'border-dashed border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))]',
+            activeRoom.predictions.length ? 'border-[color:color-mix(in_srgb,var(--accent)_20%,var(--line))]' : 'border-dashed border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))]',
             isRoomRecentlyUpdated(activeRoom.id) ? 'room-update-pulse' : '',
           ]"
           :aria-label="activeRoom.predictions.length ? `Top pick: ${activeRoom.home.code} ${activeRoom.mostBacked.home}, ${activeRoom.away.code} ${activeRoom.mostBacked.away}` : 'No top pick yet'"
@@ -2403,7 +3234,7 @@ onBeforeUnmount(() => {
           </Transition>
         </section>
 
-        <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 shadow-[var(--card-shadow)] md:hidden" aria-label="Mobile chat rooms">
+        <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 md:hidden" aria-label="Mobile chat rooms">
           <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <svg class="ph-icon h-4 w-4 text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
@@ -2425,7 +3256,7 @@ onBeforeUnmount(() => {
                   <path d="M160 48 80 128l80 80"></path>
                 </svg>
               </button>
-              <span class="min-w-[30px] text-center text-[10px] font-black tabular-nums text-[var(--muted)]">{{ roomPageLabel }}</span>
+            <span class="min-w-[34px] text-center text-[11px] font-black tabular-nums text-[var(--muted)]">{{ roomPageLabel }}</span>
               <button
                 class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px disabled:pointer-events-none disabled:opacity-35"
                 type="button"
@@ -2475,18 +3306,18 @@ onBeforeUnmount(() => {
                 :aria-label="roomStatusLabel(room)"
               >
                 <span v-if="showsLiveRoomIcon(room)" class="grid justify-items-center gap-1">
-                  <span class="text-[8px] font-black uppercase leading-none text-[var(--accent)]">{{ mobileRoomStatusText(room) }}</span>
+                  <span class="text-[10px] font-black uppercase leading-none text-[var(--accent)]">{{ mobileRoomStatusText(room) }}</span>
                   <span class="live-pulse-dot h-2 w-2 rounded-full bg-current" aria-hidden="true"></span>
                 </span>
                 <span v-else-if="effectiveRoomMatchStatus(room) === 'finished' || room.roomStatus === 'closed'" class="grid justify-items-center gap-1 text-[var(--muted)]">
-                  <span class="text-[8px] font-black uppercase leading-none">{{ mobileRoomStatusText(room) }}</span>
+                  <span class="text-[10px] font-black uppercase leading-none">{{ mobileRoomStatusText(room) }}</span>
                   <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <rect x="48" y="108" width="160" height="104" rx="16"></rect>
                     <path d="M88 108V76a40 40 0 0 1 80 0v32"></path>
                   </svg>
                 </span>
                 <span v-else class="grid justify-items-center gap-1">
-                  <span class="text-[8px] font-black uppercase leading-none">{{ mobileRoomStatusText(room) }}</span>
+                  <span class="text-[10px] font-black uppercase leading-none">{{ mobileRoomStatusText(room) }}</span>
                   <svg class="ph-icon h-3.5 w-3.5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <circle cx="128" cy="128" r="84"></circle>
                     <path d="M128 76v56l38 22"></path>
@@ -2505,7 +3336,7 @@ onBeforeUnmount(() => {
               <span class="text-[15px] font-medium text-[var(--muted)] max-sm:text-[11px]">Sorted by room energy</span>
             </h2>
             <button
-              class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_84%,transparent)] px-3 text-[13px] font-[760] text-[var(--soft)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent)] transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--text)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:text-[var(--muted)] disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:active:translate-y-0 max-sm:ml-auto max-sm:h-7 max-sm:min-h-7 max-sm:w-[58px] max-sm:gap-1 max-sm:self-baseline max-sm:rounded-md max-sm:border-[var(--line)] max-sm:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] max-sm:px-1.5 max-sm:py-0 max-sm:text-[9px] max-sm:font-[780] max-sm:leading-none max-sm:text-[var(--soft)] max-sm:shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent)] md:min-h-9"
+              class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_84%,transparent)] px-3 text-[13px] font-[760] text-[var(--soft)] transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--text)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:text-[var(--muted)] disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:active:translate-y-0 max-sm:ml-auto max-sm:h-8 max-sm:min-h-8 max-sm:w-[66px] max-sm:gap-1 max-sm:self-baseline max-sm:rounded-md max-sm:border-[var(--line)] max-sm:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] max-sm:px-2 max-sm:py-0 max-sm:text-[11px] max-sm:font-[780] max-sm:leading-none max-sm:text-[var(--soft)] md:min-h-9"
               type="button"
               :aria-label="nextFeedSortLabel"
               :aria-pressed="feedSortMode === 'comments'"
@@ -2536,7 +3367,7 @@ onBeforeUnmount(() => {
           <div
             v-if="!sortedPredictions.length"
             :key="`feed-empty-${activeRoom.id}`"
-            class="grid justify-items-center gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-5 text-center shadow-[var(--card-shadow)] max-md:rounded-[10px] max-md:p-4"
+            class="grid justify-items-center gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-5 text-center max-md:rounded-[10px] max-md:p-4"
           >
             <div class="inline-grid h-12 w-12 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] text-[var(--accent)]">
               <svg class="ph-icon h-6 w-6" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
@@ -2565,9 +3396,9 @@ onBeforeUnmount(() => {
                 v-for="item in sortedPredictions"
                 :key="item.id"
                 data-prediction-card
-                class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] transition-[background-color,border-color,box-shadow] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
+                class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 transition-[background-color,border-color] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
                 :class="[
-                  leadComment(item) && (isReplying(item.id, leadComment(item)!.id) || isCommentsExpanded(item.id)) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))] shadow-[0_14px_36px_rgba(42,37,32,0.10)]' : '',
+                  isReplying(item.id, replyTargetIdForPrediction(item)) || isCommentsExpanded(item.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))]' : '',
                   isPredictionRecentlyUpdated(item.id) ? 'room-update-pulse' : '',
                   isOptimisticPrediction(item.id) ? 'opacity-80' : '',
                 ]"
@@ -2589,13 +3420,25 @@ onBeforeUnmount(() => {
 
               <div class="grid min-w-0 gap-2 max-md:gap-1.5">
                 <div class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden whitespace-nowrap max-sm:gap-1.5">
-                  <h3 class="m-0 min-w-0 max-w-[44%] truncate text-[15px] font-black leading-tight text-[var(--text)] max-sm:max-w-[46%] max-sm:text-[14px]">{{ item.name }}</h3>
-                  <span class="inline-flex shrink-0 items-center gap-1 rounded-md border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_60%,transparent)] px-1.5 py-1 text-[10px] font-black uppercase leading-none text-[var(--muted)] [font-variant-numeric:tabular-nums] max-sm:px-1 max-sm:text-[9px]">
+                  <h3 class="m-0 w-[9ch] shrink-0 truncate text-[15px] font-black leading-tight text-[var(--text)] max-sm:w-[8ch] max-sm:text-[14px]">{{ item.name }}</h3>
+                  <span
+                    v-if="leadComment(item)"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-md border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_60%,transparent)] px-1.5 py-1 text-[10px] font-black uppercase leading-none text-[var(--muted)] [font-variant-numeric:tabular-nums] max-sm:px-1 max-sm:text-[9px]"
+                  >
                     <span>{{ activeRoom.home.code }}</span>
                     <strong class="text-[14px] font-[900] text-[var(--text)] max-sm:text-[13px]">{{ item.homeScore }}-{{ item.awayScore }}</strong>
                     <span>{{ activeRoom.away.code }}</span>
                   </span>
                   <span v-if="isOptimisticPrediction(item.id)" class="ml-2 text-[10px] font-black uppercase leading-none text-[var(--accent)]">sending</span>
+                </div>
+
+                <div
+                  v-if="!leadComment(item)"
+                  class="inline-flex w-fit items-center gap-1 rounded-md border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_60%,transparent)] px-2 py-1.5 text-[11px] font-black uppercase leading-none text-[var(--muted)] [font-variant-numeric:tabular-nums] max-sm:px-1.5 max-sm:text-[10px]"
+                >
+                  <span>{{ activeRoom.home.code }}</span>
+                  <strong class="text-[16px] font-[900] text-[var(--text)] max-sm:text-[14px]">{{ item.homeScore }}-{{ item.awayScore }}</strong>
+                  <span>{{ activeRoom.away.code }}</span>
                 </div>
 
                 <div v-if="leadComment(item)" class="grid gap-1">
@@ -2646,7 +3489,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
 
-                <div v-if="leadComment(item)?.replies.length" data-reply-thread class="grid gap-2 pt-1 pl-3">
+                <div v-if="threadEntries(item).length" data-reply-thread class="grid gap-2 pt-1 pl-3">
                   <TransitionGroup
                     :name="isFastCollapsingComments(item.id) ? 'reply-row-fast' : 'reply-row'"
                     tag="div"
@@ -2654,52 +3497,52 @@ onBeforeUnmount(() => {
                     :class="shouldFadeCommentPreview(item) ? 'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-8 after:bg-gradient-to-b after:from-transparent after:to-[var(--panel)]' : ''"
                   >
                     <div
-                      v-for="(reply, replyIndex) in visibleReplies(item)"
-                      :key="reply.id"
+                      v-for="(entry, replyIndex) in visibleThreadEntries(item)"
+                      :key="entry.id"
                       class="reply-row text-xs leading-[1.45] text-[var(--muted)]"
                       :style="{ '--reply-index': replyIndex }"
                     >
                       <form
-                        v-if="editingReplyId === reply.id"
+                        v-if="entry.type === 'reply' && editingReplyId === entry.id"
                         class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto]"
-                        @submit.prevent="submitReplyEdit(reply)"
+                        @submit.prevent="submitReplyEdit(replyById(item, entry.id)!)"
                       >
                         <input
-                          :data-edit-key="reply.id"
-                          v-model="editDrafts[reply.id]"
+                          :data-edit-key="entry.id"
+                          v-model="editDrafts[entry.id]"
                           class="min-h-8 w-full rounded-md border border-[var(--control-border)] bg-[var(--control-bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] disabled:cursor-wait disabled:opacity-70"
                           maxlength="280"
                           aria-label="Edit reply"
-                          :disabled="isEditSubmitting(reply.id)"
+                          :disabled="isEditSubmitting(entry.id)"
                         />
                         <button
                           class="inline-flex min-h-8 items-center justify-center rounded-md bg-[var(--accent)] px-2 text-[10px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
                           type="submit"
-                          :disabled="!canSubmitEdit(reply.id)"
+                          :disabled="!canSubmitEdit(entry.id)"
                         >
-                          {{ isEditSubmitting(reply.id) ? 'saving' : 'Edit' }}
+                          {{ isEditSubmitting(entry.id) ? 'saving' : 'Edit' }}
                         </button>
                         <button
                           class="inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
                           type="button"
-                          :disabled="isEditSubmitting(reply.id)"
-                          @click="cancelEdit(reply.id)"
+                          :disabled="isEditSubmitting(entry.id)"
+                          @click="cancelEdit(entry.id)"
                         >
                           Cancel
                         </button>
-                        <p v-if="editErrors[reply.id]" class="col-span-full m-0 text-[11px] font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[reply.id] }}</p>
+                        <p v-if="editErrors[entry.id]" class="col-span-full m-0 text-[11px] font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]">{{ editErrors[entry.id] }}</p>
                       </form>
                       <span v-else>
-                        <strong>{{ reply.name }}:</strong> {{ reply.text }}
-                        <span v-if="isOptimisticReply(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">sending</span>
-                        <span v-if="isEditSubmitting(reply.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">saving</span>
-                        <span v-if="reply.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
+                        <strong>{{ entry.name }}:</strong> {{ entry.text }}
+                        <span v-if="entry.type === 'reply' && isOptimisticReply(entry.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">sending</span>
+                        <span v-if="entry.type === 'reply' && isEditSubmitting(entry.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">saving</span>
+                        <span v-if="entry.editedAt" class="ml-1 text-[9px] font-bold uppercase text-[var(--muted)]">edited</span>
                       </span>
                     </div>
                   </TransitionGroup>
                   <button
                     v-if="shouldShowCommentToggle(item)"
-                    class="ml-3 inline-flex w-fit items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-[600] leading-tight text-[color:color-mix(in_srgb,var(--accent)_62%,var(--muted))] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--muted))] active:translate-y-px"
+                    class="ml-3 inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--accent)_62%,var(--muted))] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--muted))] active:translate-y-px"
                     type="button"
                     :aria-expanded="String(isCommentsExpanded(item.id))"
                     @click="toggleComments(item.id)"
@@ -2718,30 +3561,30 @@ onBeforeUnmount(() => {
                 <Transition
                   name="reply-composer"
                   @after-enter="focusReplyComposer"
-                  @after-leave="leadComment(item) && finishReplyComposerClose(item.id, leadComment(item)!.id)"
+                  @after-leave="finishReplyComposerClose(item.id, replyTargetIdForPrediction(item))"
                 >
                   <form
-                    v-if="leadComment(item) && isReplying(item.id, leadComment(item)!.id)"
+                    v-if="isReplying(item.id, replyTargetIdForPrediction(item))"
                     data-reply-composer
                     class="mt-1 grid scroll-mt-24 grid-cols-[minmax(0,1fr)_auto] gap-2 max-md:mb-2 max-md:grid-cols-[minmax(0,1fr)_auto]"
-                    @submit.prevent="submitReply(leadComment(item)!.id)"
+                    @submit.prevent="submitReply(replyTargetIdForPrediction(item))"
                   >
                     <input
-                      :data-reply-key="leadComment(item)!.id"
-                      v-model="replyDrafts[leadComment(item)!.id]"
+                      :data-reply-key="replyTargetIdForPrediction(item)"
+                      v-model="replyDrafts[replyTargetIdForPrediction(item)]"
                       class="min-h-9 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm text-[var(--text)] outline-none disabled:cursor-wait disabled:opacity-70"
-                      aria-label="Reply"
-                      placeholder="Keep it light..."
-                      :disabled="isReplySubmitting(leadComment(item)!.id)"
-                      @input="markTyping('reply', leadComment(item)!.id)"
-                      @blur="stopTyping('reply', leadComment(item)!.id)"
+                      :aria-label="replyComposerLabel(item)"
+                      :placeholder="replyComposerPlaceholder(item)"
+                      :disabled="isReplySubmitting(replyTargetIdForPrediction(item))"
+                      @input="markTyping('reply', replyTargetIdForPrediction(item))"
+                      @blur="stopTyping('reply', replyTargetIdForPrediction(item))"
                     />
                     <button
                       class="hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--control-border)] bg-[color:color-mix(in_srgb,var(--control-bg)_76%,transparent)] text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px max-md:inline-flex"
                       type="button"
                       aria-label="Close reply input"
-                      :disabled="isReplySubmitting(leadComment(item)!.id)"
-                      @click="closeReplyComposer(leadComment(item)!.id)"
+                      :disabled="isReplySubmitting(replyTargetIdForPrediction(item))"
+                      @click="closeReplyComposer(replyTargetIdForPrediction(item))"
                     >
                       <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="20">
                         <path d="M72 72l112 112"></path>
@@ -2751,15 +3594,15 @@ onBeforeUnmount(() => {
                     <button
                       class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0 max-md:col-span-2"
                       type="submit"
-                      :disabled="!canSubmitReply(leadComment(item)!.id)"
+                      :disabled="!canSubmitReply(replyTargetIdForPrediction(item))"
                     >
-                      <span>{{ isReplySubmitting(leadComment(item)!.id) ? 'sending' : 'Reply' }}</span>
+                      <span>{{ isReplySubmitting(replyTargetIdForPrediction(item)) ? 'sending' : replySubmitLabel(item) }}</span>
                     </button>
                     <p
-                      v-if="replyErrors[leadComment(item)!.id]"
+                      v-if="replyErrors[replyTargetIdForPrediction(item)]"
                       class="col-span-full m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]"
                     >
-                      {{ replyErrors[leadComment(item)!.id] }}
+                      {{ replyErrors[replyTargetIdForPrediction(item)] }}
                     </p>
                   </form>
                 </Transition>
@@ -2781,19 +3624,18 @@ onBeforeUnmount(() => {
 
                 <button
                   class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] active:translate-y-px max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
-                  :class="leadComment(item) && isReplying(item.id, leadComment(item)!.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
+                  :class="isReplying(item.id, replyTargetIdForPrediction(item)) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
                   type="button"
-                  :disabled="!leadComment(item)"
-                  :aria-expanded="leadComment(item) ? String(isReplying(item.id, leadComment(item)!.id)) : 'false'"
-                  :aria-label="leadComment(item) ? `Reply to ${item.name}. ${predictionCommentTotal(item)} comments and replies` : `${item.name} did not add a comment`"
-                  @click="leadComment(item) && toggleReply(item.id, leadComment(item)!.id)"
+                  :aria-expanded="String(isReplying(item.id, replyTargetIdForPrediction(item)))"
+                  :aria-label="replyActionLabel(item)"
+                  @click="toggleReply(item.id, replyTargetIdForPrediction(item))"
                 >
                   <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <path d="M45.2 188.7A88 88 0 1 1 76 219.5L36 228Z"></path>
                   </svg>
                   <span :key="predictionCommentTotal(item)" class="reaction-count [font-variant-numeric:tabular-nums]">{{ predictionCommentTotal(item) }}</span>
                   <span
-                    v-if="leadComment(item) && hasReplyDraft(leadComment(item)!.id)"
+                    v-if="hasReplyDraft(replyTargetIdForPrediction(item))"
                     class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
                     aria-label="Reply draft saved"
                   ></span>
@@ -2807,7 +3649,7 @@ onBeforeUnmount(() => {
 
         <button
           v-if="feedNavMode !== 'hidden'"
-          class="fixed right-4 bottom-[calc(82px+env(safe-area-inset-bottom))] z-[720] hidden h-11 w-11 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--line)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] text-[var(--text)] shadow-[0_14px_30px_color-mix(in_srgb,var(--text)_12%,transparent)] backdrop-blur-md transition-[background-color,border-color,color,transform,opacity] duration-150 ease-[var(--ease)] active:translate-y-px max-md:grid"
+          class="fixed right-4 bottom-[calc(82px+env(safe-area-inset-bottom))] z-[720] hidden h-11 w-11 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--line)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] text-[var(--text)] backdrop-blur-md transition-[background-color,border-color,color,transform,opacity] duration-150 ease-[var(--ease)] active:translate-y-px max-md:grid"
           type="button"
           :aria-label="feedNavMode === 'up' ? 'Jump to top of comments' : 'Jump to latest comments'"
           @click="handleFeedNavClick"
@@ -2824,57 +3666,130 @@ onBeforeUnmount(() => {
       </div>
 
       <aside class="grid gap-3 min-[981px]:sticky min-[981px]:top-4 max-md:hidden">
-        <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] shadow-[var(--card-shadow)] max-md:rounded-[10px]">
+        <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-[18px] max-md:rounded-[10px]">
           <div
-            class="relative grid gap-[14px] pt-[22px] max-md:pt-[18px]"
+            class="relative grid pt-1 max-md:pt-[18px]"
             :aria-label="`Room readout carousel for ${activeRoom.home.name} vs ${activeRoom.away.name}`"
           >
-            <div class="text-xs font-extrabold uppercase text-[var(--muted)]">Room readout</div>
             <div
-              class="top-pick-carousel min-h-[206px]"
+              class="top-pick-carousel h-[218px]"
               :style="{ '--slide-count': topPickInsights.length }"
             >
               <Transition name="top-pick-fade" mode="out-in">
                 <article
                   v-if="activeTopPickInsight"
                   :key="`desktop-readout-${activeRoom.id}-${activeTopPickInsight.key}`"
-                  class="top-pick-slide desktop-readout-slide relative grid content-center gap-3 px-1 py-2"
+                  class="top-pick-slide desktop-readout-slide relative grid content-start gap-3 px-1 py-2"
                   :class="`top-pick-slide-${activeTopPickInsight.tone}`"
                 >
-                  <span v-if="activeTopPickInsight.key === 'crowd'" class="absolute right-[-73px] top-[-30px] z-20 inline-flex h-7 w-[184px] origin-center rotate-45 items-center justify-center border-y border-y-[color:color-mix(in_srgb,var(--accent)_42%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--panel))] px-3 text-center text-[10px] font-extrabold uppercase leading-none tracking-[0.08em] text-[color:color-mix(in_srgb,var(--accent)_88%,var(--text))]">Top pick</span>
-                  <div class="flex items-center justify-between gap-3">
+                  <div v-if="activeTopPickInsight.key === 'crowd' && activeTopPickInsight.crowd" class="crowd-readout">
+                    <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
+                      <span class="top-pick-emoji text-[20px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
+                      <span>{{ activeTopPickInsight.label }}</span>
+                    </span>
+
+                    <div class="crowd-readout-grid">
+                      <div class="grid min-w-0 gap-3 text-center">
+                        <strong class="crowd-readout-value font-black leading-[0.98] text-[var(--text)]">{{ activeTopPickInsight.value }}</strong>
+                        <div class="crowd-readout-attribution">
+                          <span>{{ activeTopPickInsight.caption }}</span>
+                          <span>{{ activeTopPickInsight.crowd.predictorLabel }}</span>
+                        </div>
+                      </div>
+
+                      <div class="crowd-readout-stats" aria-label="Room support for the crowd pick">
+                        <div class="grid gap-0.5">
+                          <span class="text-[28px] font-black leading-none text-[var(--text)]">{{ activeTopPickInsight.crowd.share }}%</span>
+                          <span class="text-[10px] font-extrabold uppercase leading-none tracking-[0.08em] text-[var(--muted)]">of room</span>
+                        </div>
+                        <div class="h-10 w-px bg-[color:color-mix(in_srgb,var(--line)_80%,transparent)]" aria-hidden="true"></div>
+                        <div class="grid gap-0.5 text-right">
+                          <span class="text-[18px] font-black leading-none text-[var(--text)]">{{ activeTopPickInsight.crowd.pickCount }}/{{ activeTopPickInsight.crowd.total }}</span>
+                          <span class="text-[10px] font-extrabold uppercase leading-none tracking-[0.08em] text-[var(--muted)]">picks</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else-if="activeTopPickInsight.weather" class="banter-weather-readout">
                     <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
                       <span class="top-pick-emoji text-[22px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
                       <span>{{ activeTopPickInsight.label }}</span>
                     </span>
+                    <div class="grid gap-2">
+                      <strong class="banter-weather-value font-black leading-none text-[var(--text)]">{{ activeTopPickInsight.value }}</strong>
+                      <p class="m-0 text-sm font-[760] leading-snug text-[var(--soft)]">{{ activeTopPickInsight.caption }}</p>
+                    </div>
+                    <div class="banter-weather-signals" aria-label="Room banter signals">
+                      <span>
+                        <strong>{{ activeTopPickInsight.weather.picks }}</strong>
+                        <small>picks</small>
+                      </span>
+                      <span>
+                        <strong>{{ activeTopPickInsight.weather.comments }}</strong>
+                        <small>replies</small>
+                      </span>
+                      <span>
+                        <strong>{{ activeTopPickInsight.weather.likes }}</strong>
+                        <small>likes</small>
+                      </span>
+                    </div>
                   </div>
 
-                  <div v-if="!activeTopPickInsight.split" class="grid gap-1.5">
-                    <strong class="text-[clamp(22px,2.35vw,30px)] font-black leading-[1.06] text-[var(--text)]">{{ activeTopPickInsight.value }}</strong>
-                    <span class="text-sm font-[720] leading-snug text-[var(--soft)]">{{ activeTopPickInsight.detail }}</span>
+                  <div v-else-if="!activeTopPickInsight.split" class="grid content-start gap-3">
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
+                        <span class="top-pick-emoji text-[22px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
+                        <span>{{ activeTopPickInsight.label }}</span>
+                      </span>
+                    </div>
+                    <div class="grid gap-1.5">
+                      <strong class="text-[clamp(22px,2.35vw,30px)] font-black leading-[1.06] text-[var(--text)]">{{ activeTopPickInsight.value }}</strong>
+                      <span class="text-sm font-[720] leading-snug text-[var(--soft)]">{{ activeTopPickInsight.detail }}</span>
+                    </div>
                   </div>
 
-                  <div v-else class="grid gap-2">
+                  <div v-else class="grid content-start gap-2">
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">
+                        <span class="top-pick-emoji text-[22px] leading-none" aria-hidden="true">{{ activeTopPickInsight.icon }}</span>
+                        <span>{{ activeTopPickInsight.label }}</span>
+                      </span>
+                    </div>
                     <div class="room-split-pitch" aria-hidden="true">
-                      <svg viewBox="0 0 260 56" role="img">
-                        <rect class="pitch-field" x="2" y="2" width="256" height="52" rx="10"></rect>
-                        <path class="pitch-line" d="M86.5 2v52M173.5 2v52M130 2v52"></path>
-                        <circle class="pitch-center" cx="130" cy="28" r="12"></circle>
-                        <path class="pitch-box" d="M2 16h26v24H2M258 16h-26v24h26"></path>
-                        <rect class="pitch-fill pitch-fill-home" x="2" y="2" :width="Math.max(10, activeTopPickInsight.split.home * 2.56)" height="52" rx="10"></rect>
-                        <rect class="pitch-fill pitch-fill-draw" :x="130 - Math.max(7, activeTopPickInsight.split.draw * 1.28)" y="2" :width="Math.max(14, activeTopPickInsight.split.draw * 2.56)" height="52"></rect>
-                        <rect class="pitch-fill pitch-fill-away" :x="258 - Math.max(10, activeTopPickInsight.split.away * 2.56)" y="2" :width="Math.max(10, activeTopPickInsight.split.away * 2.56)" height="52" rx="10"></rect>
-                    </svg>
-                      <div class="room-split-pitch-labels">
-                        <span>{{ activeTopPickInsight.split.homeLabel }} {{ activeTopPickInsight.split.home }}%</span>
-                        <span>D {{ activeTopPickInsight.split.draw }}%</span>
-                        <span>{{ activeTopPickInsight.split.awayLabel }} {{ activeTopPickInsight.split.away }}%</span>
+                      <svg viewBox="0 0 320 118" role="img">
+                        <rect class="pitch-field" x="2" y="2" width="316" height="114" rx="18"></rect>
+                        <rect v-if="activeTopPickInsight.split.home > 0" class="pitch-fill pitch-fill-home" x="2" y="2" :width="activeTopPickInsight.split.home * 3.16" height="114" rx="18"></rect>
+                        <rect v-if="activeTopPickInsight.split.draw > 0" class="pitch-fill pitch-fill-draw" :x="160 - activeTopPickInsight.split.draw * 1.58" y="2" :width="activeTopPickInsight.split.draw * 3.16" height="114"></rect>
+                        <rect v-if="activeTopPickInsight.split.away > 0" class="pitch-fill pitch-fill-away" :x="318 - activeTopPickInsight.split.away * 3.16" y="2" :width="activeTopPickInsight.split.away * 3.16" height="114" rx="18"></rect>
+                        <path class="pitch-line" d="M106.5 2v114M213.5 2v114M160 2v114"></path>
+                        <circle class="pitch-center" cx="160" cy="59" r="18"></circle>
+                        <path class="pitch-box" d="M2 35h34v48H2M318 35h-34v48h34"></path>
+                        <g class="pitch-stat pitch-stat-home">
+                          <text x="80" y="52">{{ activeTopPickInsight.split.homeLabel }}</text>
+                          <text x="80" y="82">{{ activeTopPickInsight.split.home }}%</text>
+                        </g>
+                        <g class="pitch-stat pitch-stat-draw">
+                          <text x="160" y="55">Draw</text>
+                          <text x="160" y="79">{{ activeTopPickInsight.split.draw }}%</text>
+                        </g>
+                        <g class="pitch-stat pitch-stat-away">
+                          <text x="240" y="52">{{ activeTopPickInsight.split.awayLabel }}</text>
+                          <text x="240" y="82">{{ activeTopPickInsight.split.away }}%</text>
+                        </g>
+                      </svg>
+                      <div class="room-split-pitch-caption">
+                        <span>{{ activeTopPickInsight.detail }}</span>
                       </div>
                     </div>
-                    <span class="text-sm font-[720] leading-snug text-[var(--soft)]">{{ activeTopPickInsight.detail }}</span>
                   </div>
 
-                  <p class="m-0 text-xs font-[650] leading-snug text-[var(--muted)]">{{ activeTopPickInsight.caption }}</p>
+                  <p
+                    v-if="activeTopPickInsight.key !== 'crowd' && !activeTopPickInsight.weather"
+                    class="room-split-subtitle m-0 text-center text-xs font-[650] leading-snug text-[var(--muted)]"
+                  >
+                    {{ activeTopPickInsight.caption }}
+                  </p>
                 </article>
               </Transition>
               <div v-if="topPickInsights.length > 1" class="top-pick-dots top-pick-dots-desktop absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5" aria-hidden="true">
@@ -2893,11 +3808,11 @@ onBeforeUnmount(() => {
               <span class="min-w-0 overflow-hidden text-right text-ellipsis whitespace-nowrap text-xs font-extrabold uppercase text-[var(--muted)]">{{ activeRoom.away.name }}</span>
             </div>
 
-            <button class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0" type="button" :disabled="scoreCtaDisabled" @click="openPredictionModal">{{ scoreCtaLabel }}</button>
+            <button class="mt-2 inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0" type="button" :disabled="scoreCtaDisabled" @click="openPredictionModal">{{ scoreCtaLabel }}</button>
           </div>
         </section>
 
-        <section class="grid gap-[14px] rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 shadow-[var(--card-shadow)] max-md:rounded-[10px]">
+        <section class="grid gap-[14px] rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 max-md:rounded-[10px]">
           <div class="flex items-center gap-2.5">
             <svg class="ph-icon h-[18px] w-[18px] text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
               <path d="M84 176H48a16 16 0 0 1-16-16V64a16 16 0 0 1 16-16h160a16 16 0 0 1 16 16v96a16 16 0 0 1-16 16h-72l-40 32Z"></path>
@@ -3008,7 +3923,7 @@ onBeforeUnmount(() => {
               />
               <button
                 v-if="!username"
-                class="inline-flex h-11 min-w-[82px] flex-none items-center justify-center gap-1.5 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_30%,var(--control-border))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--control-bg))] px-3.5 text-sm font-[750] leading-none text-[var(--accent)] shadow-[0_1px_0_color-mix(in_srgb,var(--text)_5%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[border-color,background-color,color,box-shadow,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_44%,var(--control-border))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--control-bg))] active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_76%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-[0.58] disabled:shadow-none disabled:active:translate-y-0"
+                class="inline-flex h-11 min-w-[82px] flex-none items-center justify-center gap-1.5 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_30%,var(--control-border))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--control-bg))] px-3.5 text-sm font-[750] leading-none text-[var(--accent)] transition-[border-color,background-color,color,box-shadow,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_44%,var(--control-border))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--control-bg))] active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_76%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-[0.58] disabled:shadow-none disabled:active:translate-y-0"
                 type="submit"
                 :disabled="usernameDraft.trim().length === 0"
                 :aria-label="usernameDraft.trim().length > 0 ? 'Set up username' : 'Enter username to set up'"
@@ -3059,6 +3974,7 @@ onBeforeUnmount(() => {
     />
 
     <ScoreDrawer
+      ref="scoreDrawer"
       v-model:home-score="predictionForm.homeScore"
       v-model:away-score="predictionForm.awayScore"
       v-model:comment="predictionForm.comment"

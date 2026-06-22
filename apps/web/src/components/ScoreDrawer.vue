@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Room } from '@wc-chatter/shared'
+import { ref } from 'vue'
 
 defineProps<{
   open: boolean
@@ -17,6 +18,13 @@ const emit = defineEmits<{
 const homeScore = defineModel<number>('homeScore', { required: true })
 const awayScore = defineModel<number>('awayScore', { required: true })
 const comment = defineModel<string>('comment', { required: true })
+const homeScoreInput = ref<HTMLInputElement | null>(null)
+
+function focus() {
+  homeScoreInput.value?.focus()
+}
+
+defineExpose({ focus })
 </script>
 
 <template>
@@ -40,7 +48,7 @@ const comment = defineModel<string>('comment', { required: true })
           <div class="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="home-score">{{ room.home.name }}</label>
-              <input id="home-score" v-model.number="homeScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submitting || closed" required />
+              <input id="home-score" ref="homeScoreInput" v-model.number="homeScore" class="min-h-10 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60 md:min-h-11" type="number" min="0" max="20" :disabled="submitting || closed" required />
             </div>
             <div class="grid gap-1.5">
               <label class="text-xs font-bold text-[var(--muted)]" for="away-score">{{ room.away.name }}</label>

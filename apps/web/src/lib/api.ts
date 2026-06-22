@@ -1,4 +1,4 @@
-import type { BootstrapResponse, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
+import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
 
 const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8787'
 const wsBaseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8787/ws'
@@ -22,6 +22,10 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function fetchBootstrap() {
   return parseResponse<BootstrapResponse>(await fetch(`${apiBaseUrl}/api/bootstrap`))
+}
+
+export async function fetchPrizeDeskEntries() {
+  return parseResponse<{ entries: PrizeDeskEntry[] }>(await fetch(`${apiBaseUrl}/api/admin/prize-claims`))
 }
 
 export async function createPrediction(roomId: string, payload: CreatePredictionInput) {
@@ -57,6 +61,16 @@ export async function updatePredictionText(predictionId: string, payload: Update
 export async function createReply(commentId: string, payload: ReplyInput) {
   return parseResponse<{ room: Room }>(
     await fetch(`${apiBaseUrl}/api/comments/${commentId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  )
+}
+
+export async function createPredictionComment(predictionId: string, payload: PredictionCommentInput) {
+  return parseResponse<{ room: Room }>(
+    await fetch(`${apiBaseUrl}/api/predictions/${predictionId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
