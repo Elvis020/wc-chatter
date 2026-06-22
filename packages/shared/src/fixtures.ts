@@ -305,25 +305,31 @@ export function nextCycleMatches(
   matches: FixtureMatch[],
   now = new Date(),
   startHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC,
+  cycleCount = 1,
 ): FixtureMatch[] {
-  const upcoming = upcomingMatches(matches, now)
-  const window = upcoming[0]
-    ? matchCycleWindowForKickoff(matchKickoffUtc(upcoming[0]), startHourUtc)
-    : undefined
-  if (!window) return []
+  if (cycleCount <= 0) return []
 
-  const startMs = Date.parse(window.startUtc)
-  const endMs = Date.parse(window.endUtc)
-  return upcoming.filter((match) => {
-    const kickoffMs = matchKickoffUtcMs(match)
-    return kickoffMs >= startMs && kickoffMs <= endMs
-  })
+  const upcoming = upcomingMatches(matches, now)
+  const includedCycleDates = new Set<string>()
+  const selected: FixtureMatch[] = []
+
+  for (const match of upcoming) {
+    const cycleDate = matchCycleDateForKickoff(matchKickoffUtc(match), startHourUtc)
+    if (!includedCycleDates.has(cycleDate)) {
+      if (includedCycleDates.size >= cycleCount) break
+      includedCycleDates.add(cycleDate)
+    }
+    selected.push(match)
+  }
+
+  return selected
 }
 
 export function currentOrNextCycleMatches(
   matches: FixtureMatch[],
   now = new Date(),
   startHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC,
+  cycleCount = 1,
 ): FixtureMatch[] {
   const activeWindow = matchCycleWindowForKickoff(now, startHourUtc)
   const activeStartMs = Date.parse(activeWindow.startUtc)
@@ -335,5 +341,15 @@ export function currentOrNextCycleMatches(
     })
     .sort((left, right) => matchKickoffUtcMs(left) - matchKickoffUtcMs(right))
 
-  return activeMatches.length > 0 ? activeMatches : nextCycleMatches(matches, now, startHourUtc)
+  if (activeMatches.length === 0) {
+    return nextCycleMatches(matches, now, startHourUtc, cycleCount)
+  }
+
+  if (cycleCount <= 1) return activeMatches
+
+  const additionalMatches = nextCycleMatches(matches, now, startHourUtc, cycleCount).filter(
+    (match) => matchCycleDateForKickoff(matchKickoffUtc(match), startHourUtc) !== activeWindow.cycleDate,
+  )
+
+  return [...activeMatches, ...additionalMatches]
 }

@@ -111,7 +111,7 @@ function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
 export function createMockRooms(): Room[] {
   const now = new Date()
   const fixtures = loadFixtures()
-  const cycleMatches = currentOrNextCycleMatches(fixtures, now)
+  const cycleMatches = currentOrNextCycleMatches(fixtures, now, undefined, 2)
 
   if (cycleMatches.length > 0) {
     return cycleMatches.map((match) => roomFromMatch(match, now))
