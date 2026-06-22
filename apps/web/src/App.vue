@@ -2529,14 +2529,14 @@ onBeforeUnmount(() => {
       class="border-y border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))]"
       aria-label="Local profile notice"
     >
-      <div class="mx-auto flex w-full max-w-[1180px] items-center justify-center gap-2 px-4 py-2 text-center text-[13px] font-[750] leading-[1.35] text-[var(--soft)] max-md:px-3 max-md:py-1.5 max-md:text-[11px]">
+      <div class="mx-auto flex w-full max-w-[1180px] items-center justify-center gap-2 px-4 py-2 text-center text-[13px] font-[750] leading-[1.35] text-[var(--soft)] max-md:gap-1.5 max-md:px-3 max-md:py-1.5 max-md:text-[10px]">
         <span class="inline-grid h-5 w-5 shrink-0 place-items-center text-[var(--accent)] max-md:h-4 max-md:w-4" aria-hidden="true">
           <svg class="h-3.5 w-3.5 max-md:h-3 max-md:w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6.5 8V6.5a3.5 3.5 0 0 1 7 0V8"></path>
             <path d="M5.5 8h9v7h-9z"></path>
           </svg>
         </span>
-        <p class="m-0">
+        <p class="m-0 max-md:whitespace-nowrap">
           Your room name stays on this browser. Use the same device when claiming prizes.
         </p>
       </div>
@@ -3428,12 +3428,11 @@ onBeforeUnmount(() => {
               </svg>
               <h2 class="m-0 text-base font-[760] leading-tight text-[var(--text)]">Chat rooms</h2>
             </div>
-            <div v-if="roomDayBuckets.length > 1" class="grid justify-items-end gap-1 text-[var(--muted)]" aria-label="Room day navigation">
-              <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-1.5">
+            <div v-if="roomDayBuckets.length > 1" class="flex items-center justify-between gap-2 text-[var(--muted)]" aria-label="Room pages">
                 <button
                   class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
                   type="button"
-                  aria-label="Show newer room day"
+                  aria-label="Previous rooms"
                   :disabled="!leftRoomBucket"
                   @click="previousRoomPage"
                 >
@@ -3441,19 +3440,11 @@ onBeforeUnmount(() => {
                     <path d="M160 48 80 128l80 80"></path>
                   </svg>
                 </button>
-                <span class="min-w-[56px] truncate text-right text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--muted)]">
-                  {{ leftRoomBucket?.label ?? '' }}
-                </span>
-                <span class="min-w-[56px] truncate text-center text-[12px] font-black text-[var(--text)]">
-                  {{ currentRoomBucket?.label ?? 'Today' }}
-                </span>
-                <span class="min-w-[56px] truncate text-left text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--muted)]">
-                  {{ rightRoomBucket?.label ?? '' }}
-                </span>
+                <span class="text-[11px] font-bold text-[var(--muted)]">{{ roomPageLabel }}</span>
                 <button
                   class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
                   type="button"
-                  aria-label="Show older room day"
+                  aria-label="Next rooms"
                   :disabled="!rightRoomBucket"
                   @click="nextRoomPage"
                 >
@@ -3461,15 +3452,6 @@ onBeforeUnmount(() => {
                     <path d="m96 48 80 80-80 80"></path>
                   </svg>
                 </button>
-              </div>
-              <button
-                v-if="showGoToCurrentDay"
-                class="text-[10px] font-semibold text-[var(--accent)] transition-opacity duration-150 ease-[var(--ease)] hover:opacity-80"
-                type="button"
-                @click="goToCurrentRoomDay"
-              >
-                Go to current day
-              </button>
             </div>
             <span v-else class="text-[11px] font-bold text-[var(--muted)]">{{ rooms.length }} rooms</span>
           </div>
