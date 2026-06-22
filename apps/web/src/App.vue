@@ -277,6 +277,11 @@ const scoreCtaDisabled = computed(() => hasUserPredicted.value || activeRoomPred
 const isAdminRoute = computed(() => routePath.value === ADMIN_ROUTE)
 const isNotFound = computed(() => routePath.value !== '/' && !isAdminRoute.value)
 const showMobileAdminMessage = computed(() => isAdminRoute.value && isMobileViewportState.value)
+const bannerNoticeText = computed(() =>
+  isMobileViewportState.value
+    ? 'Use this device to keep your room name and claim prizes.'
+    : 'Your room name stays on this browser. Use the same device when claiming prizes.',
+)
 const shouldAutoPromptUsername = computed(() =>
   !isNotFound.value &&
   !isAdminRoute.value &&
@@ -2536,9 +2541,7 @@ onBeforeUnmount(() => {
             <path d="M5.5 8h9v7h-9z"></path>
           </svg>
         </span>
-        <p class="m-0 max-md:whitespace-nowrap">
-          Your room name stays on this browser. Use the same device when claiming prizes.
-        </p>
+        <p class="m-0 max-md:whitespace-nowrap">{{ bannerNoticeText }}</p>
       </div>
     </section>
 
