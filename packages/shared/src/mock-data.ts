@@ -57,8 +57,10 @@ function seedPredictions(match: FixtureMatch): Prediction[] {
       {
         id: `comment-${match.id}-${index + 1}`,
         authorId: `seed-${match.id}-${index + 1}`,
+        name: names[index] ?? `Seed ${index + 1}`,
         text: commentTemplates[index] ?? 'Posting this before the group chat steals it.',
         replies: [],
+        createdAt: isoOffset(17 + index * 11),
       },
     ],
   }))
