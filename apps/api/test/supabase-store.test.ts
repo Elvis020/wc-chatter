@@ -59,7 +59,9 @@ describe('supabase store hydration', () => {
           {
             id: 'comment-1',
             authorId: 'user-1',
+            name: 'Elvi',
             text: 'We take this.',
+            createdAt: '2026-06-19T10:00:01.000Z',
             editedAt: '2026-06-19T10:01:01.000Z',
             replies: [
               {

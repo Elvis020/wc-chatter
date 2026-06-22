@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono'
-import type { ApiEvent, CreatePredictionInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
+import type { ApiEvent, CreatePredictionInput, PredictionCommentInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@wc-chatter/shared'
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'
@@ -9,7 +9,6 @@ import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } fro
 type RuntimeEnv = Env & SupabaseEnv
 type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabaseStore>
 type RoomApiEvent = Extract<ApiEvent, { room: Room }>
-type AdminEnv = RuntimeEnv & { ADMIN_TOKEN?: string }
 
 const app = new Hono<{ Bindings: RuntimeEnv }>()
 const fallbackStore = createStore()
@@ -51,18 +50,6 @@ function enforceMutationRateLimit(userId: string, action: string) {
 
 function appOrigin(env: RuntimeEnv) {
   return env.APP_ORIGIN || (typeof process === 'undefined' ? '' : process.env.APP_ORIGIN) || '*'
-}
-
-function adminToken(env: AdminEnv) {
-  return env.ADMIN_TOKEN || (typeof process === 'undefined' ? '' : process.env.ADMIN_TOKEN) || ''
-}
-
-function assertAdmin(c: Context<{ Bindings: RuntimeEnv }>) {
-  const token = adminToken(c.env as AdminEnv)
-  const header = c.req.header('Authorization') || ''
-  if (!token || header !== `Bearer ${token}`) {
-    throw new ApiError('FORBIDDEN', 'Admin token is required.', 403)
-  }
 }
 
 async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: RoomApiEvent) {
@@ -132,6 +119,24 @@ function parseReplyInput(input: unknown): ReplyInput {
   const text = normalizeText(body.text, 'Reply')
   if (!text) {
     throw new ApiError('VALIDATION_ERROR', 'Reply is required.', 400)
+  }
+
+  return {
+    authorId: normalizeUserId(body.authorId),
+    name: normalizeUsername(body.name),
+    text,
+  }
+}
+
+function parsePredictionCommentInput(input: unknown): PredictionCommentInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  const text = normalizeText(body.text, 'Comment')
+  if (!text) {
+    throw new ApiError('VALIDATION_ERROR', 'Comment is required.', 400)
   }
 
   return {
@@ -291,6 +296,27 @@ app.post('/api/comments/:commentId/replies', async (c) => {
   }
 })
 
+app.post('/api/predictions/:predictionId/comments', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const predictionId = c.req.param('predictionId')
+    const payload = parsePredictionCommentInput(await readJson(c))
+    enforceMutationRateLimit(payload.authorId, 'reply')
+    const room = await store.addPredictionComment(predictionId, payload)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    const response = errorResponse(error)
+    return c.json(response.body, response.status)
+  }
+})
+
 app.post('/api/replies/:replyId/edit', async (c) => {
   const store = storeFor(c.env)
   try {
@@ -315,8 +341,7 @@ app.post('/api/replies/:replyId/edit', async (c) => {
 app.get('/api/admin/prize-claims', async (c) => {
   const store = storeFor(c.env)
   try {
-    assertAdmin(c)
-    return c.json({ claims: await store.getPrizeClaims() })
+    return c.json({ entries: await store.getPrizeDeskEntries() })
   } catch (error) {
     const response = errorResponse(error)
     return c.json(response.body, response.status)

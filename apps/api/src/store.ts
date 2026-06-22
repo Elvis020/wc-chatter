@@ -1,8 +1,10 @@
 import {
   mockThemes,
   type ApiEvent,
+  type PredictionCommentInput,
   type CreatePredictionInput,
   type Prediction,
+  type PrizeDeskEntry,
   type PrizeClaim,
   type Reply,
   type ReplyInput,
@@ -36,6 +38,38 @@ function formatMargin(homeName: string, awayName: string, homeScore: number, awa
 function assertRoomWritable(room: Room) {
   if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
     throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
+  }
+}
+
+function prizeResultFor(room: Room, prediction: Prediction): PrizeDeskEntry['result'] {
+  if (!room.currentScore || room.currentScore.status !== 'finished') return 'pending'
+  return prediction.homeScore === room.currentScore.home && prediction.awayScore === room.currentScore.away ? 'winner' : 'miss'
+}
+
+function mapPrizeDeskEntry(room: Room, prediction: Prediction, claim?: PrizeClaim): PrizeDeskEntry {
+  return {
+    id: prediction.id,
+    roomId: room.id,
+    roomTitle: `${room.home.name} vs ${room.away.name}`,
+    matchStatus: room.matchStatus,
+    home: room.home,
+    away: room.away,
+    finalScore: room.currentScore,
+    predictionId: prediction.id,
+    authorId: prediction.authorId,
+    authorName: prediction.name,
+    predictedHomeScore: prediction.homeScore,
+    predictedAwayScore: prediction.awayScore,
+    createdAt: prediction.createdAt,
+    result: prizeResultFor(room, prediction),
+    pickup: claim
+      ? {
+          claimId: claim.id,
+          question: claim.question,
+          answer: claim.answer,
+          createdAt: claim.createdAt,
+        }
+      : undefined,
   }
 }
 
@@ -87,8 +121,10 @@ export function createStore() {
               {
                 id: `comment-${roomId}-${Date.now()}`,
                 authorId: payload.authorId,
+                name: payload.name,
                 text: comment,
                 replies: [],
+                createdAt: new Date().toISOString(),
               },
             ]
           : [],
@@ -154,8 +190,36 @@ export function createStore() {
 
       return cloneRoom(room)
     },
-    getPrizeClaims() {
-      return [...prizeClaims.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    getPrizeDeskEntries() {
+      return rooms
+        .flatMap((room) =>
+          room.predictions.map((prediction) => mapPrizeDeskEntry(room, prediction, prizeClaims.get(prediction.id))),
+        )
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    },
+    addPredictionComment(predictionId: string, payload: PredictionCommentInput) {
+      const room = rooms.find((item) => item.predictions.some((prediction) => prediction.id === predictionId))
+      if (!room) return null
+      assertRoomWritable(room)
+
+      const prediction = room.predictions.find((item) => item.id === predictionId)
+      if (!prediction) return null
+
+      const text = payload.text.trim()
+      if (!text) {
+        throw new ApiError('VALIDATION_ERROR', 'Comment is required.', 400)
+      }
+
+      prediction.comments.unshift({
+        id: `comment-${predictionId}-${Date.now()}`,
+        authorId: payload.authorId,
+        name: payload.name,
+        text,
+        replies: [],
+        createdAt: new Date().toISOString(),
+      })
+
+      return cloneRoom(room)
     },
     addReply(commentId: string, payload: ReplyInput) {
       const room = rooms.find((item) =>

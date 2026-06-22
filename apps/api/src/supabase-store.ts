@@ -3,12 +3,14 @@ import {
   loadFixtures,
   matchStatusFromKickoff,
   matchKickoffUtc,
+  seededResultForFixture,
   mockThemes,
   subdivisionFlagIso2,
   type ApiEvent,
   type CreatePredictionInput,
+  type PredictionCommentInput,
   type Prediction,
-  type PrizeClaim,
+  type PrizeDeskEntry,
   type Reply,
   type ReplyInput,
   type Room,
@@ -146,6 +148,10 @@ type PrizeClaimRow = {
   created_at: string
 }
 
+function isMissingRelationError(error?: { code?: string; message?: string } | null) {
+  return error?.code === 'PGRST205' || error?.code === '42P01' || error?.message?.toLowerCase().includes('could not find the table')
+}
+
 function isMissingColumnError(error?: { code?: string } | null) {
   return error?.code === 'PGRST204' || error?.code === '42703'
 }
@@ -233,16 +239,62 @@ function currentScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
   }
 }
 
-function mapPrizeClaim(row: PrizeClaimRow): PrizeClaim {
+function actualScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
+  const syncedScore = currentScoreForRoom(room)
+  if (syncedScore) return syncedScore
+
+  if (matchStatusFromKickoff(kickoffForRoom(room)) !== 'finished') return undefined
+
+  const eventDate = room.event_date
+  if (!eventDate) return undefined
+
+  const seed = seededResultForFixture(eventDate, room.home_name, room.away_name)
+  if (!seed) return undefined
+
   return {
-    id: row.id,
-    roomId: row.room_id,
-    predictionId: row.prediction_id,
-    authorId: row.author_id,
-    authorName: row.author_name,
-    question: row.question,
-    answer: row.answer,
-    createdAt: row.created_at,
+    home: seed.homeGoals,
+    away: seed.awayGoals,
+    status: 'finished',
+    clock: 'FT',
+    provider: 'wc-idea seed',
+    updatedAt: room.kickoff_at ?? eventDate,
+  }
+}
+
+function prizeResultFor(room: RoomRow | undefined, prediction: PredictionRow): PrizeDeskEntry['result'] {
+  const score = room ? actualScoreForRoom(room) : undefined
+  if (!score || score.status !== 'finished') return 'pending'
+  return prediction.home_score === score.home && prediction.away_score === score.away ? 'winner' : 'miss'
+}
+
+function mapPrizeDeskEntry(
+  prediction: PredictionRow,
+  room: RoomRow | undefined,
+  claim: PrizeClaimRow | undefined,
+): PrizeDeskEntry {
+  return {
+    id: prediction.id,
+    roomId: room?.slug ?? prediction.room_id,
+    roomTitle: room?.title ?? 'Unknown room',
+    matchStatus: room ? effectiveMatchStatus(room) : 'upcoming',
+    home: room ? toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag) : toTeam('Home', 'HOME'),
+    away: room ? toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag) : toTeam('Away', 'AWAY'),
+    finalScore: room ? actualScoreForRoom(room) : undefined,
+    predictionId: prediction.id,
+    authorId: prediction.author_id,
+    authorName: prediction.author_name,
+    predictedHomeScore: prediction.home_score,
+    predictedAwayScore: prediction.away_score,
+    createdAt: prediction.created_at,
+    result: prizeResultFor(room, prediction),
+    pickup: claim
+      ? {
+          claimId: claim.id,
+          question: claim.question,
+          answer: claim.answer,
+          createdAt: claim.created_at,
+        }
+      : undefined,
   }
 }
 
@@ -352,8 +404,10 @@ export function mapPredictions(
       comments: (commentsByPrediction.get(prediction.id) ?? []).map((comment) => ({
         id: comment.id,
         authorId: comment.author_id,
+        name: comment.author_name,
         text: comment.text,
         replies: repliesByComment.get(comment.id) ?? [],
+        createdAt: comment.created_at,
       })),
     }
     if (prediction.edited_at) nextPrediction.editedAt = prediction.edited_at
@@ -593,6 +647,18 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
     return data as PredictionOwnerRow | null
   }
 
+  async function rollbackPredictionCreation(predictionId: string) {
+    const { error: commentDeleteError } = await supabase.from('comments').delete().eq('prediction_id', predictionId)
+    if (commentDeleteError) {
+      logSupabaseError('rollbackPredictionComments', commentDeleteError)
+    }
+
+    const { error: predictionDeleteError } = await supabase.from('predictions').delete().eq('id', predictionId)
+    if (predictionDeleteError) {
+      logSupabaseError('rollbackPrediction', predictionDeleteError)
+    }
+  }
+
   return {
     async getRooms(): Promise<Room[]> {
       return hydrateRooms(await getRoomRows())
@@ -651,7 +717,10 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
           text: take,
         })
 
-        if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
+        if (commentError) {
+          await rollbackPredictionCreation(prediction.id)
+          throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
+        }
       }
 
       if (payload.prizeQuestion && payload.prizeAnswer) {
@@ -666,6 +735,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
 
         if (claimError) {
           logSupabaseError('addPredictionPrizeClaim', claimError)
+          await rollbackPredictionCreation(prediction.id)
           throw new ApiError('INTERNAL_ERROR', 'Unable to save pickup verification.', 500)
         }
       }
@@ -736,18 +806,98 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
 
       return hydrateRoom(prediction.room_id)
     },
-    async getPrizeClaims() {
-      const { data, error } = await supabase
-        .from('prize_claims')
-        .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
-        .order('created_at', { ascending: false })
+    async addPredictionComment(predictionId: string, payload: PredictionCommentInput) {
+      const prediction = await getPredictionOwner(predictionId)
+      if (!prediction) return null
 
-      if (error) {
-        logSupabaseError('getPrizeClaims', error)
-        throw new ApiError('INTERNAL_ERROR', 'Unable to load prize claims.', 500)
+      const room = await getRoomRow(prediction.room_id)
+      if (!room) return null
+      assertRoomWritable(room)
+
+      const text = payload.text.trim()
+      if (!text) {
+        throw new ApiError('VALIDATION_ERROR', 'Comment is required.', 400)
       }
 
-      return ((data ?? []) as PrizeClaimRow[]).map(mapPrizeClaim)
+      const { error } = await supabase.from('comments').insert({
+        prediction_id: predictionId,
+        author_id: payload.authorId,
+        author_name: payload.name,
+        text,
+      })
+
+      if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
+      return hydrateRoom(prediction.room_id)
+    },
+    async getPrizeDeskEntries() {
+      const { data: predictions, error: predictionError } = await supabase
+        .from('predictions')
+        .select('id, room_id, author_id, author_name, home_score, away_score, take, created_at, edited_at')
+        .order('created_at', { ascending: false })
+
+      if (predictionError) {
+        logSupabaseError('getPrizeDeskPredictions', predictionError)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load prize desk predictions.', 500)
+      }
+
+      const predictionRows = (predictions ?? []) as PredictionRow[]
+      if (predictionRows.length === 0) return []
+
+      const roomIds = [...new Set(predictionRows.map((prediction) => prediction.room_id))]
+      const predictionIds = predictionRows.map((prediction) => prediction.id)
+
+      let roomResponse: any = await supabase
+        .from('rooms')
+        .select(ROOM_SELECT)
+        .in('id', roomIds)
+
+      if (isMissingColumnError(roomResponse.error)) {
+        roomResponse = await supabase
+          .from('rooms')
+          .select(ROOM_STATE_SELECT)
+          .in('id', roomIds)
+      }
+
+      if (isMissingColumnError(roomResponse.error)) {
+        roomResponse = await supabase
+          .from('rooms')
+          .select(LEGACY_ROOM_SELECT)
+          .in('id', roomIds)
+      }
+
+      if (roomResponse.error) {
+        logSupabaseError('getPrizeDeskRooms', roomResponse.error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load prize desk rooms.', 500)
+      }
+
+      const roomById = new Map(((roomResponse.data ?? []) as RoomRow[]).map((room) => [room.id, room]))
+
+      const claimRows: PrizeClaimRow[] = []
+      for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
+        const { data: claims, error: claimError } = await supabase
+          .from('prize_claims')
+          .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
+          .in('prediction_id', batch)
+
+        if (claimError && isMissingRelationError(claimError)) {
+          logSupabaseError('getPrizeDeskClaimsMissing', claimError)
+          break
+        }
+
+        if (claimError) {
+          logSupabaseError('getPrizeDeskClaims', claimError)
+          throw new ApiError('INTERNAL_ERROR', 'Unable to load prize pickup verification.', 500)
+        }
+
+        claimRows.push(...((claims ?? []) as PrizeClaimRow[]))
+      }
+
+      const claimByPredictionId = new Map(claimRows.map((claim) => [claim.prediction_id, claim]))
+      return predictionRows
+        .map((prediction) =>
+          mapPrizeDeskEntry(prediction, roomById.get(prediction.room_id), claimByPredictionId.get(prediction.id)),
+        )
+        .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     },
     async addReply(commentId: string, payload: ReplyInput) {
       const { data: comment, error: commentError } = await supabase
