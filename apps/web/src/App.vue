@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { buildMostBackedSummary, buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
+import { buildMostBackedSummary, buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, hasPickupVerification, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, limitRoomName, loadFixtures, matchKickoffUtc, mockThemes, normalizeIdentityText, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, validatePickupAnswer, validatePickupQuestion, validateRoomName, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, fetchRoom, togglePredictionLike, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
@@ -26,7 +26,6 @@ import {
   setStoredTheme,
 } from './lib/storage'
 
-const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const MIN_PREDICTION_COMMENT_LENGTH = 4
 const COMMENT_PREVIEW_LIMIT = 3
 const ACTIVE_ROOM_POLL_MS = 3_500
@@ -204,7 +203,7 @@ const topPickInsights = computed<RoomReadoutInsight[]>(() =>
   }),
 )
 const activeTopPickInsight = computed(() => topPickInsights.value[activeTopPickIndex.value % Math.max(1, topPickInsights.value.length)] ?? null)
-const hasPrizeVerification = computed(() => prizeQuestion.value.trim().length >= 4 && prizeAnswer.value.trim().length >= 2)
+const hasPrizeVerification = computed(() => hasPickupVerification(prizeQuestion.value, prizeAnswer.value))
 const hasIdentitySetup = computed(() => !!username.value && hasPrizeVerification.value)
 const usernameConflictRoom = computed(() => {
   const result = validateUsername(usernameDraft.value)
@@ -218,9 +217,9 @@ const usernameConflictMessage = computed(() => {
   return `${result.value} is already in use in ${roomLabel(room)}. Pick another name for this room.`
 })
 const canSaveUsername = computed(() =>
-  usernameDraft.value.trim().length > 0 &&
-  prizeQuestionDraft.value.trim().length >= 4 &&
-  prizeAnswerDraft.value.trim().length >= 2 &&
+  validateRoomName(usernameDraft.value).valid &&
+  validatePickupQuestion(prizeQuestionDraft.value).valid &&
+  validatePickupAnswer(prizeAnswerDraft.value).valid &&
   !usernameConflictRoom.value &&
   (!username.value || !hasPrizeVerification.value),
 )
@@ -384,7 +383,7 @@ watch(username, (value) => {
 })
 
 watch(usernameDraft, (value) => {
-  const limited = value.slice(0, 24)
+  const limited = limitRoomName(value)
   if (value !== limited) usernameDraft.value = limited
 }, { flush: 'sync' })
 
@@ -430,20 +429,20 @@ watch([identityPromptOpen, predictionModalOpen, selectedAdminEntry], ([identityO
 })
 
 function validateUsername(value: string) {
-  const normalized = value.normalize('NFKC').replace(/\s+/g, ' ').trim().slice(0, 24)
-  if (!USERNAME_PATTERN.test(normalized)) {
+  const result = validateRoomName(value)
+  if (!result.valid) {
     return {
       ok: false,
-      value: normalized,
-      message: 'Use 2-24 chars',
+      value: result.value,
+      message: result.message,
     }
   }
 
-  return { ok: true, value: normalized, message: '' }
+  return { ok: true, value: result.value, message: '' }
 }
 
 function usernameKey(value: string) {
-  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase()
+  return normalizeIdentityText(value).toLocaleLowerCase()
 }
 
 function roomLabel(room: Room) {
@@ -491,23 +490,24 @@ function saveUsername() {
     return
   }
 
-  const normalizedPrizeQuestion = prizeQuestionDraft.value.normalize('NFKC').replace(/\s+/g, ' ').trim()
-  const normalizedPrizeAnswer = prizeAnswerDraft.value.normalize('NFKC').replace(/\s+/g, ' ').trim()
-  if (normalizedPrizeQuestion.length < 4) {
-    usernameError.value = 'Pickup question must be at least 4 characters.'
+  const questionResult = validatePickupQuestion(prizeQuestionDraft.value)
+  if (!questionResult.valid) {
+    usernameError.value = questionResult.message
     return
   }
-  if (normalizedPrizeAnswer.length < 2) {
-    usernameError.value = 'Pickup answer must be at least 2 characters.'
+
+  const answerResult = validatePickupAnswer(prizeAnswerDraft.value)
+  if (!answerResult.valid) {
+    usernameError.value = answerResult.message
     return
   }
 
   username.value = result.value
   usernameDraft.value = result.value
-  prizeQuestion.value = normalizedPrizeQuestion
-  prizeQuestionDraft.value = normalizedPrizeQuestion
-  prizeAnswer.value = normalizedPrizeAnswer
-  prizeAnswerDraft.value = normalizedPrizeAnswer
+  prizeQuestion.value = questionResult.value
+  prizeQuestionDraft.value = questionResult.value
+  prizeAnswer.value = answerResult.value
+  prizeAnswerDraft.value = answerResult.value
   usernameError.value = ''
   setStoredUsername(result.value)
   setStoredPrizeQuestion(normalizedPrizeQuestion)

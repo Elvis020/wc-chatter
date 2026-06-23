@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { limitRoomName, validatePickupAnswer, validatePickupQuestion, validateRoomName } from '@turntabl-score-room/shared'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -17,7 +18,6 @@ const emit = defineEmits<{
 const usernameDraft = defineModel<string>('usernameDraft', { required: true })
 const prizeQuestionDraft = defineModel<string>('prizeQuestionDraft', { required: true })
 const prizeAnswerDraft = defineModel<string>('prizeAnswerDraft', { required: true })
-const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const input = ref<HTMLInputElement | null>(null)
 const prizeQuestionInput = ref<HTMLInputElement | null>(null)
 const mobileStep = ref<1 | 2>(1)
@@ -28,50 +28,13 @@ const touched = reactive({
   answer: false,
 })
 
-function normalize(value: string) {
-  return value.normalize('NFKC').replace(/\s+/g, ' ').trim()
-}
-
 function limitUsernameDraft(value: string) {
-  return value.slice(0, 24)
+  return limitRoomName(value)
 }
 
-function validateUsername(value: string) {
-  const normalized = normalize(value)
-  if (normalized.length < 2) {
-    return { valid: false, message: 'Use 2-24 chars' }
-  }
-  if (normalized.length > 24 || !USERNAME_PATTERN.test(normalized)) {
-    return { valid: false, message: 'Use 2-24 chars' }
-  }
-  return { valid: true, message: 'Looks good. 2-24 supported characters.' }
-}
-
-function validatePrizeQuestion(value: string) {
-  const normalized = normalize(value)
-  if (normalized.length < 4) {
-    return { valid: false, message: 'Admin will ask this if your prediction wins.' }
-  }
-  if (normalized.length > 280) {
-    return { valid: false, message: 'Keep it under 280 characters.' }
-  }
-  return { valid: true, message: 'Good. Admin can ask this at pickup.' }
-}
-
-function validatePrizeAnswer(value: string) {
-  const normalized = normalize(value)
-  if (normalized.length < 2) {
-    return { valid: false, message: 'Your private reply for claiming a prize.' }
-  }
-  if (normalized.length > 280) {
-    return { valid: false, message: 'Keep it under 280 characters.' }
-  }
-  return { valid: true, message: 'Good. Keep this answer private.' }
-}
-
-const usernameValidation = computed(() => validateUsername(usernameDraft.value))
-const prizeQuestionValidation = computed(() => validatePrizeQuestion(prizeQuestionDraft.value))
-const prizeAnswerValidation = computed(() => validatePrizeAnswer(prizeAnswerDraft.value))
+const usernameValidation = computed(() => validateRoomName(usernameDraft.value))
+const prizeQuestionValidation = computed(() => validatePickupQuestion(prizeQuestionDraft.value))
+const prizeAnswerValidation = computed(() => validatePickupAnswer(prizeAnswerDraft.value))
 const usernameReady = computed(() => usernameValidation.value.valid)
 
 function fieldHintClass(valid: boolean, wasTouched: boolean) {

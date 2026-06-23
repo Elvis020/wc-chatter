@@ -183,6 +183,23 @@ export const mockThemes: ThemeOption[] = [
 ]
 
 export {
+  PICKUP_ANSWER_MIN_LENGTH,
+  PICKUP_QUESTION_MIN_LENGTH,
+  PICKUP_TEXT_MAX_LENGTH,
+  ROOM_NAME_MAX_LENGTH,
+  ROOM_NAME_MIN_LENGTH,
+  ROOM_NAME_PATTERN,
+  hasPickupVerification,
+  limitRoomName,
+  normalizeIdentityText,
+  normalizeRoomName,
+  validatePickupAnswer,
+  validatePickupQuestion,
+  validateRoomName,
+  type ValidationResult,
+} from './identity.js'
+
+export {
   DEFAULT_MATCH_CYCLE_START_HOUR_UTC,
   currentOrNextCycleMatches,
   loadFixtures,

@@ -1,6 +1,6 @@
+import { validateRoomName } from '@turntabl-score-room/shared'
 import { ApiError } from './errors.js'
 
-const USERNAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 .'-]{2,24}$/
 const USER_ID_PATTERN = /^user-[0-9a-fA-F-]{36}$|^seed-[A-Za-z0-9-]+$/
 
 export function normalizeUsername(value: unknown) {
@@ -8,12 +8,12 @@ export function normalizeUsername(value: unknown) {
     throw new ApiError('VALIDATION_ERROR', 'Username is required.', 400)
   }
 
-  const normalized = value.normalize('NFKC').replace(/\s+/g, ' ').trim().slice(0, 24)
-  if (!USERNAME_PATTERN.test(normalized)) {
-    throw new ApiError('VALIDATION_ERROR', "Use 2-24 chars: letters, numbers, spaces, . ' -", 400)
+  const result = validateRoomName(value)
+  if (!result.valid) {
+    throw new ApiError('VALIDATION_ERROR', result.message, 400)
   }
 
-  return normalized
+  return result.value
 }
 
 export function normalizeUserId(value: unknown) {
