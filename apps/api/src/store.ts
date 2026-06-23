@@ -1,5 +1,7 @@
 import {
+  buildMostBackedSummary,
   mockThemes,
+  prizeResultForScore,
   type ApiEvent,
   type PredictionCommentInput,
   type CreatePredictionInput,
@@ -25,16 +27,6 @@ function cloneRoom(room: Room): Room {
   return structuredClone(room)
 }
 
-function formatMargin(homeName: string, awayName: string, homeScore: number, awayScore: number) {
-  if (homeScore === awayScore) {
-    return 'Draw backed most'
-  }
-
-  const side = homeScore > awayScore ? homeName : awayName
-  const gap = Math.abs(homeScore - awayScore)
-  return `${side} by ${gap}`
-}
-
 function assertRoomWritable(room: Room) {
   if (room.matchStatus === 'finished' || room.roomStatus !== 'open') {
     throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
@@ -42,8 +34,7 @@ function assertRoomWritable(room: Room) {
 }
 
 function prizeResultFor(room: Room, prediction: Prediction): PrizeDeskEntry['result'] {
-  if (!room.currentScore || room.currentScore.status !== 'finished') return 'pending'
-  return prediction.homeScore === room.currentScore.home && prediction.awayScore === room.currentScore.away ? 'winner' : 'miss'
+  return prizeResultForScore(prediction, room.currentScore)
 }
 
 function mapPrizeDeskEntry(room: Room, prediction: Prediction, claim?: PrizeClaim): PrizeDeskEntry {
@@ -147,11 +138,10 @@ export function createStore() {
           createdAt: prediction.createdAt,
         })
       }
-      room.mostBacked = {
-        home: payload.homeScore,
-        away: payload.awayScore,
-        margin: formatMargin(room.home.name, room.away.name, payload.homeScore, payload.awayScore),
-      }
+      room.mostBacked = buildMostBackedSummary(
+        { homeName: room.home.name, awayName: room.away.name },
+        room.predictions,
+      )
       return cloneRoom(room)
     },
     setPredictionLike(predictionId: string, userId: string, liked: boolean) {

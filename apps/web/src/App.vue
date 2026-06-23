@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { DEFAULT_MATCH_CYCLE_START_HOUR_UTC, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
+import { buildMostBackedSummary, buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, loadFixtures, matchKickoffUtc, mockThemes, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, fetchRoom, togglePredictionLike, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
@@ -64,44 +64,6 @@ type TypingState = {
   target: TypingTarget
   targetId: string
   expiresAt: number
-}
-type RoomDayBucket = {
-  key: string
-  label: string
-  startMs: number
-  rooms: Room[]
-}
-type TopPickInsight = {
-  key: string
-  icon: string
-  label: string
-  value: string
-  detail: string
-  caption: string
-  tone: 'hot' | 'calm' | 'split' | 'sharp' | 'empty' | 'winner'
-  crowd?: {
-    pickCount: number
-    total: number
-    share: number
-    predictorLabel: string
-  }
-  weather?: {
-    picks: number
-    comments: number
-    likes: number
-  }
-  split?: {
-    home: number
-    draw: number
-    away: number
-    homeLabel: string
-    awayLabel: string
-  }
-  winners?: {
-    count: number
-    names: string[]
-    score: string
-  }
 }
 
 const faviconThemes: Record<ThemeId, FaviconTheme> = {
@@ -219,17 +181,11 @@ const mobileFeedSortLabel = computed(() => 'Sort')
 const nextFeedSortLabel = computed(() =>
   feedSortMode.value === 'likes' ? 'Sort by most discussed' : 'Sort by top liked',
 )
-const totalLikes = computed(() => activeRoom.value?.predictions.reduce((sum, item) => sum + item.likes, 0) ?? 0)
-const totalComments = computed(
-  () =>
-    activeRoom.value?.predictions.reduce(
-      (sum, item) =>
-        sum +
-        item.comments.reduce((commentSum, comment) => commentSum + 1 + comment.replies.length, 0),
-      0,
-    ) ?? 0,
+const totalLikes = computed(() => activeRoom.value ? roomLikeTotal(activeRoom.value) : 0)
+const totalComments = computed(() => activeRoom.value ? roomCommentTotal(activeRoom.value) : 0)
+const activeRoomFinalScore = computed(() =>
+  activeRoom.value ? finalScoreForRoomByInsights(activeRoom.value, effectiveRoomMatchStatus(activeRoom.value)) : null,
 )
-const activeRoomFinalScore = computed(() => finalScoreForRoom(activeRoom.value))
 const exactPickPredictions = computed(() => {
   const score = activeRoomFinalScore.value
   if (!score || !activeRoom.value) return []
@@ -242,7 +198,11 @@ const exactPickPreview = computed(() => {
   if (!names.length) return ''
   return `${names.join(' · ')}${remaining > 0 ? ` · +${remaining} more` : ''}`
 })
-const topPickInsights = computed<TopPickInsight[]>(() => buildTopPickInsights(activeRoom.value))
+const topPickInsights = computed<RoomReadoutInsight[]>(() =>
+  buildRoomReadoutInsights(activeRoom.value, {
+    matchStatus: activeRoom.value ? effectiveRoomMatchStatus(activeRoom.value) : undefined,
+  }),
+)
 const activeTopPickInsight = computed(() => topPickInsights.value[activeTopPickIndex.value % Math.max(1, topPickInsights.value.length)] ?? null)
 const hasPrizeVerification = computed(() => prizeQuestion.value.trim().length >= 4 && prizeAnswer.value.trim().length >= 2)
 const hasIdentitySetup = computed(() => !!username.value && hasPrizeVerification.value)
@@ -293,23 +253,11 @@ const orderedRooms = computed(() =>
   [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { fixtureKickoffs })),
 )
 const currentRoomCycleKey = computed(() => roomCycleDateKey(Date.now()))
-const roomDayBuckets = computed<RoomDayBucket[]>(() => {
-  const buckets = new Map<string, Room[]>()
-
-  for (const room of orderedRooms.value) {
-    const key = roomCycleDateKey(roomKickoffMs(room))
-    buckets.set(key, [...(buckets.get(key) ?? []), room])
-  }
-
-  return [...buckets.entries()]
-    .map(([key, bucketRooms]) => ({
-      key,
-      label: roomBucketLabel(key, currentRoomCycleKey.value),
-      startMs: roomCycleStartMs(key),
-      rooms: bucketRooms,
-    }))
-    .sort((left, right) => right.startMs - left.startMs)
-})
+const roomDayBuckets = computed<RoomDayBucket[]>(() =>
+  groupRoomsByCycle(orderedRooms.value, {
+    kickoffMsForRoom: roomKickoffMs,
+  }),
+)
 const selectedRoomBucketIndex = computed(() =>
   roomDayBuckets.value.findIndex((bucket) => bucket.key === selectedRoomBucketKey.value),
 )
@@ -814,209 +762,6 @@ function threadEntries(prediction: Prediction) {
   return entries.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
 }
 
-function predictionCommentTotal(prediction: Prediction) {
-  return prediction.comments.reduce((sum, comment) => sum + 1 + comment.replies.length, 0)
-}
-
-function percentOf(value: number, total: number) {
-  if (total <= 0) return 0
-  return Math.round((value / total) * 100)
-}
-
-function scoreKey(homeScore: number, awayScore: number) {
-  return `${homeScore}-${awayScore}`
-}
-
-function scoreLabel(room: Room, homeScore: number, awayScore: number) {
-  return `${room.home.code} ${homeScore}-${awayScore} ${room.away.code}`
-}
-
-function scorelineCount(room: Room, homeScore: number, awayScore: number) {
-  const key = scoreKey(homeScore, awayScore)
-  return room.predictions.filter((prediction) => scoreKey(prediction.homeScore, prediction.awayScore) === key).length
-}
-
-function formatWinnerNames(names: string[]) {
-  const visible = names.slice(0, 4)
-  const remaining = names.length - visible.length
-  return `${visible.join(' · ')}${remaining > 0 ? ` · +${remaining} more` : ''}`
-}
-
-function roomSplit(room: Room) {
-  return room.predictions.reduce(
-    (split, prediction) => {
-      if (prediction.homeScore > prediction.awayScore) split.home += 1
-      else if (prediction.homeScore < prediction.awayScore) split.away += 1
-      else split.draw += 1
-      return split
-    },
-    { home: 0, draw: 0, away: 0 },
-  )
-}
-
-function roomSplitPercentages(room: Room) {
-  const split = roomSplit(room)
-  const total = room.predictions.length
-
-  return {
-    counts: split,
-    percentages: {
-      home: percentOf(split.home, total),
-      draw: percentOf(split.draw, total),
-      away: percentOf(split.away, total),
-    },
-  }
-}
-
-function banterWeatherInsight(room: Room): TopPickInsight {
-  const talk = totalComments.value
-  const likes = totalLikes.value
-  const picks = room.predictions.length
-  const heat = talk * 2 + likes
-  const weather = { picks, comments: talk, likes }
-
-  if (heat >= 40) {
-    return {
-      key: 'weather',
-      icon: '🌶️',
-      label: 'Banter weather',
-      value: 'Spicy',
-      detail: `${picks} picks · ${talk} replies · ${likes} likes`,
-      caption: 'Keep water nearby.',
-      tone: 'hot',
-      weather,
-    }
-  }
-
-  if (heat >= 14) {
-    return {
-      key: 'weather',
-      icon: '🌡️',
-      label: 'Banter weather',
-      value: 'Heating up',
-      detail: `${picks} picks · ${talk} replies · ${likes} likes`,
-      caption: talk > 0 ? 'Replies are stretching.' : 'Takes are warming up.',
-      tone: 'sharp',
-      weather,
-    }
-  }
-
-  if (picks <= 1 && heat <= 2) {
-    return {
-      key: 'weather',
-      icon: '🧊',
-      label: 'Banter weather',
-      value: 'Cold room',
-      detail: `${picks} picks · ${talk} replies · ${likes} likes`,
-      caption: 'First bold take gets the mic.',
-      tone: 'calm',
-      weather,
-    }
-  }
-
-  return {
-    key: 'weather',
-    icon: '☁️',
-    label: 'Banter weather',
-    value: 'Calm',
-    detail: `${picks} picks · ${talk} replies · ${likes} likes`,
-    caption: 'Suspiciously polite.',
-    tone: 'calm',
-    weather,
-  }
-}
-
-function buildTopPickInsights(room?: Room | null): TopPickInsight[] {
-  if (!room || room.predictions.length === 0) {
-    return [
-      {
-        key: 'empty',
-        icon: '👀',
-        label: 'Top pick',
-        value: 'No top pick yet',
-        detail: 'The room is waiting for the first brave score.',
-        caption: 'Drop one and become the headline.',
-        tone: 'empty',
-      },
-    ]
-  }
-
-  const total = room.predictions.length
-  const topPickCount = scorelineCount(room, room.mostBacked.home, room.mostBacked.away)
-  const topPickShare = percentOf(topPickCount, total)
-  const topPickPredictors = [
-    ...new Set(
-      room.predictions
-        .filter((prediction) => prediction.homeScore === room.mostBacked.home && prediction.awayScore === room.mostBacked.away)
-        .map((prediction) => prediction.name.trim())
-        .filter(Boolean),
-    ),
-  ]
-  const topPickPredictorLabel = topPickPredictors.length > 1
-    ? `${topPickPredictors[0]} +${topPickPredictors.length - 1} predicted it`
-    : topPickPredictors[0]
-      ? `${topPickPredictors[0]} predicted it`
-      : 'Someone predicted it'
-  const { counts: split, percentages } = roomSplitPercentages(room)
-  const finalScore = finalScoreForRoom(room)
-  const winners = finalScore
-    ? room.predictions.filter((prediction) => isExactPick(prediction, finalScore))
-    : []
-  const winnerNames = [...new Set(winners.map((prediction) => prediction.name.trim()).filter(Boolean))]
-  const winnerInsight: TopPickInsight | null = finalScore && winnerNames.length
-    ? {
-        key: 'winners',
-        icon: '🏆',
-        label: winnerNames.length === 1 ? 'Winner' : 'Winners',
-        value: winnerNames.length === 1 ? `${winnerNames[0]} nailed it` : `${winnerNames.length} nailed it`,
-        detail: formatWinnerNames(winnerNames),
-        caption: `Exact on ${scoreLabel(room, finalScore.home, finalScore.away)}`,
-        tone: 'winner',
-        winners: {
-          count: winnerNames.length,
-          names: winnerNames,
-          score: scoreLabel(room, finalScore.home, finalScore.away),
-        },
-      }
-    : null
-
-  return [
-    {
-      key: 'crowd',
-      icon: '📣',
-      label: 'Crowd pick',
-      value: scoreLabel(room, room.mostBacked.home, room.mostBacked.away),
-      detail: `${topPickCount}/${total} picks · ${topPickShare}% of the room`,
-      caption: room.mostBacked.margin,
-      tone: topPickShare >= 50 ? 'sharp' : 'split',
-      crowd: {
-        pickCount: topPickCount,
-        total,
-        share: topPickShare,
-        predictorLabel: topPickPredictorLabel,
-      },
-    },
-    ...(winnerInsight ? [winnerInsight] : []),
-    {
-      key: 'split',
-      icon: '⚖️',
-      label: 'Room split',
-      value: `${room.home.code} ${percentages.home}% · Draw ${percentages.draw}% · ${room.away.code} ${percentages.away}%`,
-      detail: `${split.home} backing ${room.home.code} · ${split.draw} draw · ${split.away} backing ${room.away.code}`,
-      caption: split.draw >= Math.max(split.home, split.away) ? 'The draw gang has entered the chat.' : 'The room has picked a direction.',
-      tone: 'split',
-      split: {
-        home: percentages.home,
-        draw: percentages.draw,
-        away: percentages.away,
-        homeLabel: room.home.code,
-        awayLabel: room.away.code,
-      },
-    },
-    banterWeatherInsight(room),
-  ]
-}
-
 function isCommentsExpanded(predictionId: string) {
   return expandedCommentCards.value.has(predictionId)
 }
@@ -1096,43 +841,12 @@ function roomKickoffMs(room: Room) {
   return roomKickoffMsByState(room, fixtureKickoffs)
 }
 
-function roomCycleDateKey(kickoffMs: number, cycleStartHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC) {
-  const shifted = new Date(kickoffMs - cycleStartHourUtc * 60 * 60 * 1000)
-  return shifted.toISOString().slice(0, 10)
-}
-
-function roomCycleStartMs(cycleKey: string, cycleStartHourUtc = DEFAULT_MATCH_CYCLE_START_HOUR_UTC) {
-  const [year, month, day] = cycleKey.split('-').map(Number)
-  return Date.UTC(year, (month || 1) - 1, day || 1, cycleStartHourUtc, 0, 0)
-}
-
-function roomBucketLabel(cycleKey: string, currentCycleKey: string) {
-  const dayDelta = Math.round((roomCycleStartMs(cycleKey) - roomCycleStartMs(currentCycleKey)) / (24 * 60 * 60 * 1000))
-  if (dayDelta === 1) return 'Tomorrow'
-  if (dayDelta === 0) return 'Today'
-  if (dayDelta === -1) return 'Yesterday'
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(`${cycleKey}T12:00:00.000Z`))
-}
-
 function effectiveRoomMatchStatus(room: Room) {
   return effectiveRoomMatchStatusByState(room, { fixtureKickoffs })
 }
 
-function finalScoreForRoom(room?: Room | null) {
-  if (!room || effectiveRoomMatchStatus(room) !== 'finished') return null
-  if (!room.currentScore || room.currentScore.status !== 'finished') return null
-  return {
-    home: room.currentScore.home,
-    away: room.currentScore.away,
-  }
-}
-
 function isExactPick(prediction: Prediction, score = activeRoomFinalScore.value) {
-  return !!score && prediction.homeScore === score.home && prediction.awayScore === score.away
+  return isExactPickByScore(prediction, score)
 }
 
 function showsLiveRoomIcon(room: Room) {
@@ -1323,12 +1037,6 @@ function nextRoomPage() {
 function toggleFeedSort() {
   if (!canSortPredictions.value) return
   feedSortMode.value = feedSortMode.value === 'likes' ? 'comments' : 'likes'
-}
-
-function formatMargin(homeName: string, awayName: string, homeScore: number, awayScore: number) {
-  if (homeScore === awayScore) return 'Draw backed most'
-  const side = homeScore > awayScore ? homeName : awayName
-  return `${side} by ${Math.abs(homeScore - awayScore)}`
 }
 
 async function submitPrediction() {
@@ -1873,15 +1581,15 @@ function updateLocalPrediction(predictionId: string, update: (prediction: Predic
 function addLocalPrediction(roomId: string, prediction: Prediction) {
   rooms.value = rooms.value.map((room) => {
     if (room.id !== roomId) return room
+    const predictions = [prediction, ...room.predictions]
 
     return {
       ...room,
-      mostBacked: {
-        home: prediction.homeScore,
-        away: prediction.awayScore,
-        margin: formatMargin(room.home.name, room.away.name, prediction.homeScore, prediction.awayScore),
-      },
-      predictions: [prediction, ...room.predictions],
+      mostBacked: buildMostBackedSummary(
+        { homeName: room.home.name, awayName: room.away.name },
+        predictions,
+      ),
+      predictions,
     }
   })
 }

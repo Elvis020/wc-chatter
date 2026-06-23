@@ -1,10 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
+  buildMostBackedSummary,
   loadFixtures,
   matchStatusFromKickoff,
   matchKickoffUtc,
   seededResultForFixture,
   mockThemes,
+  prizeResultForScore,
   subdivisionFlagIso2,
   type ApiEvent,
   type CreatePredictionInput,
@@ -214,13 +216,6 @@ function legacyRoomStatus(status: RoomRow['status']): RoomInteractionStatus {
   return 'open'
 }
 
-function formatMargin(homeName: string, awayName: string, homeScore: number, awayScore: number) {
-  if (homeScore === awayScore) return 'Draw backed most'
-  const side = homeScore > awayScore ? homeName : awayName
-  const gap = Math.abs(homeScore - awayScore)
-  return `${side} by ${gap}`
-}
-
 function currentScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
   if (
     room.current_home_score === undefined ||
@@ -267,8 +262,7 @@ function actualScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
 
 function prizeResultFor(room: RoomRow | undefined, prediction: PredictionRow): PrizeDeskEntry['result'] {
   const score = room ? actualScoreForRoom(room) : undefined
-  if (!score || score.status !== 'finished') return 'pending'
-  return prediction.home_score === score.home && prediction.away_score === score.away ? 'winner' : 'miss'
+  return prizeResultForScore({ homeScore: prediction.home_score, awayScore: prediction.away_score }, score)
 }
 
 function mapPrizeDeskEntry(
@@ -302,46 +296,6 @@ function mapPrizeDeskEntry(
   }
 }
 
-function mostBackedFor(room: RoomRow, predictions: Prediction[]) {
-  if (predictions.length === 0) {
-    return {
-      home: 0,
-      away: 0,
-      margin: 'No picks yet',
-    }
-  }
-
-  const backed = new Map<string, { home: number; away: number; count: number; likes: number; createdAt: string }>()
-  for (const prediction of predictions) {
-    const key = `${prediction.homeScore}-${prediction.awayScore}`
-    const existing = backed.get(key)
-    if (existing) {
-      existing.count += 1
-      existing.likes += prediction.likes
-      if (prediction.createdAt > existing.createdAt) existing.createdAt = prediction.createdAt
-      continue
-    }
-
-    backed.set(key, {
-      home: prediction.homeScore,
-      away: prediction.awayScore,
-      count: 1,
-      likes: prediction.likes,
-      createdAt: prediction.createdAt,
-    })
-  }
-
-  const top = [...backed.values()].sort(
-    (left, right) => right.count - left.count || right.likes - left.likes || right.createdAt.localeCompare(left.createdAt),
-  )[0]
-
-  return {
-    home: top.home,
-    away: top.away,
-    margin: formatMargin(room.home_name, room.away_name, top.home, top.away),
-  }
-}
-
 function mapRoom(
   room: RoomRow,
   predictionsByRoom: Map<string, Prediction[]>,
@@ -360,7 +314,10 @@ function mapRoom(
     currentScore: currentScoreForRoom(room),
     home: toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag),
     away: toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag),
-    mostBacked: mostBackedFor(room, predictions),
+    mostBacked: buildMostBackedSummary(
+      { homeName: room.home_name, awayName: room.away_name },
+      predictions,
+    ),
     predictions,
   }
 }

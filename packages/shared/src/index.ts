@@ -201,6 +201,34 @@ export {
 } from './fixtures.js'
 
 export {
+  buildMostBackedSummary,
+  buildRoomReadoutInsights,
+  finalScoreForRoom,
+  formatScoreMargin,
+  isExactPick,
+  predictionCommentTotal,
+  prizeResultForScore,
+  roomCommentTotal,
+  roomLikeTotal,
+  roomSplitPercentages,
+  scoreLabel,
+  type RoomReadoutInsight,
+  type Scoreline,
+} from './prediction-insights.js'
+
+export {
+  DEFAULT_ROOM_SLATE_CYCLE_COUNT,
+  fallbackLatestMatches,
+  fixtureCycleKey,
+  groupRoomsByCycle,
+  roomBucketLabel,
+  roomCycleDateKey,
+  roomCycleStartMs,
+  selectRoomSlateMatches,
+  type RoomDayBucket,
+} from './room-slate.js'
+
+export {
   compareRoomsForSwitcher,
   effectiveRoomMatchStatus,
   isRoomLocked,

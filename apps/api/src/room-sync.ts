@@ -1,9 +1,9 @@
 import { type SupabaseClient } from '@supabase/supabase-js'
 import {
-  currentOrNextCycleMatches,
   loadFixtures,
   matchKickoffUtc,
   matchStatusAt,
+  selectRoomSlateMatches,
   type FixtureMatch,
   type MatchStatus,
   type RoomInteractionStatus,
@@ -157,7 +157,7 @@ export async function syncCurrentCycleRooms(
   options: { now?: Date; dryRun?: boolean } = {},
 ): Promise<RoomSyncResult> {
   const now = options.now ?? new Date()
-  const matches = currentOrNextCycleMatches(loadFixtures(), now, undefined, 2)
+  const matches = selectRoomSlateMatches(loadFixtures(), { now })
   const existingRooms = await getExistingRooms(supabase, matches.map((match) => match.id))
   const featuredMatchId = matches.find((match) => matchStatusForMatch(match, now) === 'live')?.id ?? matches[0]?.id
   const rows = matches.map((match) => roomFromMatch(match, now, match.id === featuredMatchId, existingRooms.get(match.id)))

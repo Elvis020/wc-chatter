@@ -1,14 +1,15 @@
 import {
-  currentOrNextCycleMatches,
+  fallbackLatestMatches,
   loadFixtures,
   matchKickoffUtc,
-  matchKickoffUtcMs,
   matchStatusAt,
+  selectRoomSlateMatches,
   type FixtureMatch,
   type Prediction,
   type Room,
   type RoomStatus,
 } from './index.js'
+import { buildMostBackedSummary } from './prediction-insights.js'
 
 function isoOffset(minutesAgo: number) {
   return new Date(Date.now() - minutesAgo * 60_000).toISOString()
@@ -16,16 +17,6 @@ function isoOffset(minutesAgo: number) {
 
 function hashSeed(seed: string) {
   return Array.from(seed).reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0)
-}
-
-function formatMargin(homeName: string, awayName: string, homeScore: number, awayScore: number) {
-  if (homeScore === awayScore) {
-    return 'Draw backed most'
-  }
-
-  const side = homeScore > awayScore ? homeName : awayName
-  const gap = Math.abs(homeScore - awayScore)
-  return `${side} by ${gap}`
 }
 
 function scoreVariants(match: FixtureMatch) {
@@ -74,7 +65,6 @@ function roomStatus(match: FixtureMatch, now = new Date()): RoomStatus {
 
 function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
   const predictions = seedPredictions(match)
-  const [topPrediction] = predictions
   const matchStatus = matchStatusAt(match, now)
   const kickoffAt = matchKickoffUtc(match)
 
@@ -97,13 +87,10 @@ function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
       : undefined,
     home: match.home,
     away: match.away,
-    mostBacked: {
-      home: topPrediction?.homeScore ?? 0,
-      away: topPrediction?.awayScore ?? 0,
-      margin: topPrediction
-        ? formatMargin(match.home.name, match.away.name, topPrediction.homeScore, topPrediction.awayScore)
-        : 'No picks yet',
-    },
+    mostBacked: buildMostBackedSummary(
+      { homeName: match.home.name, awayName: match.away.name },
+      predictions,
+    ),
     predictions,
   }
 }
@@ -111,15 +98,11 @@ function roomFromMatch(match: FixtureMatch, now = new Date()): Room {
 export function createMockRooms(): Room[] {
   const now = new Date()
   const fixtures = loadFixtures()
-  const cycleMatches = currentOrNextCycleMatches(fixtures, now, undefined, 2)
+  const cycleMatches = selectRoomSlateMatches(fixtures, { now })
 
   if (cycleMatches.length > 0) {
     return cycleMatches.map((match) => roomFromMatch(match, now))
   }
 
-  return fixtures
-    .sort((left, right) => matchKickoffUtcMs(right) - matchKickoffUtcMs(left))
-    .slice(0, 4)
-    .reverse()
-    .map((match) => roomFromMatch(match, now))
+  return fallbackLatestMatches(fixtures).map((match) => roomFromMatch(match, now))
 }
