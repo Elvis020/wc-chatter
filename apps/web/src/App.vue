@@ -175,6 +175,36 @@ const sortedPredictions = computed(() => {
     return right.likes - left.likes || predictionCommentTotal(right) - predictionCommentTotal(left)
   })
 })
+const predictionFeedItems = computed(() =>
+  sortedPredictions.value.map((prediction) => {
+    const lead = leadComment(prediction)
+    const entries = threadEntries(prediction)
+    const expanded = isCommentsExpanded(prediction.id)
+    const replyTargetId = replyTargetIdForPrediction(prediction)
+    const hiddenCount = Math.max(0, entries.length - COMMENT_PREVIEW_LIMIT)
+    const showToggle =
+      !isReplying(prediction.id, replyTargetId) &&
+      !isReplyComposerClosing(prediction.id, replyTargetId) &&
+      hiddenCount > 0
+
+    return {
+      prediction,
+      lead,
+      entries,
+      visibleEntries: expanded ? entries : entries.slice(0, COMMENT_PREVIEW_LIMIT),
+      hiddenCount,
+      showToggle,
+      fadePreview: showToggle && !expanded,
+      replyTargetId,
+      isReplying: isReplying(prediction.id, replyTargetId),
+      commentTotal: predictionCommentTotal(prediction),
+      replyComposerLabel: replyComposerLabel(prediction),
+      replyComposerPlaceholder: replyComposerPlaceholder(prediction),
+      replyActionLabel: replyActionLabel(prediction),
+      replySubmitLabel: replySubmitLabel(prediction),
+    }
+  }),
+)
 const feedSortLabel = computed(() =>
   feedSortMode.value === 'likes' ? 'Top liked' : 'Most discussed',
 )
@@ -3115,21 +3145,21 @@ onBeforeUnmount(() => {
             <div v-else :key="`feed-list-${activeRoom.id}`" ref="predictionFeedList">
             <TransitionGroup :key="activeRoom.id" name="prediction-list" tag="div" class="grid gap-2.5 max-md:gap-3">
               <article
-                v-for="item in sortedPredictions"
-                :key="item.id"
+                v-for="feedItem in predictionFeedItems"
+                :key="feedItem.prediction.id"
                 data-prediction-card
                 class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 transition-[background-color,border-color] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
                 :class="[
-                  isReplying(item.id, replyTargetIdForPrediction(item)) || isCommentsExpanded(item.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))]' : '',
-                  isPredictionRecentlyUpdated(item.id) ? 'room-update-pulse' : '',
-                  isOptimisticPrediction(item.id) ? 'opacity-80' : '',
+                  feedItem.isReplying || isCommentsExpanded(feedItem.prediction.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))]' : '',
+                  isPredictionRecentlyUpdated(feedItem.prediction.id) ? 'room-update-pulse' : '',
+                  isOptimisticPrediction(feedItem.prediction.id) ? 'opacity-80' : '',
                 ]"
               >
               <div class="pt-0.5 max-md:pt-0">
                 <div class="prediction-avatar-wrap">
-                  <img class="prediction-avatar" :src="predictionAvatar(item.name)" :alt="`${item.name} avatar`" loading="lazy" decoding="async" />
+                  <img class="prediction-avatar" :src="predictionAvatar(feedItem.prediction.name)" :alt="`${feedItem.prediction.name} avatar`" loading="lazy" decoding="async" />
                   <svg
-                    v-if="isExactPick(item)"
+                    v-if="isExactPick(feedItem.prediction)"
                     class="prediction-crown"
                     viewBox="0 0 256 256"
                     aria-hidden="true"
@@ -3142,43 +3172,43 @@ onBeforeUnmount(() => {
 
               <div class="grid min-w-0 gap-2 max-md:gap-1.5">
                 <div class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden whitespace-nowrap max-sm:gap-1.5">
-                  <h3 class="m-0 w-[9ch] shrink-0 truncate text-[15px] font-black leading-tight text-[var(--text)] max-sm:w-[8ch] max-sm:text-[14px]">{{ item.name }}</h3>
+                  <h3 class="m-0 w-[9ch] shrink-0 truncate text-[15px] font-black leading-tight text-[var(--text)] max-sm:w-[8ch] max-sm:text-[14px]">{{ feedItem.prediction.name }}</h3>
                   <span
-                    v-if="leadComment(item)"
+                    v-if="feedItem.lead"
                     class="inline-flex shrink-0 items-center gap-1 rounded-md border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_60%,transparent)] px-1.5 py-1 text-[10px] font-black uppercase leading-none text-[var(--muted)] [font-variant-numeric:tabular-nums] max-sm:px-1 max-sm:text-[9px]"
                   >
                     <span>{{ activeRoom.home.code }}</span>
-                    <strong class="text-[14px] font-[900] text-[var(--text)] max-sm:text-[13px]">{{ item.homeScore }}-{{ item.awayScore }}</strong>
+                    <strong class="text-[14px] font-[900] text-[var(--text)] max-sm:text-[13px]">{{ feedItem.prediction.homeScore }}-{{ feedItem.prediction.awayScore }}</strong>
                     <span>{{ activeRoom.away.code }}</span>
                   </span>
-                  <span v-if="isOptimisticPrediction(item.id)" class="ml-2 text-[10px] font-black uppercase leading-none text-[var(--accent)]">sending</span>
+                  <span v-if="isOptimisticPrediction(feedItem.prediction.id)" class="ml-2 text-[10px] font-black uppercase leading-none text-[var(--accent)]">sending</span>
                 </div>
 
                 <div
-                  v-if="!leadComment(item)"
+                  v-if="!feedItem.lead"
                   class="inline-flex w-fit items-center gap-1 rounded-md border border-[color:color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color:color-mix(in_srgb,var(--chip-bg)_60%,transparent)] px-2 py-1.5 text-[11px] font-black uppercase leading-none text-[var(--muted)] [font-variant-numeric:tabular-nums] max-sm:px-1.5 max-sm:text-[10px]"
                 >
                   <span>{{ activeRoom.home.code }}</span>
-                  <strong class="text-[16px] font-[900] text-[var(--text)] max-sm:text-[14px]">{{ item.homeScore }}-{{ item.awayScore }}</strong>
+                  <strong class="text-[16px] font-[900] text-[var(--text)] max-sm:text-[14px]">{{ feedItem.prediction.homeScore }}-{{ feedItem.prediction.awayScore }}</strong>
                   <span>{{ activeRoom.away.code }}</span>
                 </div>
 
-                <div v-if="leadComment(item)" class="grid gap-1">
+                <div v-if="feedItem.lead" class="grid gap-1">
                   <p data-lead-comment class="m-0 max-w-[62ch] text-[17px] leading-[1.4] text-[var(--soft)] max-md:text-[15px]">
-                    {{ leadComment(item)?.text }}
-                    <span v-if="leadComment(item)?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
+                    {{ feedItem.lead?.text }}
+                    <span v-if="feedItem.lead?.editedAt" class="ml-1 text-[11px] font-bold uppercase text-[var(--muted)]">edited</span>
                   </p>
                 </div>
 
-                <div v-if="threadEntries(item).length" data-reply-thread class="grid gap-2 pt-1 pl-3">
+                <div v-if="feedItem.entries.length" data-reply-thread class="grid gap-2 pt-1 pl-3">
                   <TransitionGroup
-                    :name="isFastCollapsingComments(item.id) ? 'reply-row-fast' : 'reply-row'"
+                    :name="isFastCollapsingComments(feedItem.prediction.id) ? 'reply-row-fast' : 'reply-row'"
                     tag="div"
                     class="relative grid gap-1.5 border-l border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] pl-3"
-                    :class="shouldFadeCommentPreview(item) ? 'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-8 after:bg-gradient-to-b after:from-transparent after:to-[var(--panel)]' : ''"
+                    :class="feedItem.fadePreview ? 'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-8 after:bg-gradient-to-b after:from-transparent after:to-[var(--panel)]' : ''"
                   >
                     <div
-                      v-for="(entry, replyIndex) in visibleThreadEntries(item)"
+                      v-for="(entry, replyIndex) in feedItem.visibleEntries"
                       :key="entry.id"
                       class="reply-row text-xs leading-[1.45] text-[var(--muted)]"
                       :style="{ '--reply-index': replyIndex }"
@@ -3186,7 +3216,7 @@ onBeforeUnmount(() => {
                       <form
                         v-if="entry.type === 'reply' && editingReplyId === entry.id"
                         class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto]"
-                        @submit.prevent="submitReplyEdit(replyById(item, entry.id)!)"
+                        @submit.prevent="submitReplyEdit(replyById(feedItem.prediction, entry.id)!)"
                       >
                         <input
                           :data-edit-key="entry.id"
@@ -3219,10 +3249,10 @@ onBeforeUnmount(() => {
                         <span v-if="entry.type === 'reply' && isEditSubmitting(entry.id)" class="ml-1 text-[9px] font-black uppercase text-[var(--accent)]">saving</span>
                         <span v-if="entry.editedAt" class="ml-2 text-[9px] font-bold text-[color:color-mix(in_srgb,var(--muted)_82%,var(--text))]">Edited</span>
                         <button
-                          v-if="entry.type === 'reply' && replyById(item, entry.id) && canEditReply(replyById(item, entry.id)!)"
+                          v-if="entry.type === 'reply' && replyById(feedItem.prediction, entry.id) && canEditReply(replyById(feedItem.prediction, entry.id)!)"
                           class="ml-3 inline-flex rounded px-1 text-[9px] font-black uppercase tracking-[0.08em] text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
                           type="button"
-                          @click="startEditingReply(replyById(item, entry.id)!)"
+                          @click="startEditingReply(replyById(feedItem.prediction, entry.id)!)"
                         >
                           EDIT
                         </button>
@@ -3230,50 +3260,50 @@ onBeforeUnmount(() => {
                     </div>
                   </TransitionGroup>
                   <button
-                    v-if="shouldShowCommentToggle(item)"
+                    v-if="feedItem.showToggle"
                     class="ml-3 inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--accent)_62%,var(--muted))] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--muted))] active:translate-y-px"
                     type="button"
-                    :aria-expanded="String(isCommentsExpanded(item.id))"
-                    @click="toggleComments(item.id)"
+                    :aria-expanded="String(isCommentsExpanded(feedItem.prediction.id))"
+                    @click="toggleComments(feedItem.prediction.id)"
                   >
-                    <span>{{ isCommentsExpanded(item.id) ? 'Show less' : `Show ${hiddenReplyCount(item)} more` }}</span>
+                    <span>{{ isCommentsExpanded(feedItem.prediction.id) ? 'Show less' : `Show ${feedItem.hiddenCount} more` }}</span>
                   </button>
                   <p
-                    v-if="leadComment(item) && typingLabel('reply', leadComment(item)!.id)"
+                    v-if="feedItem.lead && typingLabel('reply', feedItem.lead!.id)"
                     class="m-0 min-h-3.5 pl-3 text-[10px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--accent)_58%,var(--muted))]"
                     aria-live="polite"
                   >
-                    {{ typingLabel('reply', leadComment(item)!.id) }}
+                    {{ typingLabel('reply', feedItem.lead!.id) }}
                   </p>
                 </div>
 
                 <Transition
                   name="reply-composer"
                   @after-enter="focusReplyComposer"
-                  @after-leave="finishReplyComposerClose(item.id, replyTargetIdForPrediction(item))"
+                  @after-leave="finishReplyComposerClose(feedItem.prediction.id, feedItem.replyTargetId)"
                 >
                   <form
-                    v-if="isReplying(item.id, replyTargetIdForPrediction(item))"
+                    v-if="isReplying(feedItem.prediction.id, feedItem.replyTargetId)"
                     data-reply-composer
                     class="mt-1 grid scroll-mt-24 grid-cols-[minmax(0,1fr)_auto] gap-2 max-md:mb-2 max-md:grid-cols-[minmax(0,1fr)_auto]"
-                    @submit.prevent="submitReply(replyTargetIdForPrediction(item))"
+                    @submit.prevent="submitReply(feedItem.replyTargetId)"
                   >
                     <input
-                      :data-reply-key="replyTargetIdForPrediction(item)"
-                      v-model="replyDrafts[replyTargetIdForPrediction(item)]"
+                      :data-reply-key="feedItem.replyTargetId"
+                      v-model="replyDrafts[feedItem.replyTargetId]"
                       class="min-h-9 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-2.5 text-sm text-[var(--text)] outline-none disabled:cursor-wait disabled:opacity-70"
-                      :aria-label="replyComposerLabel(item)"
-                      :placeholder="replyComposerPlaceholder(item)"
-                      :disabled="isReplySubmitting(replyTargetIdForPrediction(item))"
-                      @input="markTyping('reply', replyTargetIdForPrediction(item))"
-                      @blur="stopTyping('reply', replyTargetIdForPrediction(item))"
+                      :aria-label="feedItem.replyComposerLabel"
+                      :placeholder="feedItem.replyComposerPlaceholder"
+                      :disabled="isReplySubmitting(feedItem.replyTargetId)"
+                      @input="markTyping('reply', feedItem.replyTargetId)"
+                      @blur="stopTyping('reply', feedItem.replyTargetId)"
                     />
                     <button
                       class="hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--control-border)] bg-[color:color-mix(in_srgb,var(--control-bg)_76%,transparent)] text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px max-md:inline-flex"
                       type="button"
                       aria-label="Close reply input"
-                      :disabled="isReplySubmitting(replyTargetIdForPrediction(item))"
-                      @click="closeReplyComposer(replyTargetIdForPrediction(item))"
+                      :disabled="isReplySubmitting(feedItem.replyTargetId)"
+                      @click="closeReplyComposer(feedItem.replyTargetId)"
                     >
                       <svg class="ph-icon h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="20">
                         <path d="M72 72l112 112"></path>
@@ -3283,15 +3313,15 @@ onBeforeUnmount(() => {
                     <button
                       class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0 max-md:col-span-2"
                       type="submit"
-                      :disabled="!canSubmitReply(replyTargetIdForPrediction(item))"
+                      :disabled="!canSubmitReply(feedItem.replyTargetId)"
                     >
-                      <span>{{ isReplySubmitting(replyTargetIdForPrediction(item)) ? 'sending' : replySubmitLabel(item) }}</span>
+                      <span>{{ isReplySubmitting(feedItem.replyTargetId) ? 'sending' : feedItem.replySubmitLabel }}</span>
                     </button>
                     <p
-                      v-if="replyErrors[replyTargetIdForPrediction(item)]"
+                      v-if="replyErrors[feedItem.replyTargetId]"
                       class="col-span-full m-0 text-xs font-semibold text-[color:color-mix(in_srgb,#d14343_78%,var(--text))]"
                     >
-                      {{ replyErrors[replyTargetIdForPrediction(item)] }}
+                      {{ replyErrors[feedItem.replyTargetId] }}
                     </p>
                   </form>
                 </Transition>
@@ -3300,31 +3330,31 @@ onBeforeUnmount(() => {
               <div class="grid w-[54px] flex-none content-start gap-1.5 justify-self-end max-md:w-[38px] max-md:gap-1">
                 <button
                   class="group inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_70%,var(--muted))] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-[0.55] disabled:active:translate-y-0 max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
-                  :class="likedPredictions.has(item.id) ? 'text-[var(--accent)]' : ''"
+                  :class="likedPredictions.has(feedItem.prediction.id) ? 'text-[var(--accent)]' : ''"
                   type="button"
-                  :aria-label="`Like prediction from ${item.name}`"
-                  @click="submitLike(item.id, item.authorId)"
+                  :aria-label="`Like prediction from ${feedItem.prediction.name}`"
+                  @click="submitLike(feedItem.prediction.id, feedItem.prediction.authorId)"
                 >
-                  <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" :class="likedPredictions.has(item.id) ? 'reaction-pop fill-current text-[var(--accent)]' : ''" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+                  <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" :class="likedPredictions.has(feedItem.prediction.id) ? 'reaction-pop fill-current text-[var(--accent)]' : ''" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <path d="M128 216S28 160 28 92a52 52 0 0 1 92-33.2L128 68l8-9.2A52 52 0 0 1 228 92c0 68-100 124-100 124Z"></path>
                   </svg>
-                  <span :key="item.likes" class="reaction-count [font-variant-numeric:tabular-nums]">{{ item.likes }}</span>
+                  <span :key="feedItem.prediction.likes" class="reaction-count [font-variant-numeric:tabular-nums]">{{ feedItem.prediction.likes }}</span>
                 </button>
 
                 <button
                   class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] active:translate-y-px max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
-                  :class="isReplying(item.id, replyTargetIdForPrediction(item)) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
+                  :class="isReplying(feedItem.prediction.id, feedItem.replyTargetId) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
                   type="button"
-                  :aria-expanded="String(isReplying(item.id, replyTargetIdForPrediction(item)))"
-                  :aria-label="replyActionLabel(item)"
-                  @click="toggleReply(item.id, replyTargetIdForPrediction(item))"
+                  :aria-expanded="String(isReplying(feedItem.prediction.id, feedItem.replyTargetId))"
+                  :aria-label="feedItem.replyActionLabel"
+                  @click="toggleReply(feedItem.prediction.id, feedItem.replyTargetId)"
                 >
                   <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <path d="M45.2 188.7A88 88 0 1 1 76 219.5L36 228Z"></path>
                   </svg>
-                  <span :key="predictionCommentTotal(item)" class="reaction-count [font-variant-numeric:tabular-nums]">{{ predictionCommentTotal(item) }}</span>
+                  <span :key="feedItem.commentTotal" class="reaction-count [font-variant-numeric:tabular-nums]">{{ feedItem.commentTotal }}</span>
                   <span
-                    v-if="hasReplyDraft(replyTargetIdForPrediction(item))"
+                    v-if="hasReplyDraft(feedItem.replyTargetId)"
                     class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
                     aria-label="Reply draft saved"
                   ></span>
