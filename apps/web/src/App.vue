@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { buildMostBackedSummary, buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, hasPickupVerification, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, limitRoomName, loadFixtures, matchKickoffUtc, mockThemes, normalizeIdentityText, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, validatePickupAnswer, validatePickupQuestion, validateRoomName, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
+import { buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, hasPickupVerification, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, limitRoomName, loadFixtures, matchKickoffUtc, mockThemes, normalizeIdentityText, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, validatePickupAnswer, validatePickupQuestion, validateRoomName, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, fetchRoom, togglePredictionLike, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
 import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
+import { addRoomPrediction, removeRoomPrediction, removeRoomReply, updateRoomPrediction, updateRoomReply, updateRoomReplyThread } from './lib/room-cache'
 import { leadComment, replyActionLabel, replyComposerLabel, replyComposerPlaceholder, replySubmitLabel, threadEntries } from './lib/prediction-thread'
 import {
   getOrCreateUserId,
@@ -1479,134 +1480,27 @@ function patchRoom(nextRoom: Room) {
 }
 
 function updateLocalPrediction(predictionId: string, update: (prediction: Prediction) => Prediction) {
-  let changed = false
-
-  const nextRooms = rooms.value.map((room) => {
-    let roomChanged = false
-    const predictions = room.predictions.map((prediction) => {
-      if (prediction.id !== predictionId) return prediction
-      changed = true
-      roomChanged = true
-      return update(prediction)
-    })
-
-    return roomChanged ? { ...room, predictions } : room
-  })
-
-  if (changed) {
-    rooms.value = nextRooms
-  }
+  rooms.value = updateRoomPrediction(rooms.value, predictionId, update)
 }
 
 function addLocalPrediction(roomId: string, prediction: Prediction) {
-  rooms.value = rooms.value.map((room) => {
-    if (room.id !== roomId) return room
-    const predictions = [prediction, ...room.predictions]
-
-    return {
-      ...room,
-      mostBacked: buildMostBackedSummary(
-        { homeName: room.home.name, awayName: room.away.name },
-        predictions,
-      ),
-      predictions,
-    }
-  })
+  rooms.value = addRoomPrediction(rooms.value, roomId, prediction)
 }
 
 function removeLocalPrediction(predictionId: string) {
-  rooms.value = rooms.value.map((room) => {
-    const predictions = room.predictions.filter((prediction) => prediction.id !== predictionId)
-    return predictions.length === room.predictions.length ? room : { ...room, predictions }
-  })
+  rooms.value = removeRoomPrediction(rooms.value, predictionId)
 }
 
 function updateLocalReplyThread(commentId: string, update: (replies: Reply[]) => Reply[]) {
-  let changed = false
-
-  const nextRooms = rooms.value.map((room) => {
-    let roomChanged = false
-    const predictions = room.predictions.map((prediction) => {
-      let predictionChanged = false
-      const comments = prediction.comments.map((comment) => {
-        if (comment.id !== commentId) return comment
-        changed = true
-        roomChanged = true
-        predictionChanged = true
-        return {
-          ...comment,
-          replies: update(comment.replies),
-        }
-      })
-
-      return predictionChanged ? { ...prediction, comments } : prediction
-    })
-
-    return roomChanged ? { ...room, predictions } : room
-  })
-
-  if (changed) {
-    rooms.value = nextRooms
-  }
+  rooms.value = updateRoomReplyThread(rooms.value, commentId, update)
 }
 
 function updateLocalReply(replyId: string, update: (reply: Reply) => Reply) {
-  let changed = false
-
-  const nextRooms = rooms.value.map((room) => {
-    let roomChanged = false
-    const predictions = room.predictions.map((prediction) => {
-      let predictionChanged = false
-      const comments = prediction.comments.map((comment) => {
-        let commentChanged = false
-        const replies = comment.replies.map((reply) => {
-          if (reply.id !== replyId) return reply
-          changed = true
-          roomChanged = true
-          predictionChanged = true
-          commentChanged = true
-          return update(reply)
-        })
-
-        return commentChanged ? { ...comment, replies } : comment
-      })
-
-      return predictionChanged ? { ...prediction, comments } : prediction
-    })
-
-    return roomChanged ? { ...room, predictions } : room
-  })
-
-  if (changed) {
-    rooms.value = nextRooms
-  }
+  rooms.value = updateRoomReply(rooms.value, replyId, update)
 }
 
 function removeLocalReply(replyId: string) {
-  let changed = false
-
-  const nextRooms = rooms.value.map((room) => {
-    let roomChanged = false
-    const predictions = room.predictions.map((prediction) => {
-      let predictionChanged = false
-      const comments = prediction.comments.map((comment) => {
-        const replies = comment.replies.filter((reply) => reply.id !== replyId)
-        if (replies.length === comment.replies.length) return comment
-        changed = true
-        roomChanged = true
-        predictionChanged = true
-        return { ...comment, replies }
-      })
-
-      return predictionChanged ? { ...prediction, comments } : prediction
-    })
-
-    return roomChanged ? { ...room, predictions } : room
-  })
-
-  if (changed) {
-    rooms.value = nextRooms
-  }
+  rooms.value = removeRoomReply(rooms.value, replyId)
 }
 
 function predictionIdForComment(commentId: string) {
