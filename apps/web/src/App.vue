@@ -316,15 +316,18 @@ const statusNotice = computed(() => {
   if (realtimeStatus.value === 'offline') return 'Live updates are offline. Retrying...'
   return ''
 })
-const adminWinnerCount = computed(() => adminEntries.value.filter((entry) => entry.result === 'winner').length)
-const adminVerifiedCount = computed(() => adminEntries.value.filter((entry) => entry.pickup).length)
+const isAdminWinner = (entry: PrizeDeskEntry) => entry.result === 'winner'
+const hasAdminWinnerPickup = (entry: PrizeDeskEntry) => isAdminWinner(entry) && !!entry.pickup
+const isAdminWinnerMissingPickup = (entry: PrizeDeskEntry) => isAdminWinner(entry) && !entry.pickup
+const adminWinnerCount = computed(() => adminEntries.value.filter(isAdminWinner).length)
+const adminVerifiedCount = computed(() => adminEntries.value.filter(hasAdminWinnerPickup).length)
 const adminPendingCount = computed(() => adminEntries.value.filter((entry) => entry.result === 'pending').length)
-const adminMissingPickupCount = computed(() => adminEntries.value.filter((entry) => !entry.pickup).length)
+const adminMissingPickupCount = computed(() => adminEntries.value.filter(isAdminWinnerMissingPickup).length)
 const adminFilteredEntries = computed(() => {
-  if (adminPrizeFilter.value === 'winner') return adminEntries.value.filter((entry) => entry.result === 'winner')
+  if (adminPrizeFilter.value === 'winner') return adminEntries.value.filter(isAdminWinner)
   if (adminPrizeFilter.value === 'pending') return adminEntries.value.filter((entry) => entry.result === 'pending')
-  if (adminPrizeFilter.value === 'verified') return adminEntries.value.filter((entry) => entry.pickup)
-  if (adminPrizeFilter.value === 'missing') return adminEntries.value.filter((entry) => !entry.pickup)
+  if (adminPrizeFilter.value === 'verified') return adminEntries.value.filter(hasAdminWinnerPickup)
+  if (adminPrizeFilter.value === 'missing') return adminEntries.value.filter(isAdminWinnerMissingPickup)
   return adminEntries.value
 })
 const adminPrizePageCount = computed(() => Math.max(1, Math.ceil(adminFilteredEntries.value.length / ADMIN_PRIZE_PAGE_SIZE)))

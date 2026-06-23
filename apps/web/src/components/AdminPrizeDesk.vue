@@ -71,8 +71,8 @@ function adminFilterLabel(filter: AdminPrizeFilter) {
     all: 'All',
     winner: 'Winners',
     pending: 'Pending',
-    verified: 'Has pickup',
-    missing: 'No pickup',
+    verified: 'Winners with pickup',
+    missing: 'Winners missing pickup',
   }[filter]
 }
 
