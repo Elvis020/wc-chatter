@@ -324,7 +324,7 @@ function hasSpriteFlag(team: Team) {
                     <span class="h-1.5 w-1.5 rounded-full bg-[color:color-mix(in_srgb,var(--muted)_58%,transparent)]" aria-hidden="true"></span>
                     Open
                   </span>
-                  <span v-else-if="entry.result === 'winner'" class="inline-grid h-8 w-8 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)] shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_20%,transparent)]" :aria-label="prizeEntryStatusLabel(entry)" role="img">
+                  <span v-else-if="entry.result === 'winner'" class="admin-result-badge admin-result-badge--winner h-8 w-8" :aria-label="prizeEntryStatusLabel(entry)" role="img">
                     <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m5 10.5 3.2 3.1L15.5 6"></path>
                     </svg>
@@ -418,7 +418,7 @@ function hasSpriteFlag(team: Team) {
 
               <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_22%,transparent)] p-3">
                 <span class="mb-2 inline-flex items-center gap-2 text-xs font-bold text-[var(--soft)]">
-                  <span v-if="selectedEntry.result === 'winner'" class="inline-grid h-7 w-7 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)]" aria-hidden="true">
+                  <span v-if="selectedEntry.result === 'winner'" class="admin-result-badge admin-result-badge--winner h-7 w-7" aria-hidden="true">
                     <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m5 10.5 3.2 3.1L15.5 6"></path>
                     </svg>
