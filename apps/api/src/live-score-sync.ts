@@ -1,47 +1,23 @@
 import { type SupabaseClient } from '@supabase/supabase-js'
 import {
   loadFixtures,
-  MATCH_LIVE_DURATION_MS,
-  matchKickoffUtcMs,
-  matchStatusAt,
-  type FixtureMatch,
-  type MatchStatus,
-  type RoomInteractionStatus,
 } from '@turntabl-score-room/shared'
 import {
   EspnWorldCupApiProvider,
   MergedLiveScorelineProvider,
-  scorelineKeyForNames,
-  WorldCup26ApiProvider,
-  type LiveScoreline,
   type LiveScorelineProvider,
+  WorldCup26ApiProvider,
 } from './live-score-providers.js'
+import {
+  buildScoreRoomUpdate,
+  legacyRoomStatus,
+  LIVE_WINDOW_AFTER_MS,
+  LIVE_WINDOW_BEFORE_MS,
+  selectLiveScoreCandidates,
+  type ScoreRoomRow,
+  type ScoreRoomUpdate,
+} from './live-score-policy.js'
 import { ApiError } from './errors.js'
-
-type DbRoomStatus = 'draft' | 'live' | 'closed' | 'archived'
-
-type ScoreRoomRow = {
-  slug: string
-  status: DbRoomStatus
-  room_status?: RoomInteractionStatus | null
-  current_home_score?: number | null
-  current_away_score?: number | null
-  score_status?: LiveScoreline['status'] | null
-}
-
-type ScoreRoomUpdate = {
-  slug: string
-  status: DbRoomStatus
-  match_status: MatchStatus
-  room_status?: RoomInteractionStatus
-  is_featured: boolean
-  current_home_score: number | null
-  current_away_score: number | null
-  score_status: LiveScoreline['status']
-  score_clock: string | null
-  score_provider: string | null
-  score_updated_at: string
-}
 
 export type LiveScoreSyncResult = {
   checked: boolean
@@ -52,61 +28,8 @@ export type LiveScoreSyncResult = {
   reason?: string
 }
 
-const LIVE_WINDOW_BEFORE_MS = 15 * 60 * 1000
-const LIVE_WINDOW_AFTER_MS = 140 * 60 * 1000
-const FINISHED_SCORE_BACKFILL_AFTER_MS = 48 * 60 * 60 * 1000
-const LOCKED_ROOM_STATUSES = new Set<RoomInteractionStatus>(['closed', 'hidden'])
-
 function isMissingColumnError(error?: { code?: string } | null) {
   return error?.code === 'PGRST204' || error?.code === '42703'
-}
-
-function legacyRoomStatus(status: DbRoomStatus): RoomInteractionStatus {
-  if (status === 'closed' || status === 'archived') return 'closed'
-  return 'open'
-}
-
-function legacyStatusFor(matchStatus: MatchStatus, roomStatus: RoomInteractionStatus): DbRoomStatus {
-  if (roomStatus !== 'open') return roomStatus === 'hidden' ? 'archived' : 'closed'
-  if (matchStatus === 'live') return 'live'
-  if (matchStatus === 'finished') return 'archived'
-  return 'draft'
-}
-
-function isInLiveScoreWindow(match: FixtureMatch, now: Date) {
-  const kickoffMs = matchKickoffUtcMs(match)
-  const nowMs = now.getTime()
-  return nowMs >= kickoffMs - LIVE_WINDOW_BEFORE_MS && nowMs <= kickoffMs + LIVE_WINDOW_AFTER_MS
-}
-
-function isInFinishedScoreBackfillWindow(match: FixtureMatch, now: Date) {
-  const kickoffMs = matchKickoffUtcMs(match)
-  const nowMs = now.getTime()
-  return nowMs > kickoffMs + MATCH_LIVE_DURATION_MS && nowMs <= kickoffMs + FINISHED_SCORE_BACKFILL_AFTER_MS
-}
-
-function hasFinishedScore(room: ScoreRoomRow) {
-  return (
-    room.current_home_score !== undefined &&
-    room.current_home_score !== null &&
-    room.current_away_score !== undefined &&
-    room.current_away_score !== null &&
-    room.score_status === 'finished'
-  )
-}
-
-function scorelineMatch(scoreline: LiveScoreline, match: FixtureMatch) {
-  const datedKey = `${scoreline.date}:${scorelineKeyForNames(scoreline.homeName, scoreline.awayName)}`
-  const matchDatedKey = `${match.date}:${scorelineKeyForNames(match.homeName, match.awayName)}`
-  const looseKey = scorelineKeyForNames(scoreline.homeName, scoreline.awayName)
-  const matchLooseKey = scorelineKeyForNames(match.homeName, match.awayName)
-  return datedKey === matchDatedKey || looseKey === matchLooseKey
-}
-
-function matchStatusFromScoreline(scoreline: LiveScoreline | undefined, match: FixtureMatch, now: Date): MatchStatus {
-  if (scoreline?.status === 'live') return 'live'
-  if (scoreline?.status === 'finished') return 'finished'
-  return matchStatusAt(match, now)
 }
 
 async function getExistingRooms(supabase: SupabaseClient, slugs: string[]) {
@@ -160,10 +83,7 @@ export async function syncLiveRoomScores(
   options: { now?: Date; provider?: LiveScorelineProvider; dryRun?: boolean } = {},
 ): Promise<LiveScoreSyncResult> {
   const now = options.now ?? new Date()
-  const liveWindowMatches = loadFixtures().filter((match) => isInLiveScoreWindow(match, now))
-  const backfillMatches = loadFixtures().filter((match) => isInFinishedScoreBackfillWindow(match, now))
-  const candidates = [...new Map([...liveWindowMatches, ...backfillMatches].map((match) => [match.id, match])).values()]
-  const liveWindowSlugs = new Set(liveWindowMatches.map((match) => match.id))
+  const { candidates, liveWindowSlugs } = selectLiveScoreCandidates(loadFixtures(), now)
 
   if (candidates.length === 0) {
     return {
@@ -184,32 +104,14 @@ export async function syncLiveRoomScores(
   const scorelines = await provider.fetchScorelines()
   const existingRooms = await getExistingRooms(supabase, candidates.map((match) => match.id))
 
-  const rows = candidates.map<ScoreRoomUpdate | null>((match) => {
-    const room = existingRooms.get(match.id)
-    if (!room) return null
-
-    const scoreline = scorelines.find((item) => scorelineMatch(item, match))
-    const isBackfillOnly = !liveWindowSlugs.has(match.id)
-    if (isBackfillOnly && (hasFinishedScore(room) || scoreline?.status !== 'finished')) return null
-
-    const roomStatus = room.room_status ?? legacyRoomStatus(room.status)
-    const keptRoomStatus = LOCKED_ROOM_STATUSES.has(roomStatus) ? roomStatus : 'open'
-    const matchStatus = matchStatusFromScoreline(scoreline, match, now)
-
-    return {
-      slug: match.id,
-      status: legacyStatusFor(matchStatus, keptRoomStatus),
-      match_status: matchStatus,
-      room_status: keptRoomStatus,
-      is_featured: false,
-      current_home_score: scoreline ? scoreline.homeGoals : null,
-      current_away_score: scoreline ? scoreline.awayGoals : null,
-      score_status: scoreline?.status ?? (matchStatus === 'live' ? 'live' : matchStatus === 'finished' ? 'finished' : 'scheduled'),
-      score_clock: scoreline?.clock ?? null,
-      score_provider: scoreline?.provider ?? null,
-      score_updated_at: scoreline?.updatedAt ?? now.toISOString(),
-    }
-  }).filter((row): row is ScoreRoomUpdate => Boolean(row))
+  const rows = candidates
+    .map((match) =>
+      buildScoreRoomUpdate(match, existingRooms.get(match.id), scorelines, {
+        now,
+        isBackfillOnly: !liveWindowSlugs.has(match.id),
+      }),
+    )
+    .filter((row): row is ScoreRoomUpdate => Boolean(row))
 
   const featuredSlug = rows.find((row) => row.match_status === 'live')?.slug
   const upserts = rows.map((row) => ({
