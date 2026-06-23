@@ -200,6 +200,7 @@ export {
 } from './identity.js'
 
 export {
+  createFixtureKickoffLookup,
   DEFAULT_MATCH_CYCLE_START_HOUR_UTC,
   currentOrNextCycleMatches,
   loadFixtures,

@@ -232,6 +232,18 @@ export function loadFixtures(): FixtureMatch[] {
   }))
 }
 
+export function createFixtureKickoffLookup(matches: FixtureMatch[] = loadFixtures()): Map<string, string> {
+  return new Map(
+    matches.flatMap((match) => {
+      const kickoff = matchKickoffUtc(match)
+      return [
+        [match.id, kickoff],
+        [`${match.home.code}-${match.away.code}`, kickoff],
+      ]
+    }),
+  )
+}
+
 function dateKeyUtc(date: Date): string {
   return date.toISOString().slice(0, 10)
 }

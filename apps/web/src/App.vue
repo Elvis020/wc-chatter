@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, hasPickupVerification, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, limitRoomName, loadFixtures, matchKickoffUtc, mockThemes, normalizeIdentityText, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, validatePickupAnswer, validatePickupQuestion, validateRoomName, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
+import { buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, createFixtureKickoffLookup, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, hasPickupVerification, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, limitRoomName, mockThemes, normalizeIdentityText, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, validatePickupAnswer, validatePickupQuestion, validateRoomName, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, fetchRoom, togglePredictionLike, updateReply } from './lib/api'
 import IdentityPrompt from './components/IdentityPrompt.vue'
@@ -38,15 +38,7 @@ const TYPING_THROTTLE_MS = 1400
 const TYPING_VISIBLE_MS = 3200
 const TOP_PICK_SLIDE_MS = 4400
 const ADMIN_ROUTE = '/turntabl-prize-desk'
-const fixtureKickoffs = new Map(
-  loadFixtures().flatMap((match) => {
-    const kickoff = matchKickoffUtc(match)
-    return [
-      [match.id, kickoff],
-      [`${match.home.code}-${match.away.code}`, kickoff],
-    ]
-  }),
-)
+const fixtureKickoffs = createFixtureKickoffLookup()
 type FeedSortMode = 'likes' | 'comments'
 type AdminPrizeFilter = 'all' | 'winner' | 'pending' | 'verified' | 'missing'
 type RealtimeStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline'

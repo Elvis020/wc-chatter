@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  createFixtureKickoffLookup,
   currentOrNextCycleMatches,
   nextCycleMatches,
   type FixtureMatch,
@@ -67,5 +68,14 @@ describe('fixture cycle selection', () => {
     const rows = currentOrNextCycleMatches(matches, new Date('2026-06-15T08:00:00.000Z'), undefined, 2)
 
     expect(rows.map((match) => match.id)).toEqual(['late', 'overnight', 'next', 'next-late'])
+  })
+
+  test('builds kickoff lookup entries by fixture id and team-code pairing', () => {
+    const matches = [fixture('first', '2026-06-12', '14:00 UTC+0')]
+
+    const lookup = createFixtureKickoffLookup(matches)
+
+    expect(lookup.get('first')).toBe('2026-06-12T14:00:00.000Z')
+    expect(lookup.get('HME-AWY')).toBe('2026-06-12T14:00:00.000Z')
   })
 })

@@ -1,9 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   buildMostBackedSummary,
-  loadFixtures,
+  createFixtureKickoffLookup,
   matchStatusFromKickoff,
-  matchKickoffUtc,
   seededResultForFixture,
   mockThemes,
   prizeResultForScore,
@@ -123,15 +122,7 @@ const ROOM_STATE_NO_KICKOFF_SELECT =
 const LEGACY_ROOM_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at'
 const SUPABASE_IN_BATCH_SIZE = 100
-const fixtureKickoffs = new Map(
-  loadFixtures().flatMap((match) => {
-    const kickoff = matchKickoffUtc(match)
-    return [
-      [match.id, kickoff],
-      [`${match.home.code}-${match.away.code}`, kickoff],
-    ]
-  }),
-)
+const fixtureKickoffs = createFixtureKickoffLookup()
 
 type PredictionOwnerRow = {
   id: string
