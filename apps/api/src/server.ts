@@ -9,6 +9,16 @@ import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } fro
 type RuntimeEnv = Env & SupabaseEnv
 type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabaseStore>
 type RoomApiEvent = Extract<ApiEvent, { room: Room }>
+type AppContext = Context<{ Bindings: RuntimeEnv }>
+type RoomMutationConfig<TPayload> = {
+  parse: (input: unknown) => TPayload
+  rateLimit: {
+    userId: (payload: TPayload) => string
+    action: string
+  }
+  mutate: (store: ApiStore, payload: TPayload) => Promise<Room | null> | Room | null
+  notFoundMessage: string
+}
 
 const app = new Hono<{ Bindings: RuntimeEnv }>()
 const fallbackStore = createStore()
@@ -64,6 +74,31 @@ async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: RoomApiEve
 
   const stub = env.ROOM_HUB.getByName(event.room.id) as DurableObjectStub<RoomHub>
   await stub.broadcast(event)
+}
+
+async function handleApiError(c: AppContext, error: unknown) {
+  const response = errorResponse(error)
+  return c.json(response.body, response.status)
+}
+
+async function runRoomMutation<TPayload>(c: AppContext, config: RoomMutationConfig<TPayload>) {
+  const store = storeFor(c.env)
+
+  try {
+    const payload = config.parse(await readJson(c))
+    enforceMutationRateLimit(config.rateLimit.userId(payload), config.rateLimit.action)
+    const room = await config.mutate(store, payload)
+
+    if (!room) {
+      throw new ApiError('NOT_FOUND', config.notFoundMessage, 404)
+    }
+
+    const event: ApiEvent = { type: 'room.updated', room }
+    await broadcastRoom(c.env, store, event)
+    return c.json({ room })
+  } catch (error) {
+    return handleApiError(c, error)
+  }
 }
 
 function parsePredictionInput(input: unknown): CreatePredictionInput {
@@ -211,8 +246,7 @@ app.get('/api/bootstrap', async (c) => {
       generatedAt: new Date().toISOString(),
     })
   } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
+    return handleApiError(c, error)
   }
 })
 
@@ -227,135 +261,68 @@ app.get('/api/rooms/:roomId', async (c) => {
 
     return c.json({ room })
   } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
+    return handleApiError(c, error)
   }
 })
 
 app.post('/api/rooms/:roomId/predictions', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const roomId = c.req.param('roomId')
-    const payload = parsePredictionInput(await readJson(c))
-    enforceMutationRateLimit(payload.authorId, 'prediction')
-    const room = await store.addPrediction(roomId, payload)
-
-    if (!room) {
-      throw new ApiError('NOT_FOUND', 'Room not found.', 404)
-    }
-
-    const event: ApiEvent = { type: 'room.updated', room }
-    await broadcastRoom(c.env, store, event)
-    return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
+  const roomId = c.req.param('roomId')
+  return runRoomMutation(c, {
+    parse: parsePredictionInput,
+    rateLimit: { userId: (payload) => payload.authorId, action: 'prediction' },
+    mutate: (store, payload) => store.addPrediction(roomId, payload),
+    notFoundMessage: 'Room not found.',
+  })
 })
 
 app.post('/api/predictions/:predictionId/likes', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const predictionId = c.req.param('predictionId')
-    const payload = parseLikeInput(await readJson(c))
-    enforceMutationRateLimit(payload.userId, 'like')
-    const room = await store.setPredictionLike(predictionId, payload.userId, payload.liked)
-
-    if (!room) {
-      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
-    }
-
-    const event: ApiEvent = { type: 'room.updated', room }
-    await broadcastRoom(c.env, store, event)
-    return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
+  const predictionId = c.req.param('predictionId')
+  return runRoomMutation(c, {
+    parse: parseLikeInput,
+    rateLimit: { userId: (payload) => payload.userId, action: 'like' },
+    mutate: (store, payload) => store.setPredictionLike(predictionId, payload.userId, payload.liked),
+    notFoundMessage: 'Prediction not found.',
+  })
 })
 
 app.post('/api/predictions/:predictionId/edit', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const predictionId = c.req.param('predictionId')
-    const payload = parsePredictionEditInput(await readJson(c))
-    enforceMutationRateLimit(payload.userId, 'edit')
-    const room = await store.updatePredictionText(predictionId, payload)
-
-    if (!room) {
-      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
-    }
-
-    const event: ApiEvent = { type: 'room.updated', room }
-    await broadcastRoom(c.env, store, event)
-    return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
+  const predictionId = c.req.param('predictionId')
+  return runRoomMutation(c, {
+    parse: parsePredictionEditInput,
+    rateLimit: { userId: (payload) => payload.userId, action: 'edit' },
+    mutate: (store, payload) => store.updatePredictionText(predictionId, payload),
+    notFoundMessage: 'Prediction not found.',
+  })
 })
 
 app.post('/api/comments/:commentId/replies', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const commentId = c.req.param('commentId')
-    const payload = parseReplyInput(await readJson(c))
-    enforceMutationRateLimit(payload.authorId, 'reply')
-    const room = await store.addReply(commentId, payload)
-
-    if (!room) {
-      throw new ApiError('NOT_FOUND', 'Comment not found.', 404)
-    }
-
-    const event: ApiEvent = { type: 'room.updated', room }
-    await broadcastRoom(c.env, store, event)
-    return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
+  const commentId = c.req.param('commentId')
+  return runRoomMutation(c, {
+    parse: parseReplyInput,
+    rateLimit: { userId: (payload) => payload.authorId, action: 'reply' },
+    mutate: (store, payload) => store.addReply(commentId, payload),
+    notFoundMessage: 'Comment not found.',
+  })
 })
 
 app.post('/api/predictions/:predictionId/comments', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const predictionId = c.req.param('predictionId')
-    const payload = parsePredictionCommentInput(await readJson(c))
-    enforceMutationRateLimit(payload.authorId, 'reply')
-    const room = await store.addPredictionComment(predictionId, payload)
-
-    if (!room) {
-      throw new ApiError('NOT_FOUND', 'Prediction not found.', 404)
-    }
-
-    const event: ApiEvent = { type: 'room.updated', room }
-    await broadcastRoom(c.env, store, event)
-    return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
+  const predictionId = c.req.param('predictionId')
+  return runRoomMutation(c, {
+    parse: parsePredictionCommentInput,
+    rateLimit: { userId: (payload) => payload.authorId, action: 'reply' },
+    mutate: (store, payload) => store.addPredictionComment(predictionId, payload),
+    notFoundMessage: 'Prediction not found.',
+  })
 })
 
 app.post('/api/replies/:replyId/edit', async (c) => {
-  const store = storeFor(c.env)
-  try {
-    const replyId = c.req.param('replyId')
-    const payload = parseReplyEditInput(await readJson(c))
-    enforceMutationRateLimit(payload.userId, 'edit')
-    const room = await store.updateReply(replyId, payload)
-
-    if (!room) {
-      throw new ApiError('NOT_FOUND', 'Reply not found.', 404)
-    }
-
-    const event: ApiEvent = { type: 'room.updated', room }
-    await broadcastRoom(c.env, store, event)
-    return c.json({ room })
-  } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
-  }
+  const replyId = c.req.param('replyId')
+  return runRoomMutation(c, {
+    parse: parseReplyEditInput,
+    rateLimit: { userId: (payload) => payload.userId, action: 'edit' },
+    mutate: (store, payload) => store.updateReply(replyId, payload),
+    notFoundMessage: 'Reply not found.',
+  })
 })
 
 app.get('/api/admin/prize-claims', async (c) => {
@@ -363,8 +330,7 @@ app.get('/api/admin/prize-claims', async (c) => {
   try {
     return c.json({ entries: await store.getPrizeDeskEntries() })
   } catch (error) {
-    const response = errorResponse(error)
-    return c.json(response.body, response.status)
+    return handleApiError(c, error)
   }
 })
 
