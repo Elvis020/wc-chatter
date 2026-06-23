@@ -17,11 +17,7 @@ import {
 } from '@turntabl-score-room/shared'
 import { createMockRooms } from '@turntabl-score-room/shared/mock-data'
 import { ApiError } from './errors.js'
-
-type WebSocketLike = {
-  send: (data: string) => void
-  readyState?: number
-}
+import type { RoomStore, WebSocketLike } from './store-contract.js'
 
 function cloneRoom(room: Room): Room {
   return structuredClone(room)
@@ -64,7 +60,7 @@ function mapPrizeDeskEntry(room: Room, prediction: Prediction, claim?: PrizeClai
   }
 }
 
-export function createStore() {
+export function createStore(): RoomStore {
   const rooms = createMockRooms()
   const clients = new Map<string, WebSocketLike>()
   const likesByPrediction = new Map<string, Set<string>>()

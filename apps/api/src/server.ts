@@ -3,11 +3,12 @@ import type { ApiEvent, CreatePredictionInput, PredictionCommentInput, ReplyInpu
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'
+import type { RoomStore } from './store-contract.js'
 import { createSupabaseStore, hasSupabaseConfig, supabaseConfigFromEnv, type SupabaseEnv } from './supabase-store.js'
 import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } from './validation.js'
 
 type RuntimeEnv = Env & SupabaseEnv
-type ApiStore = ReturnType<typeof createStore> | ReturnType<typeof createSupabaseStore>
+type ApiStore = RoomStore
 type RoomApiEvent = Extract<ApiEvent, { room: Room }>
 type AppContext = Context<{ Bindings: RuntimeEnv }>
 type RoomMutationConfig<TPayload> = {

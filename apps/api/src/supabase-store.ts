@@ -27,11 +27,7 @@ import {
   type UpdateReplyInput,
 } from '@turntabl-score-room/shared'
 import { ApiError } from './errors.js'
-
-type WebSocketLike = {
-  send: (data: string) => void
-  readyState?: number
-}
+import type { RoomStore, WebSocketLike } from './store-contract.js'
 
 type RoomRow = {
   id: string
@@ -440,7 +436,7 @@ export function supabaseConfigFromEnv(env: SupabaseEnv = {}): SupabaseStoreConfi
   return { url, serviceRoleKey }
 }
 
-export function createSupabaseStore(config: SupabaseStoreConfig) {
+export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
   const supabase = createSupabaseClient(config)
   const clients = new Map<string, WebSocketLike>()
 
