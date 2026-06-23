@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { buildRoomReadoutInsights, compareRoomsForSwitcher as compareRoomsForSwitcherByState, effectiveRoomMatchStatus as effectiveRoomMatchStatusByState, finalScoreForRoom as finalScoreForRoomByInsights, groupRoomsByCycle, hasPickupVerification, isExactPick as isExactPickByScore, isRoomLocked as isRoomLockedByState, limitRoomName, loadFixtures, matchKickoffUtc, mockThemes, normalizeIdentityText, predictionCommentTotal, roomCommentTotal, roomCycleDateKey, roomCycleStartMs, roomKickoffMs as roomKickoffMsByState, roomKickoffTime as roomKickoffTimeByState, roomLikeTotal, subdivisionFlagIso2, validatePickupAnswer, validatePickupQuestion, validateRoomName, type ApiEvent, type Comment as PredictionComment, type CreatePredictionInput, type Prediction, type PredictionCommentInput, type PrizeDeskEntry, type Reply, type ReplyInput, type Room, type RoomDayBucket, type RoomReadoutInsight, type Team, type ThemeId, type TypingEvent, type TypingTarget } from '@turntabl-score-room/shared'
 import 'flag-icons/css/flag-icons.min.css'
 import { connectRoomEvents, createPrediction, createPredictionComment, createReply, fetchBootstrap, fetchPrizeDeskEntries, fetchRoom, togglePredictionLike, updateReply } from './lib/api'
@@ -66,6 +66,8 @@ type TypingState = {
   targetId: string
   expiresAt: number
 }
+
+const AdminPrizeDesk = defineAsyncComponent(() => import('./components/AdminPrizeDesk.vue'))
 
 const faviconThemes: Record<ThemeId, FaviconTheme> = {
   paper: { accent: '#b45309', panel: '#fff9ec', text: '#2a2520' },
@@ -609,61 +611,12 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-function formatAdminDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
+function setAdminPrizeFilter(filter: AdminPrizeFilter) {
+  adminPrizeFilter.value = filter
 }
 
-function prizeEntryScore(entry: PrizeDeskEntry) {
-  return `${entry.home.code} ${entry.predictedHomeScore}-${entry.predictedAwayScore} ${entry.away.code}`
-}
-
-function prizeEntryFinalScore(entry: PrizeDeskEntry) {
-  if (!entry.finalScore) return 'Result pending'
-  const prefix = entry.finalScore.status === 'finished' ? 'FT' : entry.finalScore.status === 'live' ? 'Live' : 'Score'
-  return `${prefix} ${entry.finalScore.home}-${entry.finalScore.away}`
-}
-
-function hasPrizeEntryFinalScore(entry: PrizeDeskEntry) {
-  return !!entry.finalScore
-}
-
-function prizeEntryStatusLabel(entry: PrizeDeskEntry) {
-  if (entry.result === 'winner') return 'Exact winner'
-  if (entry.result === 'miss') return 'Not exact'
-  return entry.matchStatus === 'live' ? 'In play' : 'Pending'
-}
-
-function adminFilterCount(filter: AdminPrizeFilter) {
-  if (filter === 'winner') return adminWinnerCount.value
-  if (filter === 'pending') return adminPendingCount.value
-  if (filter === 'verified') return adminVerifiedCount.value
-  if (filter === 'missing') return adminMissingPickupCount.value
-  return adminEntries.value.length
-}
-
-function adminFilterLabel(filter: AdminPrizeFilter) {
-  return {
-    all: 'All',
-    winner: 'Winners',
-    pending: 'Pending',
-    verified: 'Has pickup',
-    missing: 'No pickup',
-  }[filter]
-}
-
-function adminPickupLabel(entry: PrizeDeskEntry) {
-  return entry.pickup ? 'View pickup details' : 'No pickup details'
-}
-
-function adminPickupIconPath(entry: PrizeDeskEntry) {
-  return entry.pickup
-    ? 'M56 96V72a72 72 0 0 1 144 0v24M48 96h160v112H48zM128 144v24'
-    : 'M56 96V72a72 72 0 0 1 124.8-48.9M208 96v112H48V96h112M32 32l192 192'
+function setAdminPrizePage(page: number) {
+  adminPrizePage.value = Math.max(0, Math.min(adminPrizePageCount.value - 1, page))
 }
 
 function openAdminEntry(entry: PrizeDeskEntry) {
@@ -2226,342 +2179,27 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section
+    <AdminPrizeDesk
       v-else-if="isAdminRoute"
-      class="grid gap-4"
-      aria-labelledby="admin-title"
-    >
-      <div class="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4">
-        <div class="grid gap-1">
-          <p class="m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Admin</p>
-          <h1 id="admin-title" class="m-0 text-2xl font-black leading-tight text-[var(--text)]">Configurations</h1>
-          <p class="m-0 text-sm leading-snug text-[var(--muted)]">Manage the parts of Turntabl Score Room that need owner attention.</p>
-        </div>
-        <span class="rounded-md border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--accent)]">Hidden route</span>
-      </div>
-
-      <section class="grid gap-2.5 md:grid-cols-3" aria-label="Admin configuration areas">
-        <article class="grid gap-2 rounded-xl border border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] p-4">
-          <div class="flex items-center justify-between gap-2">
-            <h2 class="m-0 text-base font-black text-[var(--text)]">Prize desk</h2>
-            <span class="rounded-md bg-[var(--accent)] px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[var(--accent-text)]">Live</span>
-          </div>
-          <p class="m-0 text-sm leading-[1.45] text-[var(--soft)]">Review prediction outcomes and pickup verification.</p>
-          <p class="m-0 text-xs font-bold text-[var(--muted)]">{{ adminEntries.length }} predictions tracked</p>
-        </article>
-
-        <article class="grid gap-2 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4">
-          <div class="flex items-center justify-between gap-2">
-            <h2 class="m-0 text-base font-black text-[var(--text)]">Room board</h2>
-            <span class="rounded-md border border-[var(--line)] px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Next</span>
-          </div>
-          <p class="m-0 text-sm leading-[1.45] text-[var(--soft)]">Create, close, archive, and refresh match rooms from the admin surface.</p>
-        </article>
-
-        <article class="grid gap-2 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4">
-          <div class="flex items-center justify-between gap-2">
-            <h2 class="m-0 text-base font-black text-[var(--text)]">Visibility</h2>
-            <span class="rounded-md border border-[var(--line)] px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Next</span>
-          </div>
-          <p class="m-0 text-sm leading-[1.45] text-[var(--soft)]">Control what is public, draft, hidden, or ready for match-day traffic.</p>
-        </article>
-      </section>
-
-      <section class="grid gap-3 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4" aria-labelledby="prize-desk-title">
-        <div class="flex flex-wrap items-end justify-between gap-3">
-          <div class="grid gap-1">
-            <p class="m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Configuration</p>
-            <h2 id="prize-desk-title" class="m-0 text-xl font-black leading-tight text-[var(--text)]">Prize desk</h2>
-            <p class="m-0 text-sm leading-snug text-[var(--muted)]">Map predictions to final scores, then use pickup checks for exact winners.</p>
-          </div>
-          <button
-            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-3.5 text-xs font-extrabold text-[var(--accent)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] active:translate-y-px disabled:cursor-wait disabled:opacity-70 disabled:active:translate-y-0"
-            type="button"
-            :disabled="adminLoading"
-            @click="loadAdminPrizeDesk"
-          >
-            <svg class="ph-icon h-4 w-4" :class="adminLoading ? 'animate-spin' : ''" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
-              <path d="M200 72v48h-48"></path>
-              <path d="M56 184v-48h48"></path>
-              <path d="M185.8 112A64 64 0 0 0 77 82.2L56 104"></path>
-              <path d="M70.2 144A64 64 0 0 0 179 173.8L200 152"></path>
-            </svg>
-            <span>{{ adminLoading ? 'Refreshing' : 'Refresh desk' }}</span>
-          </button>
-        </div>
-
-        <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_24%,transparent)] p-2">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <span class="px-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Filter predictions</span>
-            <div class="flex flex-wrap items-center gap-1" aria-label="Prize desk filters">
-              <button
-                v-for="filter in (['all', 'winner', 'pending', 'verified', 'missing'] as AdminPrizeFilter[])"
-                :key="filter"
-                class="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-extrabold transition-[background-color,border-color,color] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                :class="adminPrizeFilter === filter ? 'border-[color:color-mix(in_srgb,var(--accent)_46%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))] text-[var(--accent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_16%,transparent)]' : 'border-transparent bg-transparent text-[var(--soft)] hover:border-[var(--line)] hover:bg-[var(--panel)] hover:text-[var(--text)]'"
-                type="button"
-                @click="adminPrizeFilter = filter"
-              >
-                <span>{{ adminFilterLabel(filter) }}</span>
-                <span class="min-w-5 rounded-md px-1.5 py-0.5 text-center text-[10px] leading-none" :class="adminPrizeFilter === filter ? 'bg-[color:color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]' : 'bg-[color:color-mix(in_srgb,var(--text)_7%,transparent)] text-[var(--muted)]'">{{ adminFilterCount(filter) }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="adminLoading && !adminEntries.length" class="grid gap-2.5" aria-label="Loading prize desk">
-          <div v-for="item in 3" :key="item" class="grid gap-2 rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_40%,transparent)] p-3">
-            <div class="skeleton-pulse h-4 w-36 rounded-full"></div>
-            <div class="grid gap-2 min-[720px]:grid-cols-3">
-              <div class="skeleton-pulse h-10 rounded-lg"></div>
-              <div class="skeleton-pulse h-10 rounded-lg"></div>
-              <div class="skeleton-pulse h-10 rounded-lg"></div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="adminError" class="grid gap-3 rounded-lg border border-[color:color-mix(in_srgb,#d14343_28%,var(--line))] bg-[color:color-mix(in_srgb,#d14343_7%,var(--panel))] p-4 text-sm text-[var(--text)]">
-          <strong class="text-[var(--danger)]">Could not load prize desk</strong>
-          <p class="m-0 text-[var(--soft)]">{{ adminError }}</p>
-        </div>
-
-        <div v-else-if="!adminEntries.length" class="grid min-h-[220px] place-items-center rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_36%,transparent)] p-8 text-center">
-          <div class="grid max-w-[420px] gap-2">
-            <h3 class="m-0 text-lg font-black text-[var(--text)]">No predictions yet</h3>
-            <p class="m-0 text-sm leading-[1.5] text-[var(--muted)]">Every submitted prediction will appear here with result status and pickup verification.</p>
-          </div>
-        </div>
-
-        <div v-else-if="!adminFilteredEntries.length" class="grid min-h-[160px] place-items-center rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_30%,transparent)] p-6 text-center">
-          <div class="grid gap-1">
-            <h3 class="m-0 text-base font-black text-[var(--text)]">No rows for this filter</h3>
-            <p class="m-0 text-sm text-[var(--muted)]">Try another filter to continue reviewing predictions.</p>
-          </div>
-        </div>
-
-        <div v-else class="overflow-hidden rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_22%,transparent)]" aria-label="Prize desk predictions">
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[920px] border-collapse text-left text-sm">
-              <thead>
-                <tr class="border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_62%,transparent)] text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">
-                  <th class="px-3 py-2.5">User</th>
-                  <th class="px-3 py-2.5">Match</th>
-                  <th class="px-3 py-2.5">Prediction</th>
-                  <th class="px-3 py-2.5">Actual</th>
-                  <th class="px-3 py-2.5">Result</th>
-                  <th class="px-3 py-2.5">Pickup</th>
-                  <th class="px-3 py-2.5">Submitted</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="entry in adminPrizeVisibleEntries"
-                  :key="entry.id"
-                  class="h-[76px] border-b border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] last:border-b-0 hover:bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)]"
-                >
-                  <td class="px-3 py-3 align-middle">
-                    <strong class="text-[13px] leading-tight text-[var(--text)]">{{ entry.authorName }}</strong>
-                  </td>
-                  <td class="px-3 py-3 align-middle">
-                    <div class="inline-grid grid-cols-[52px_auto_52px] items-start gap-2" :aria-label="`${entry.home.name} versus ${entry.away.name}`">
-                      <div class="grid justify-items-center gap-1">
-                        <span v-if="hasSpriteFlag(entry.home)" :class="flagClass(entry.home)" class="!h-7 !w-10 rounded-[4px]" :title="entry.home.name" aria-hidden="true"></span>
-                        <span v-else class="text-xs font-black text-[var(--text)]">{{ entry.home.code }}</span>
-                        <span class="max-w-[52px] truncate text-center text-[10px] font-bold leading-tight text-[var(--muted)]">{{ entry.home.name }}</span>
-                      </div>
-                      <span class="pt-2 text-[10px] font-black uppercase tracking-[0.08em] text-[var(--muted)]">vs</span>
-                      <div class="grid justify-items-center gap-1">
-                        <span v-if="hasSpriteFlag(entry.away)" :class="flagClass(entry.away)" class="!h-7 !w-10 rounded-[4px]" :title="entry.away.name" aria-hidden="true"></span>
-                        <span v-else class="text-xs font-black text-[var(--text)]">{{ entry.away.code }}</span>
-                        <span class="max-w-[52px] truncate text-center text-[10px] font-bold leading-tight text-[var(--muted)]">{{ entry.away.name }}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="px-3 py-3 align-middle font-semibold text-[var(--text)]">{{ prizeEntryScore(entry) }}</td>
-                  <td class="px-3 py-3 align-middle">
-                    <span
-                      class="inline-flex rounded-md px-2 py-1 text-xs font-extrabold"
-                      :class="hasPrizeEntryFinalScore(entry) ? 'bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)] text-[var(--text)]' : 'bg-[color:color-mix(in_srgb,var(--muted)_9%,transparent)] text-[var(--muted)]'"
-                    >
-                      {{ prizeEntryFinalScore(entry) }}
-                    </span>
-                  </td>
-                  <td class="px-3 py-3 align-middle">
-                    <span
-                      v-if="entry.result === 'pending'"
-                      class="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--muted)]"
-                    >
-                      <span class="h-1.5 w-1.5 rounded-full bg-[color:color-mix(in_srgb,var(--muted)_58%,transparent)]" aria-hidden="true"></span>
-                      Open
-                    </span>
-                    <span
-                      v-else-if="entry.result === 'winner'"
-                      class="inline-grid h-8 w-8 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)] shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_20%,transparent)]"
-                      :aria-label="prizeEntryStatusLabel(entry)"
-                      role="img"
-                    >
-                      <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m5 10.5 3.2 3.1L15.5 6"></path>
-                      </svg>
-                    </span>
-                    <span
-                      v-else
-                      class="inline-grid h-8 w-8 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))] bg-transparent text-[color:color-mix(in_srgb,var(--muted)_86%,var(--text))]"
-                      :aria-label="prizeEntryStatusLabel(entry)"
-                      role="img"
-                    >
-                      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                        <path d="M6 6l8 8M14 6l-8 8"></path>
-                      </svg>
-                    </span>
-                  </td>
-                  <td class="px-3 py-3 align-middle">
-                    <button
-                      v-if="entry.result === 'winner'"
-                      class="inline-grid h-9 w-9 place-items-center rounded-lg border transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px"
-                      :class="entry.pickup ? 'border-[color:color-mix(in_srgb,#15803d_30%,var(--line))] bg-[color:color-mix(in_srgb,#15803d_8%,var(--panel))] text-[#166534]' : 'border-[var(--line)] text-[var(--muted)]'"
-                      type="button"
-                      :aria-label="adminPickupLabel(entry)"
-                      @click="openAdminEntry(entry)"
-                    >
-                      <svg class="h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
-                        <path :d="adminPickupIconPath(entry)"></path>
-                      </svg>
-                    </button>
-                    <span v-else class="text-sm font-bold text-[var(--muted)]">-</span>
-                  </td>
-                  <td class="px-3 py-3 align-middle text-xs font-bold text-[var(--muted)]">{{ formatAdminDate(entry.createdAt) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_46%,transparent)] px-3 py-2">
-            <span class="text-xs font-bold text-[var(--muted)]">{{ adminPrizeRangeLabel }}</span>
-            <div class="flex items-center gap-1.5">
-              <button
-                class="inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] transition-[background-color,border-color,color] duration-100 hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"
-                type="button"
-                :disabled="adminPrizePage === 0"
-                @click="adminPrizePage = Math.max(0, adminPrizePage - 1)"
-              >
-                Prev
-              </button>
-              <span class="min-w-14 text-center text-xs font-extrabold text-[var(--muted)]">{{ adminPrizePage + 1 }}/{{ adminPrizePageCount }}</span>
-              <button
-                class="inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] transition-[background-color,border-color,color] duration-100 hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"
-                type="button"
-                :disabled="adminPrizePage >= adminPrizePageCount - 1"
-                @click="adminPrizePage = Math.min(adminPrizePageCount - 1, adminPrizePage + 1)"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <Transition
-        enter-active-class="transition-opacity duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
-        leave-active-class="transition-opacity duration-150 ease-[cubic-bezier(0.4,0,1,1)]"
-        enter-from-class="opacity-0"
-        leave-to-class="opacity-0"
-      >
-        <div
-          v-if="selectedAdminEntry"
-          class="fixed inset-0 z-[1250] bg-black/35"
-          role="presentation"
-          @click.self="closeAdminEntry"
-        >
-          <Transition
-            appear
-            enter-active-class="transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            leave-active-class="transition-transform duration-200 ease-[cubic-bezier(0.4,0,1,1)]"
-            enter-from-class="translate-x-full"
-            leave-to-class="translate-x-full"
-          >
-            <aside class="ml-auto flex h-full w-[min(420px,calc(100%-24px))] flex-col border-l border-[var(--line-strong)] bg-[var(--panel)] p-4 shadow-[var(--card-shadow)]" role="dialog" aria-modal="true" aria-labelledby="pickup-detail-title">
-              <div class="flex items-start justify-between gap-3 border-b border-[var(--line)] pb-3">
-                <div class="grid gap-1">
-                  <p class="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--accent)]">Pickup detail</p>
-                  <h3 id="pickup-detail-title" class="m-0 text-xl font-black leading-tight text-[var(--text)]">{{ selectedAdminEntry.authorName }}</h3>
-                  <p class="m-0 text-xs font-bold text-[var(--muted)]">{{ selectedAdminEntry.roomTitle }}</p>
-                </div>
-                <button class="inline-grid h-10 w-10 place-items-center rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] text-[var(--text)] hover:border-[var(--line-strong)]" type="button" aria-label="Close pickup detail" @click="closeAdminEntry">
-                  <svg class="h-4 w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round">
-                    <path d="M72 72l112 112M184 72 72 184"></path>
-                  </svg>
-                </button>
-              </div>
-
-              <div class="grid gap-3 overflow-auto py-4">
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_28%,transparent)] p-3">
-                    <span class="block text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Prediction</span>
-                    <strong class="mt-1 block text-sm text-[var(--text)]">{{ prizeEntryScore(selectedAdminEntry) }}</strong>
-                  </div>
-                  <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_28%,transparent)] p-3">
-                    <span class="block text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Actual</span>
-                    <strong class="mt-1 block text-sm text-[var(--text)]">{{ prizeEntryFinalScore(selectedAdminEntry) }}</strong>
-                  </div>
-                </div>
-
-                <div class="rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_22%,transparent)] p-3">
-                  <span class="mb-2 inline-flex items-center gap-2 text-xs font-bold text-[var(--soft)]">
-                    <span
-                      v-if="selectedAdminEntry.result === 'winner'"
-                      class="inline-grid h-7 w-7 place-items-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)]"
-                      aria-hidden="true"
-                    >
-                      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m5 10.5 3.2 3.1L15.5 6"></path>
-                      </svg>
-                    </span>
-                    <span
-                      v-else-if="selectedAdminEntry.result === 'miss'"
-                      class="inline-grid h-7 w-7 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--muted)_34%,var(--line))] text-[var(--muted)]"
-                      aria-hidden="true"
-                    >
-                      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                        <path d="M6 6l8 8M14 6l-8 8"></path>
-                      </svg>
-                    </span>
-                    <span
-                      v-else
-                      class="inline-block h-2 w-2 rounded-full bg-[color:color-mix(in_srgb,var(--muted)_58%,transparent)]"
-                      aria-hidden="true"
-                    ></span>
-                    {{ prizeEntryStatusLabel(selectedAdminEntry) }}
-                  </span>
-                  <div class="grid gap-1 text-sm text-[var(--soft)]">
-                    <p class="m-0"><strong class="text-[var(--text)]">Match:</strong> {{ selectedAdminEntry.home.name }} vs {{ selectedAdminEntry.away.name }}</p>
-                    <p class="m-0"><strong class="text-[var(--text)]">Score provider:</strong> {{ selectedAdminEntry.finalScore?.provider || 'No score provider yet' }}</p>
-                    <p class="m-0"><strong class="text-[var(--text)]">Submitted:</strong> {{ formatAdminDate(selectedAdminEntry.createdAt) }}</p>
-                  </div>
-                </div>
-
-                <div class="grid gap-2 rounded-lg border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] p-3">
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Question and answer</span>
-                    <span class="rounded-md px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em]" :class="selectedAdminEntry.pickup ? 'bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)]' : 'bg-[color:color-mix(in_srgb,var(--muted)_10%,transparent)] text-[var(--muted)]'">{{ selectedAdminEntry.pickup ? 'Provided' : 'Missing' }}</span>
-                  </div>
-                  <template v-if="selectedAdminEntry.pickup">
-                    <div class="grid gap-1">
-                      <span class="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Question</span>
-                      <p class="m-0 text-sm font-bold leading-snug text-[var(--text)]">{{ selectedAdminEntry.pickup.question }}</p>
-                    </div>
-                    <div class="grid gap-1">
-                      <span class="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[var(--muted)]">Answer</span>
-                      <p class="m-0 text-sm leading-snug text-[var(--soft)]">{{ selectedAdminEntry.pickup.answer }}</p>
-                    </div>
-                  </template>
-                  <p v-else class="m-0 text-sm leading-snug text-[var(--muted)]">This prediction has no pickup question saved, so admin cannot verify prize pickup from this browser setup.</p>
-                </div>
-              </div>
-            </aside>
-          </Transition>
-        </div>
-      </Transition>
-    </section>
+      :entries="adminEntries"
+      :visible-entries="adminPrizeVisibleEntries"
+      :selected-entry="selectedAdminEntry"
+      :loading="adminLoading"
+      :error="adminError"
+      :filter="adminPrizeFilter"
+      :page="adminPrizePage"
+      :page-count="adminPrizePageCount"
+      :range-label="adminPrizeRangeLabel"
+      :winner-count="adminWinnerCount"
+      :verified-count="adminVerifiedCount"
+      :pending-count="adminPendingCount"
+      :missing-pickup-count="adminMissingPickupCount"
+      @refresh="loadAdminPrizeDesk"
+      @update:filter="setAdminPrizeFilter"
+      @update:page="setAdminPrizePage"
+      @select-entry="openAdminEntry"
+      @close-entry="closeAdminEntry"
+    />
 
     <section
       v-else-if="isNotFound"
