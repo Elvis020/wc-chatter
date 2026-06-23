@@ -105,6 +105,7 @@ export type SupabaseEnv = {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ROOM_WRITE_STATUSES = new Set<RoomInteractionStatus>(['open'])
+const ROOM_CACHE_TTL_MS = 2_000
 const ROOM_STATUS_ORDER: Record<RoomRow['status'], number> = {
   live: 0,
   draft: 1,
@@ -439,6 +440,27 @@ export function supabaseConfigFromEnv(env: SupabaseEnv = {}): SupabaseStoreConfi
 export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
   const supabase = createSupabaseClient(config)
   const clients = new Map<string, WebSocketLike>()
+  const roomCache = new Map<string, { room: Room; expiresAt: number }>()
+
+  function cacheRoom(room: Room, aliases: string[] = []) {
+    const entry = { room, expiresAt: Date.now() + ROOM_CACHE_TTL_MS }
+    roomCache.set(room.id, entry)
+    for (const alias of aliases) roomCache.set(alias, entry)
+  }
+
+  function cachedRoom(roomRef: string) {
+    const entry = roomCache.get(roomRef)
+    if (!entry) return null
+    if (entry.expiresAt <= Date.now()) {
+      roomCache.delete(roomRef)
+      return null
+    }
+    return entry.room
+  }
+
+  function invalidateRoom(roomRef: string) {
+    roomCache.delete(roomRef)
+  }
 
   async function getRoomRows() {
     let response: any = await supabase
@@ -597,10 +619,17 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
     const [likes, comments] = await Promise.all([getLikes(predictionIds), getComments(predictionIds)])
     const replies = await getReplies(comments.map((comment) => comment.id))
     const predictionsByRoom = mapPredictions(predictions, likes, comments, replies)
-    return roomRows.map((room) => mapRoom(room, predictionsByRoom))
+    const rooms = roomRows.map((room) => mapRoom(room, predictionsByRoom))
+    for (let index = 0; index < rooms.length; index += 1) {
+      cacheRoom(rooms[index], [roomRows[index].slug])
+    }
+    return rooms
   }
 
   async function hydrateRoom(roomRef: string) {
+    const cached = cachedRoom(roomRef)
+    if (cached) return cached
+
     const room = await getRoomRow(roomRef)
     if (!room) return null
     const [hydrated] = await hydrateRooms([room])
@@ -716,6 +745,8 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
           throw new ApiError('INTERNAL_ERROR', 'Unable to save pickup verification.', 500)
         }
       }
+      invalidateRoom(room.id)
+      invalidateRoom(room.slug)
       return hydrateRoom(room.id)
     },
     async setPredictionLike(predictionId: string, userId: string, liked: boolean) {
@@ -740,6 +771,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
         if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to remove like.', 500)
       }
 
+      invalidateRoom(prediction.room_id)
       return hydrateRoom(prediction.room_id)
     },
     async updatePredictionText(predictionId: string, payload: UpdatePredictionInput) {
@@ -781,6 +813,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
         if (commentError) throw new ApiError('INTERNAL_ERROR', 'Unable to edit prediction comment.', 500)
       }
 
+      invalidateRoom(prediction.room_id)
       return hydrateRoom(prediction.room_id)
     },
     async addPredictionComment(predictionId: string, payload: PredictionCommentInput) {
@@ -804,6 +837,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
       })
 
       if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to create prediction comment.', 500)
+      invalidateRoom(prediction.room_id)
       return hydrateRoom(prediction.room_id)
     },
     async getPrizeDeskEntries() {
@@ -915,6 +949,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
         .single()
 
       if (prediction.error) throw new ApiError('INTERNAL_ERROR', 'Unable to load room.', 500)
+      invalidateRoom(prediction.data.room_id)
       return hydrateRoom(prediction.data.room_id)
     },
     async updateReply(replyId: string, payload: UpdateReplyInput) {
@@ -961,6 +996,7 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
         .eq('id', replyId)
 
       if (error) throw new ApiError('INTERNAL_ERROR', 'Unable to edit reply.', 500)
+      invalidateRoom(roomId)
       return hydrateRoom(roomId)
     },
   }
