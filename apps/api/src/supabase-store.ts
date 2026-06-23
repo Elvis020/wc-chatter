@@ -508,6 +508,47 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
       })
   }
 
+  async function getRoomRowsByIds(roomIds: string[]) {
+    if (roomIds.length === 0) return []
+
+    return loadInBatches<RoomRow>(roomIds, 'prize desk rooms', async (batch) => {
+      let response: any = await supabase
+        .from('rooms')
+        .select(ROOM_SELECT)
+        .in('id', batch)
+
+      if (isMissingColumnError(response.error)) {
+        response = await supabase
+          .from('rooms')
+          .select(ROOM_SCORE_SELECT)
+          .in('id', batch)
+      }
+
+      if (isMissingColumnError(response.error)) {
+        response = await supabase
+          .from('rooms')
+          .select(ROOM_STATE_SELECT)
+          .in('id', batch)
+      }
+
+      if (isMissingColumnError(response.error)) {
+        response = await supabase
+          .from('rooms')
+          .select(ROOM_STATE_NO_KICKOFF_SELECT)
+          .in('id', batch)
+      }
+
+      if (isMissingColumnError(response.error)) {
+        response = await supabase
+          .from('rooms')
+          .select(LEGACY_ROOM_SELECT)
+          .in('id', batch)
+      }
+
+      return { data: (response.data ?? null) as RoomRow[] | null, error: response.error }
+    })
+  }
+
   async function getRoomRow(roomRef: string) {
     const column = UUID_PATTERN.test(roomRef) ? 'id' : 'slug'
     let response: any = await supabase
@@ -602,6 +643,36 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
         .order('created_at', { ascending: true })
       return { data: (response.data ?? null) as ReplyRow[] | null, error: response.error }
     })
+  }
+
+  async function getPrizeClaims(predictionIds: string[]) {
+    if (predictionIds.length === 0) return []
+
+    const responses = await Promise.all(
+      chunks(predictionIds, SUPABASE_IN_BATCH_SIZE).map((batch) =>
+        supabase
+          .from('prize_claims')
+          .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
+          .in('prediction_id', batch),
+      ),
+    )
+    const rows: PrizeClaimRow[] = []
+
+    for (const response of responses) {
+      if (response.error && isMissingRelationError(response.error)) {
+        logSupabaseError('getPrizeDeskClaimsMissing', response.error)
+        return []
+      }
+
+      if (response.error) {
+        logSupabaseError('getPrizeDeskClaims', response.error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load prize pickup verification.', 500)
+      }
+
+      rows.push(...((response.data ?? []) as PrizeClaimRow[]))
+    }
+
+    return rows
   }
 
   async function hydrateRooms(roomRows: RoomRow[]) {
@@ -847,67 +918,12 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
 
       const roomIds = [...new Set(predictionRows.map((prediction) => prediction.room_id))]
       const predictionIds = predictionRows.map((prediction) => prediction.id)
+      const [roomRows, claimRows] = await Promise.all([
+        getRoomRowsByIds(roomIds),
+        getPrizeClaims(predictionIds),
+      ])
 
-      let roomResponse: any = await supabase
-        .from('rooms')
-        .select(ROOM_SELECT)
-        .in('id', roomIds)
-
-      if (isMissingColumnError(roomResponse.error)) {
-        roomResponse = await supabase
-          .from('rooms')
-          .select(ROOM_SCORE_SELECT)
-          .in('id', roomIds)
-      }
-
-      if (isMissingColumnError(roomResponse.error)) {
-        roomResponse = await supabase
-          .from('rooms')
-          .select(ROOM_STATE_SELECT)
-          .in('id', roomIds)
-      }
-
-      if (isMissingColumnError(roomResponse.error)) {
-        roomResponse = await supabase
-          .from('rooms')
-          .select(ROOM_STATE_NO_KICKOFF_SELECT)
-          .in('id', roomIds)
-      }
-
-      if (isMissingColumnError(roomResponse.error)) {
-        roomResponse = await supabase
-          .from('rooms')
-          .select(LEGACY_ROOM_SELECT)
-          .in('id', roomIds)
-      }
-
-      if (roomResponse.error) {
-        logSupabaseError('getPrizeDeskRooms', roomResponse.error)
-        throw new ApiError('INTERNAL_ERROR', 'Unable to load prize desk rooms.', 500)
-      }
-
-      const roomById = new Map(((roomResponse.data ?? []) as RoomRow[]).map((room) => [room.id, room]))
-
-      const claimRows: PrizeClaimRow[] = []
-      for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
-        const { data: claims, error: claimError } = await supabase
-          .from('prize_claims')
-          .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
-          .in('prediction_id', batch)
-
-        if (claimError && isMissingRelationError(claimError)) {
-          logSupabaseError('getPrizeDeskClaimsMissing', claimError)
-          break
-        }
-
-        if (claimError) {
-          logSupabaseError('getPrizeDeskClaims', claimError)
-          throw new ApiError('INTERNAL_ERROR', 'Unable to load prize pickup verification.', 500)
-        }
-
-        claimRows.push(...((claims ?? []) as PrizeClaimRow[]))
-      }
-
+      const roomById = new Map(roomRows.map((room) => [room.id, room]))
       const claimByPredictionId = new Map(claimRows.map((claim) => [claim.prediction_id, claim]))
       return predictionRows
         .map((prediction) =>
