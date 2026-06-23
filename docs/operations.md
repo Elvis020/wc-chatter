@@ -24,9 +24,10 @@ For the Worker, configure:
 APP_ORIGIN=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_PASSWORD=
 ```
 
-Use Wrangler secrets for Supabase values.
+Use Wrangler secrets for Supabase and admin password values.
 
 ## Scheduled Sync
 
@@ -88,3 +89,4 @@ Regional latency still needs regional runners or machines near the actual audien
 - `sync:rooms` has populated active rooms
 - web env points to the deployed API and websocket base
 - Worker `APP_ORIGIN` matches the web origin
+- Worker `ADMIN_PASSWORD` is set before prize collection is used

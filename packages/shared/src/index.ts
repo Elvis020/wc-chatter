@@ -103,6 +103,7 @@ export interface PrizeClaim {
   question: string
   answer: string
   createdAt: string
+  pickedUpAt?: string
 }
 
 export type PrizeDeskResult = 'winner' | 'miss' | 'pending'
@@ -127,7 +128,13 @@ export interface PrizeDeskEntry {
     question: string
     answer: string
     createdAt: string
+    pickedUpAt?: string
   }
+}
+
+export interface UpdatePrizePickupInput {
+  adminPassword: string
+  pickedUp: boolean
 }
 
 export interface ReplyInput {

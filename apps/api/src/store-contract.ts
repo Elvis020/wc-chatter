@@ -7,6 +7,7 @@ import type {
   Room,
   ThemeOption,
   ToggleLikeInput,
+  UpdatePrizePickupInput,
   UpdatePredictionInput,
   UpdateReplyInput,
 } from '@turntabl-score-room/shared'
@@ -30,6 +31,7 @@ export type RoomStore = {
   updatePredictionText(predictionId: string, payload: UpdatePredictionInput): MaybePromise<Room | null>
   addPredictionComment(predictionId: string, payload: PredictionCommentInput): MaybePromise<Room | null>
   getPrizeDeskEntries(): MaybePromise<PrizeDeskEntry[]>
+  setPrizePickupStatus(predictionId: string, payload: Pick<UpdatePrizePickupInput, 'pickedUp'>): MaybePromise<PrizeDeskEntry | null>
   addReply(commentId: string, payload: ReplyInput): MaybePromise<Room | null>
   updateReply(replyId: string, payload: UpdateReplyInput): MaybePromise<Room | null>
 }

@@ -15,6 +15,7 @@ POST   /api/predictions/:predictionId/comments
 POST   /api/comments/:commentId/replies
 POST   /api/replies/:replyId/edit
 GET    /api/admin/prize-claims
+POST   /api/admin/prize-claims/:predictionId/pickup
 GET    /ws/:roomId
 ```
 
@@ -77,7 +78,20 @@ Edit routes require the editing `userId` and the replacement text/comment.
 
 `GET /api/admin/prize-claims`
 
-Returns prediction rows with room, final-score, result, and pickup-claim information for the prize desk. It is not linked from the public UI; the route is meant for the hidden admin surface.
+Returns prediction rows with room, final-score, result, pickup-claim information, and prize collection status for the prize desk. It is not linked from the public UI; the route is meant for the hidden admin surface.
+
+`POST /api/admin/prize-claims/:predictionId/pickup`
+
+Marks a winner prize as collected or not collected. The request is gated by `ADMIN_PASSWORD`.
+
+```ts
+{
+  adminPassword: string
+  pickedUp: boolean
+}
+```
+
+On success it returns the updated prize desk entry.
 
 ## WebSocket
 

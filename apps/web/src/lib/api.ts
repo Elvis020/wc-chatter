@@ -1,4 +1,4 @@
-import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdateReplyInput } from '@turntabl-score-room/shared'
+import type { BootstrapResponse, CreatePredictionInput, PredictionCommentInput, PrizeDeskEntry, ReplyInput, Room, ToggleLikeInput, UpdatePrizePickupInput, UpdateReplyInput } from '@turntabl-score-room/shared'
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
@@ -55,6 +55,16 @@ export async function fetchBootstrap() {
 
 export async function fetchPrizeDeskEntries() {
   return parseResponse<{ entries: PrizeDeskEntry[] }>(await fetch(`${apiBaseUrl}/api/admin/prize-claims`))
+}
+
+export async function updatePrizePickupStatus(predictionId: string, payload: UpdatePrizePickupInput) {
+  return parseResponse<{ entry: PrizeDeskEntry }>(
+    await fetch(`${apiBaseUrl}/api/admin/prize-claims/${predictionId}/pickup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  )
 }
 
 export async function fetchRoom(roomId: string) {

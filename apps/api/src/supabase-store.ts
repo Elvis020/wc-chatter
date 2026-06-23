@@ -140,6 +140,7 @@ type PrizeClaimRow = {
   question: string
   answer: string
   created_at: string
+  picked_up_at?: string | null
 }
 
 function isMissingRelationError(error?: { code?: string; message?: string } | null) {
@@ -300,6 +301,7 @@ function mapPrizeDeskEntry(
           question: claim.question,
           answer: claim.answer,
           createdAt: claim.created_at,
+          pickedUpAt: claim.picked_up_at ?? undefined,
         }
       : undefined,
   }
@@ -649,12 +651,21 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
     if (predictionIds.length === 0) return []
 
     const responses = await Promise.all(
-      chunks(predictionIds, SUPABASE_IN_BATCH_SIZE).map((batch) =>
-        supabase
+      chunks(predictionIds, SUPABASE_IN_BATCH_SIZE).map(async (batch) => {
+        let response: any = await supabase
           .from('prize_claims')
-          .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
-          .in('prediction_id', batch),
-      ),
+          .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at, picked_up_at')
+          .in('prediction_id', batch)
+
+        if (isMissingColumnError(response.error)) {
+          response = await supabase
+            .from('prize_claims')
+            .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at')
+            .in('prediction_id', batch)
+        }
+
+        return response
+      }),
     )
     const rows: PrizeClaimRow[] = []
 
@@ -930,6 +941,42 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
           mapPrizeDeskEntry(prediction, roomById.get(prediction.room_id), claimByPredictionId.get(prediction.id)),
         )
         .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    },
+    async setPrizePickupStatus(predictionId: string, payload: { pickedUp: boolean }) {
+      const pickedUpAt = payload.pickedUp ? new Date().toISOString() : null
+      const { data: claim, error } = await supabase
+        .from('prize_claims')
+        .update({ picked_up_at: pickedUpAt })
+        .eq('prediction_id', predictionId)
+        .select('id, room_id, prediction_id, author_id, author_name, question, answer, created_at, picked_up_at')
+        .maybeSingle()
+
+      if (error && isMissingColumnError(error)) {
+        logSupabaseError('setPrizePickupStatusMissingColumn', error)
+        throw new ApiError('INTERNAL_ERROR', 'Apply the pickup collection migration before marking prizes collected.', 500)
+      }
+
+      if (error) {
+        logSupabaseError('setPrizePickupStatus', error)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to update prize pickup status.', 500)
+      }
+
+      if (!claim) return null
+
+      const room = await getRoomRow((claim as PrizeClaimRow).room_id)
+      const { data: prediction, error: predictionError } = await supabase
+        .from('predictions')
+        .select('id, room_id, author_id, author_name, home_score, away_score, take, created_at, edited_at')
+        .eq('id', predictionId)
+        .maybeSingle()
+
+      if (predictionError) {
+        logSupabaseError('setPrizePickupStatusPrediction', predictionError)
+        throw new ApiError('INTERNAL_ERROR', 'Unable to load updated prize row.', 500)
+      }
+
+      if (!prediction) return null
+      return mapPrizeDeskEntry(prediction as PredictionRow, room ?? undefined, claim as PrizeClaimRow)
     },
     async addReply(commentId: string, payload: ReplyInput) {
       const { data: comment, error: commentError } = await supabase

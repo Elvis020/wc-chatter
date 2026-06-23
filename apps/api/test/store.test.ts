@@ -30,6 +30,33 @@ describe('fallback store prize pickup verification', () => {
     })
   })
 
+  test('marks a winner prize as collected separately from pickup verification', () => {
+    const store = createStore()
+    const room = store.getRooms().find((item) => item.matchStatus !== 'finished' && item.roomStatus === 'open')
+
+    if (!room) throw new Error('Expected at least one writable mock room.')
+
+    const updatedRoom = store.addPrediction(room.id, {
+      authorId: 'user-00000000-0000-4000-8000-000000000003',
+      name: 'Esi',
+      homeScore: 1,
+      awayScore: 0,
+      prizeQuestion: 'What should admin ask?',
+      prizeAnswer: 'Green',
+    })
+
+    const prediction = updatedRoom?.predictions[0]
+    if (!prediction) throw new Error('Expected prediction to be created.')
+
+    const collectedEntry = store.setPrizePickupStatus(prediction.id, { pickedUp: true })
+
+    expect(collectedEntry?.pickup?.pickedUpAt).toBeTruthy()
+
+    const uncollectedEntry = store.setPrizePickupStatus(prediction.id, { pickedUp: false })
+
+    expect(uncollectedEntry?.pickup?.pickedUpAt).toBeUndefined()
+  })
+
   test('allows the first comment to be added after a score-only prediction is posted', () => {
     const store = createStore()
     const room = store.getRooms().find((item) => item.matchStatus !== 'finished' && item.roomStatus === 'open')

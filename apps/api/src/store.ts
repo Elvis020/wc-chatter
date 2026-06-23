@@ -55,6 +55,7 @@ function mapPrizeDeskEntry(room: Room, prediction: Prediction, claim?: PrizeClai
           question: claim.question,
           answer: claim.answer,
           createdAt: claim.createdAt,
+          pickedUpAt: claim.pickedUpAt,
         }
       : undefined,
   }
@@ -186,6 +187,17 @@ export function createStore(): RoomStore {
           room.predictions.map((prediction) => mapPrizeDeskEntry(room, prediction, prizeClaims.get(prediction.id))),
         )
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    },
+    setPrizePickupStatus(predictionId: string, payload: { pickedUp: boolean }) {
+      const room = rooms.find((item) => item.predictions.some((prediction) => prediction.id === predictionId))
+      if (!room) return null
+      const prediction = room.predictions.find((item) => item.id === predictionId)
+      if (!prediction) return null
+      const claim = prizeClaims.get(predictionId)
+      if (!claim) return null
+
+      claim.pickedUpAt = payload.pickedUp ? new Date().toISOString() : undefined
+      return mapPrizeDeskEntry(room, prediction, claim)
     },
     addPredictionComment(predictionId: string, payload: PredictionCommentInput) {
       const room = rooms.find((item) => item.predictions.some((prediction) => prediction.id === predictionId))

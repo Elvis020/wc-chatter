@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono'
-import type { ApiEvent, CreatePredictionInput, PredictionCommentInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdateReplyInput } from '@turntabl-score-room/shared'
+import type { ApiEvent, CreatePredictionInput, PredictionCommentInput, ReplyInput, Room, ToggleLikeInput, UpdatePredictionInput, UpdatePrizePickupInput, UpdateReplyInput } from '@turntabl-score-room/shared'
 import { ApiError, errorResponse } from './errors.js'
 import type { RoomHub } from './room-hub.js'
 import { createStore } from './store.js'
@@ -7,7 +7,7 @@ import type { RoomStore } from './store-contract.js'
 import { createSupabaseStore, hasSupabaseConfig, supabaseConfigFromEnv, type SupabaseEnv } from './supabase-store.js'
 import { normalizeScore, normalizeText, normalizeUserId, normalizeUsername } from './validation.js'
 
-type RuntimeEnv = Env & SupabaseEnv
+type RuntimeEnv = Env & SupabaseEnv & { ADMIN_PASSWORD?: string }
 type ApiStore = RoomStore
 type RoomApiEvent = Extract<ApiEvent, { room: Room }>
 type AppContext = Context<{ Bindings: RuntimeEnv }>
@@ -65,6 +65,21 @@ function enforceMutationRateLimit(userId: string, action: string) {
 
 function appOrigin(env: RuntimeEnv) {
   return env.APP_ORIGIN || (typeof process === 'undefined' ? '' : process.env.APP_ORIGIN) || '*'
+}
+
+function adminPassword(env: RuntimeEnv) {
+  return env.ADMIN_PASSWORD || (typeof process === 'undefined' ? '' : process.env.ADMIN_PASSWORD) || ''
+}
+
+function assertAdminPassword(env: RuntimeEnv, value: string) {
+  const expectedPassword = adminPassword(env)
+  if (!expectedPassword) {
+    throw new ApiError('FORBIDDEN', 'Admin password is not configured.', 403)
+  }
+
+  if (value !== expectedPassword) {
+    throw new ApiError('FORBIDDEN', 'Admin password is incorrect.', 403)
+  }
 }
 
 async function broadcastRoom(env: RuntimeEnv, store: ApiStore, event: RoomApiEvent) {
@@ -220,6 +235,25 @@ function parseReplyEditInput(input: unknown): UpdateReplyInput {
   }
 }
 
+function parsePrizePickupInput(input: unknown): UpdatePrizePickupInput {
+  if (!input || typeof input !== 'object') {
+    throw new ApiError('BAD_REQUEST', 'Request body is required.', 400)
+  }
+
+  const body = input as Record<string, unknown>
+  if (typeof body.adminPassword !== 'string' || !body.adminPassword.trim()) {
+    throw new ApiError('VALIDATION_ERROR', 'Admin password is required.', 400)
+  }
+  if (typeof body.pickedUp !== 'boolean') {
+    throw new ApiError('VALIDATION_ERROR', 'Picked up must be true or false.', 400)
+  }
+
+  return {
+    adminPassword: body.adminPassword,
+    pickedUp: body.pickedUp,
+  }
+}
+
 app.use(
   '*',
   async (c, next) => {
@@ -330,6 +364,23 @@ app.get('/api/admin/prize-claims', async (c) => {
   const store = storeFor(c.env)
   try {
     return c.json({ entries: await store.getPrizeDeskEntries() })
+  } catch (error) {
+    return handleApiError(c, error)
+  }
+})
+
+app.post('/api/admin/prize-claims/:predictionId/pickup', async (c) => {
+  const store = storeFor(c.env)
+  try {
+    const payload = parsePrizePickupInput(await readJson(c))
+    assertAdminPassword(c.env, payload.adminPassword)
+    const entry = await store.setPrizePickupStatus(c.req.param('predictionId'), { pickedUp: payload.pickedUp })
+
+    if (!entry) {
+      throw new ApiError('NOT_FOUND', 'Prize claim not found.', 404)
+    }
+
+    return c.json({ entry })
   } catch (error) {
     return handleApiError(c, error)
   }

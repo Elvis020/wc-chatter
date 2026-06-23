@@ -47,14 +47,16 @@ VITE_ENABLE_USERNAME_RESET=true
 APP_ORIGIN=http://localhost:5173
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_PASSWORD=
 ```
 
-Production `APP_ORIGIN` lives in `apps/api/wrangler.jsonc`. Supabase values should be Wrangler secrets, not committed env files.
+Production `APP_ORIGIN` lives in `apps/api/wrangler.jsonc`. Supabase and admin password values should be Wrangler secrets, not committed env files.
 
 ```bash
 cd apps/api
 bunx wrangler secret put SUPABASE_URL --env production
 bunx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --env production
+bunx wrangler secret put ADMIN_PASSWORD --env production
 ```
 
 ## Supabase
@@ -68,6 +70,7 @@ Apply migrations in filename order:
 0003_room_visibility_model.sql
 0004_room_scoreline_state.sql
 0005_prize_claims.sql
+0006_prize_pickup_collection.sql
 ```
 
 If Supabase does not pick up new columns immediately, reload the PostgREST schema.

@@ -631,6 +631,16 @@ function closeAdminEntry() {
   selectedAdminEntryId.value = ''
 }
 
+function updateAdminEntry(entry: PrizeDeskEntry) {
+  const index = adminEntries.value.findIndex((item) => item.id === entry.id)
+  if (index === -1) return
+  adminEntries.value = [
+    ...adminEntries.value.slice(0, index),
+    entry,
+    ...adminEntries.value.slice(index + 1),
+  ]
+}
+
 async function loadAdminPrizeDesk() {
   adminLoading.value = true
   adminError.value = ''
@@ -2208,6 +2218,7 @@ onBeforeUnmount(() => {
       @update:page="setAdminPrizePage"
       @select-entry="openAdminEntry"
       @close-entry="closeAdminEntry"
+      @entry-updated="updateAdminEntry"
     />
 
     <section
