@@ -30,6 +30,8 @@ import {
 
 const MIN_PREDICTION_COMMENT_LENGTH = 4
 const COMMENT_PREVIEW_LIMIT = 3
+const INITIAL_FEED_RENDER_LIMIT = 24
+const FEED_RENDER_STEP = 24
 const ACTIVE_ROOM_POLL_MS = 3_500
 const ROOM_REFRESH_MS = 60_000
 const ADMIN_PRIZE_PAGE_SIZE = 6
@@ -101,6 +103,7 @@ const selectedTheme = ref<ThemeId>(getStoredTheme() as ThemeId)
 const themePreview = ref<ThemeId | null>(null)
 const highlightedThemeIndex = ref(0)
 const feedSortMode = ref<FeedSortMode>('likes')
+const feedRenderLimit = ref(INITIAL_FEED_RENDER_LIMIT)
 const selectedRoomBucketKey = ref('')
 const likedPredictions = ref(getStoredLikes())
 const activeReplyTarget = ref<{ predictionId: string; targetId: string } | null>(null)
@@ -199,6 +202,8 @@ const predictionFeedItems = computed(() =>
     }
   }),
 )
+const visiblePredictionFeedItems = computed(() => predictionFeedItems.value.slice(0, feedRenderLimit.value))
+const hiddenPredictionFeedCount = computed(() => Math.max(0, predictionFeedItems.value.length - visiblePredictionFeedItems.value.length))
 const feedSortLabel = computed(() =>
   feedSortMode.value === 'likes' ? 'Top liked' : 'Most discussed',
 )
@@ -426,6 +431,10 @@ watch(replyDrafts, () => {
 
 watch([sortedPredictions, activeRoomId], () => {
   nextTick(updateFeedNavMode)
+})
+
+watch([activeRoomId, feedSortMode], () => {
+  feedRenderLimit.value = INITIAL_FEED_RENDER_LIMIT
 })
 
 watch(themeMenuOpen, (open) => {
@@ -933,6 +942,11 @@ function nextRoomPage() {
 function toggleFeedSort() {
   if (!canSortPredictions.value) return
   feedSortMode.value = feedSortMode.value === 'likes' ? 'comments' : 'likes'
+}
+
+function showMorePredictions() {
+  feedRenderLimit.value = Math.min(predictionFeedItems.value.length, feedRenderLimit.value + FEED_RENDER_STEP)
+  nextTick(updateFeedNavMode)
 }
 
 async function submitPrediction() {
@@ -2775,7 +2789,7 @@ onBeforeUnmount(() => {
             <div v-else :key="`feed-list-${activeRoom.id}`" ref="predictionFeedList">
             <TransitionGroup :key="activeRoom.id" name="prediction-list" tag="div" class="grid gap-2.5 max-md:gap-3">
               <article
-                v-for="feedItem in predictionFeedItems"
+                v-for="feedItem in visiblePredictionFeedItems"
                 :key="feedItem.prediction.id"
                 data-prediction-card
                 class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 transition-[background-color,border-color] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
@@ -2992,6 +3006,14 @@ onBeforeUnmount(() => {
               </div>
               </article>
             </TransitionGroup>
+            <button
+              v-if="hiddenPredictionFeedCount > 0"
+              class="mx-auto mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))] px-4 text-xs font-extrabold text-[var(--accent)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_38%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--panel))] active:translate-y-px"
+              type="button"
+              @click="showMorePredictions"
+            >
+              Show {{ Math.min(FEED_RENDER_STEP, hiddenPredictionFeedCount) }} more predictions
+            </button>
             </div>
           </Transition>
         </section>
