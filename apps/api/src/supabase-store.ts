@@ -170,6 +170,27 @@ function chunks<T>(items: T[], size: number) {
   return result
 }
 
+async function loadInBatches<T>(
+  ids: string[],
+  label: string,
+  loadBatch: (ids: string[]) => Promise<{ data: T[] | null; error: { code?: string; message?: string; details?: string; hint?: string } | null }>,
+) {
+  if (ids.length === 0) return []
+
+  const responses = await Promise.all(chunks(ids, SUPABASE_IN_BATCH_SIZE).map((batch) => loadBatch(batch)))
+  const rows: T[] = []
+
+  for (const response of responses) {
+    if (response.error) {
+      logSupabaseError(label, response.error)
+      throw new ApiError('INTERNAL_ERROR', `Unable to load ${label}.`, 500)
+    }
+    rows.push(...(response.data ?? []))
+  }
+
+  return rows
+}
+
 function toTeam(name: string, code: string, iso2?: string | null, flag?: string | null): Team {
   return {
     name,
@@ -541,70 +562,37 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
   }
 
   async function getLikes(predictionIds: string[]) {
-    if (predictionIds.length === 0) return []
-    const rows: LikeRow[] = []
-
-    for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
-      const { data, error } = await supabase
+    return loadInBatches<LikeRow>(predictionIds, 'likes', async (batch) => {
+      const response = await supabase
         .from('prediction_likes')
         .select('prediction_id, user_id')
         .in('prediction_id', batch)
-
-      if (error) {
-        logSupabaseError('getLikes', error)
-        throw new ApiError('INTERNAL_ERROR', 'Unable to load likes.', 500)
-      }
-
-      rows.push(...((data ?? []) as LikeRow[]))
-    }
-
-    return rows
+      return { data: (response.data ?? null) as LikeRow[] | null, error: response.error }
+    })
   }
 
   async function getComments(predictionIds: string[]) {
-    if (predictionIds.length === 0) return []
-    const rows: CommentRow[] = []
-
-    for (const batch of chunks(predictionIds, SUPABASE_IN_BATCH_SIZE)) {
-      const { data, error } = await supabase
+    return loadInBatches<CommentRow>(predictionIds, 'comments', async (batch) => {
+      const response = await supabase
         .from('comments')
         .select('id, prediction_id, author_id, author_name, text, created_at, edited_at')
         .in('prediction_id', batch)
         .eq('hidden', false)
         .order('created_at', { ascending: true })
-
-      if (error) {
-        logSupabaseError('getComments', error)
-        throw new ApiError('INTERNAL_ERROR', 'Unable to load comments.', 500)
-      }
-
-      rows.push(...((data ?? []) as CommentRow[]))
-    }
-
-    return rows
+      return { data: (response.data ?? null) as CommentRow[] | null, error: response.error }
+    })
   }
 
   async function getReplies(commentIds: string[]) {
-    if (commentIds.length === 0) return []
-    const rows: ReplyRow[] = []
-
-    for (const batch of chunks(commentIds, SUPABASE_IN_BATCH_SIZE)) {
-      const { data, error } = await supabase
+    return loadInBatches<ReplyRow>(commentIds, 'replies', async (batch) => {
+      const response = await supabase
         .from('comment_replies')
         .select('id, comment_id, author_id, author_name, text, created_at, edited_at')
         .in('comment_id', batch)
         .eq('hidden', false)
         .order('created_at', { ascending: true })
-
-      if (error) {
-        logSupabaseError('getReplies', error)
-        throw new ApiError('INTERNAL_ERROR', 'Unable to load replies.', 500)
-      }
-
-      rows.push(...((data ?? []) as ReplyRow[]))
-    }
-
-    return rows
+      return { data: (response.data ?? null) as ReplyRow[] | null, error: response.error }
+    })
   }
 
   async function hydrateRooms(roomRows: RoomRow[]) {
