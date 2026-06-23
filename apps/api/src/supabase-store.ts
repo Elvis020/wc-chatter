@@ -890,7 +890,21 @@ export function createSupabaseStore(config: SupabaseStoreConfig) {
       if (isMissingColumnError(roomResponse.error)) {
         roomResponse = await supabase
           .from('rooms')
+          .select(ROOM_SCORE_SELECT)
+          .in('id', roomIds)
+      }
+
+      if (isMissingColumnError(roomResponse.error)) {
+        roomResponse = await supabase
+          .from('rooms')
           .select(ROOM_STATE_SELECT)
+          .in('id', roomIds)
+      }
+
+      if (isMissingColumnError(roomResponse.error)) {
+        roomResponse = await supabase
+          .from('rooms')
+          .select(ROOM_STATE_NO_KICKOFF_SELECT)
           .in('id', roomIds)
       }
 
