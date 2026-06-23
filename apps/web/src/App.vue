@@ -382,16 +382,24 @@ watch(selectedTheme, (value) => {
   setStoredTheme(value)
 })
 
-watch(activeRoom, (room) => {
+watch(activeRoom, (room, previousRoom) => {
   if (!room) return
-  activeTopPickIndex.value = 0
+  if (room.id !== previousRoom?.id) {
+    activeTopPickIndex.value = 0
+  }
   predictionForm.homeScore = room.mostBacked.home
   predictionForm.awayScore = room.mostBacked.away
   predictionForm.comment = predictionDrafts[room.id] ?? ''
 })
 
-watch(() => topPickInsights.value.length, () => {
-  activeTopPickIndex.value = 0
+watch(() => topPickInsights.value.length, (slideCount) => {
+  if (slideCount <= 1) {
+    activeTopPickIndex.value = 0
+    return
+  }
+  if (activeTopPickIndex.value >= slideCount) {
+    activeTopPickIndex.value %= slideCount
+  }
 })
 
 watch(activeRoomId, (roomId) => {
@@ -3342,16 +3350,13 @@ onBeforeUnmount(() => {
                     </span>
                   </div>
 
-                  <div class="grid justify-items-center gap-1.5">
+                  <div v-if="exactPickPredictions.length > 0" class="grid justify-items-center gap-1.5">
                     <strong class="block text-[clamp(28px,3vw,44px)] leading-none text-[var(--text)] max-md:text-[24px]">{{ exactPickPredictions.length }}</strong>
                     <span class="text-[13px] font-[750] text-[var(--muted)] max-md:text-[11px]">
                       {{ exactPickPredictions.length === 1 ? 'exact pick' : 'exact picks' }}
                     </span>
                     <span v-if="exactPickPreview" class="max-w-full truncate text-[14px] font-[750] text-[color:color-mix(in_srgb,var(--accent)_70%,var(--text))] max-md:text-[12px]">
                       {{ exactPickPreview }}
-                    </span>
-                    <span v-else class="text-[14px] font-[650] text-[var(--muted)] max-md:text-[12px]">
-                      No exact picks
                     </span>
                   </div>
                 </div>
