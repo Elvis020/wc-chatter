@@ -6,6 +6,7 @@ import { connectRoomEvents, createPrediction, createPredictionComment, createRep
 import IdentityPrompt from './components/IdentityPrompt.vue'
 import ScoreDrawer from './components/ScoreDrawer.vue'
 import { createNaviiIcon } from './lib/navii'
+import { leadComment, replyActionLabel, replyComposerLabel, replyComposerPlaceholder, replySubmitLabel, threadEntries } from './lib/prediction-thread'
 import {
   getOrCreateUserId,
   getStoredActiveRoomId,
@@ -706,62 +707,6 @@ function predictionAvatar(name: string) {
   return avatar
 }
 
-function leadComment(prediction: Prediction) {
-  return prediction.comments.find((comment) => comment.authorId === prediction.authorId) ?? null
-}
-
-function secondaryComments(prediction: Prediction) {
-  const ownerLead = leadComment(prediction)
-  return prediction.comments.filter((comment) => comment.id !== ownerLead?.id)
-}
-
-function threadEntries(prediction: Prediction) {
-  const ownerLead = leadComment(prediction)
-  const entries: Array<{
-    id: string
-    type: 'comment' | 'reply'
-    name: string
-    text: string
-    createdAt: string
-    editedAt?: string
-  }> = []
-
-  for (const comment of secondaryComments(prediction)) {
-    entries.push({
-      id: comment.id,
-      type: 'comment',
-      name: comment.name,
-      text: comment.text,
-      createdAt: comment.createdAt,
-      editedAt: comment.editedAt,
-    })
-
-    for (const reply of comment.replies) {
-      entries.push({
-        id: reply.id,
-        type: 'reply',
-        name: reply.name,
-        text: reply.text,
-        createdAt: reply.createdAt,
-        editedAt: reply.editedAt,
-      })
-    }
-  }
-
-  for (const reply of ownerLead?.replies ?? []) {
-    entries.push({
-      id: reply.id,
-      type: 'reply',
-      name: reply.name,
-      text: reply.text,
-      createdAt: reply.createdAt,
-      editedAt: reply.editedAt,
-    })
-  }
-
-  return entries.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-}
-
 function isCommentsExpanded(predictionId: string) {
   return expandedCommentCards.value.has(predictionId)
 }
@@ -810,31 +755,6 @@ function shouldShowCommentToggle(prediction: Prediction) {
 
 function shouldFadeCommentPreview(prediction: Prediction) {
   return shouldShowCommentToggle(prediction) && !isCommentsExpanded(prediction.id)
-}
-
-function replyComposerLabel(prediction: Prediction) {
-  return leadComment(prediction) ? 'Reply' : 'Add a comment'
-}
-
-function replyComposerPlaceholder(prediction: Prediction) {
-  if (leadComment(prediction)) return 'Keep it light...'
-  return threadEntries(prediction).length ? 'Join the thread...' : 'Start the thread...'
-}
-
-function replyActionLabel(prediction: Prediction) {
-  if (leadComment(prediction)) {
-    return `Reply to ${prediction.name}. ${predictionCommentTotal(prediction)} comments and replies`
-  }
-
-  if (threadEntries(prediction).length) {
-    return `Comment under ${prediction.name}'s prediction. ${predictionCommentTotal(prediction)} comments in thread.`
-  }
-
-  return `Comment on ${prediction.name}'s prediction. Start the thread.`
-}
-
-function replySubmitLabel(prediction: Prediction) {
-  return leadComment(prediction) ? 'Reply' : 'Comment'
 }
 
 function roomKickoffMs(room: Room) {
