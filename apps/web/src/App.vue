@@ -367,10 +367,8 @@ watch(activeRoom, (room, previousRoom) => {
   if (!room) return
   if (room.id !== previousRoom?.id) {
     activeTopPickIndex.value = 0
+    seedPredictionForm(room)
   }
-  predictionForm.homeScore = room.mostBacked.home
-  predictionForm.awayScore = room.mostBacked.away
-  predictionForm.comment = predictionDrafts[room.id] ?? ''
 })
 
 watch(() => topPickInsights.value.length, (slideCount) => {
@@ -597,9 +595,18 @@ function requireUsername(message = 'Set your username first.', action?: PendingI
   return openIdentityPrompt(message, action)
 }
 
+function seedPredictionForm(room: Room) {
+  predictionForm.homeScore = room.mostBacked.home
+  predictionForm.awayScore = room.mostBacked.away
+  predictionForm.comment = predictionDrafts[room.id] ?? ''
+}
+
 function openPredictionModal() {
   if (scoreCtaDisabled.value) return
+  const room = activeRoom.value
+  if (!room) return
   if (!requireUsername('Set your username before posting.', { type: 'prediction' })) return
+  seedPredictionForm(room)
   if (!predictionModalOpen.value) {
     lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
   }
