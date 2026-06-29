@@ -133,6 +133,12 @@ body[data-theme='pub'] .prediction [data-lead-comment] {
   color: var(--soft);
 }
 
+body[data-theme='pub'] .chat-room-heading,
+body[data-theme='pub'] .chat-room-heading-icon {
+  color: var(--text);
+  opacity: 1;
+}
+
 body[data-theme='pub'] button:disabled {
   color: color-mix(in srgb, var(--muted) 86%, var(--text));
 }

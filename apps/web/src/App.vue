@@ -2661,15 +2661,15 @@ onBeforeUnmount(() => {
           </Transition>
         </section>
 
-        <section class="grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 md:hidden max-md:border-transparent" aria-label="Mobile chat rooms">
+        <section class="chat-room-panel grid gap-2 rounded-[10px] border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-3 md:hidden max-md:border-transparent" aria-label="Mobile chat rooms">
           <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
-              <svg class="ph-icon h-4 w-4 text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+              <svg class="chat-room-heading-icon ph-icon h-4 w-4 text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                 <path d="M84 176H48a16 16 0 0 1-16-16V64a16 16 0 0 1 16-16h160a16 16 0 0 1 16 16v96a16 16 0 0 1-16 16h-72l-40 32Z"></path>
                 <path d="M84 96h88"></path>
                 <path d="M84 128h56"></path>
               </svg>
-              <h2 class="m-0 text-base font-[760] leading-tight text-[var(--text)]">Chat rooms</h2>
+              <h2 class="chat-room-heading m-0 text-base font-[760] leading-tight text-[var(--text)]">Chat rooms</h2>
             </div>
             <div v-if="roomDayBuckets.length > 1" class="flex items-center justify-between gap-2 text-[var(--muted)]" aria-label="Room pages">
                 <button
@@ -3238,14 +3238,14 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="grid gap-[14px] rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 max-md:rounded-[10px]">
+        <section class="chat-room-panel grid gap-[14px] rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 max-md:rounded-[10px]">
           <div class="flex items-center gap-2.5">
-            <svg class="ph-icon h-[18px] w-[18px] text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
+            <svg class="chat-room-heading-icon ph-icon h-[18px] w-[18px] text-[var(--muted)]" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
               <path d="M84 176H48a16 16 0 0 1-16-16V64a16 16 0 0 1 16-16h160a16 16 0 0 1 16 16v96a16 16 0 0 1-16 16h-72l-40 32Z"></path>
               <path d="M84 96h88"></path>
               <path d="M84 128h56"></path>
             </svg>
-            <h2 class="m-0 text-[var(--text)]">Chat rooms</h2>
+            <h2 class="chat-room-heading m-0 text-[var(--text)]">Chat rooms</h2>
           </div>
 
           <div class="grid gap-2.5 max-md:gap-3" aria-label="Match rooms for the current cycle">

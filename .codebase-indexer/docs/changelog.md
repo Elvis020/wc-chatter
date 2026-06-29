@@ -7,6 +7,7 @@
 - Scoped room sync and prediction creation to the active knockout round through the today/tomorrow match-cycle window, while keeping historical finished rooms visible on the public board.
 - Added performance-conscious motion polish using staggered room/feed entrances, direction-aware room transitions, press feedback, and lightweight stat ticker pops.
 - Consolidated repeated frontend transition utilities into shared motion primitives for press feedback, snappy controls, form fields, color changes, and card state changes.
+- Added Pub/Grape Room-specific chat-room heading hooks so the sidebar and mobile room switcher keep high-contrast heading/icon color.
 - Added regression coverage for stale live scores and verified the web/shared typechecks.
 
 ## 2026-06-19 — Initial index and readout carousel checkpoint
