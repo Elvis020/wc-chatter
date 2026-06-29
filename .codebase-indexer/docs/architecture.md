@@ -57,7 +57,7 @@ Bun workspace monorepo for a World Cup score-room app:
 | API contract | `apps/api/src/server.ts`, `packages/shared/src/index.ts` | Endpoint paths and request/response payload types are code-first; no OpenAPI spec found in scan |
 | Runtime topology | `apps/api/wrangler.jsonc` | Defines Worker entry, production origin, Durable Object binding, SQLite DO migration, observability, and cron schedules |
 | Frontend runtime config | `apps/web/vite.config.ts`, `apps/web/src/lib/api.ts` | Defines Vite/Tailwind/Vue setup and browser API/WebSocket base URLs |
-| Fixture data | `packages/shared/src/data/worldcup*.json` | Supplies match rooms, teams, ISO flags, kickoff windows, and fallback match data |
+| Fixture data | `packages/shared/src/data/worldcup*.json`, `packages/shared/src/data/wc2026-results.json`, `packages/shared/src/data/third-place-annex-c.json` | Supplies match rooms, teams, ISO flags, kickoff windows, finished-result seeds, Annex C best-third assignments, and fallback match data |
 
 ## External Dependencies
 | Name | Purpose |
@@ -72,4 +72,3 @@ Bun workspace monorepo for a World Cup score-room app:
 | `@cloudflare/workers-types` | Worker/Durable Object TypeScript types |
 | `typescript` / `vue-tsc` | Typechecking and shared package builds |
 | `bun` | Workspace package manager, runtime, test runner, and scripts |
-

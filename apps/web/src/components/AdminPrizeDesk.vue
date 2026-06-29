@@ -207,7 +207,7 @@ function hasSpriteFlag(team: Team) {
           <p class="m-0 text-sm leading-snug text-[var(--muted)]">Map predictions to final scores, then use pickup checks for exact winners.</p>
         </div>
         <button
-          class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-3.5 text-xs font-extrabold text-[var(--accent)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] active:translate-y-px disabled:cursor-wait disabled:opacity-70 disabled:active:translate-y-0"
+          class="motion-press inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-3.5 text-xs font-extrabold text-[var(--accent)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] disabled:cursor-wait disabled:opacity-70"
           type="button"
           :disabled="loading"
           @click="emit('refresh')"
@@ -229,7 +229,7 @@ function hasSpriteFlag(team: Team) {
             <button
               v-for="filterOption in filters"
               :key="filterOption"
-              class="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-extrabold transition-[background-color,border-color,color] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              class="motion-press inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-extrabold motion-fast"
               :class="filter === filterOption ? 'border-[color:color-mix(in_srgb,var(--accent)_46%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))] text-[var(--accent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_16%,transparent)]' : 'border-transparent bg-transparent text-[var(--soft)] hover:border-[var(--line)] hover:bg-[var(--panel)] hover:text-[var(--text)]'"
               type="button"
               @click="emit('update:filter', filterOption)"
@@ -338,7 +338,7 @@ function hasSpriteFlag(team: Team) {
                 <td class="px-3 py-3 align-middle">
                   <button
                     v-if="entry.result === 'winner'"
-                    class="inline-grid h-9 w-9 place-items-center rounded-lg border transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px"
+                    class="motion-press inline-grid h-9 w-9 place-items-center rounded-lg border motion-fast hover:border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))]"
                     :class="entry.pickup ? 'border-[color:color-mix(in_srgb,#15803d_30%,var(--line))] bg-[color:color-mix(in_srgb,#15803d_8%,var(--panel))] text-[#166534]' : 'border-[var(--line)] text-[var(--muted)]'"
                     type="button"
                     :aria-label="adminPickupLabel(entry)"
@@ -353,7 +353,7 @@ function hasSpriteFlag(team: Team) {
                 <td class="px-3 py-3 align-middle">
                   <button
                     v-if="entry.result === 'winner' && entry.pickup"
-                    class="inline-flex min-h-9 items-center gap-2 rounded-lg border px-2.5 text-xs font-extrabold transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px"
+                    class="motion-press inline-flex min-h-9 items-center gap-2 rounded-lg border px-2.5 text-xs font-extrabold motion-fast hover:border-[color:color-mix(in_srgb,var(--accent)_32%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))]"
                     :class="hasCollectedPrize(entry) ? 'border-[color:color-mix(in_srgb,#15803d_30%,var(--line))] bg-[color:color-mix(in_srgb,#15803d_8%,var(--panel))] text-[#166534]' : 'border-[var(--line)] text-[var(--muted)]'"
                     type="button"
                     :aria-label="collectionLabel(entry)"
@@ -375,11 +375,11 @@ function hasSpriteFlag(team: Team) {
         <div class="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_46%,transparent)] px-3 py-2">
           <span class="text-xs font-bold text-[var(--muted)]">{{ rangeLabel }}</span>
           <div class="flex items-center gap-1.5">
-            <button class="inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] transition-[background-color,border-color,color] duration-100 hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45" type="button" :disabled="page === 0" @click="emit('update:page', Math.max(0, page - 1))">
+            <button class="motion-press inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] motion-fast hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45" type="button" :disabled="page === 0" @click="emit('update:page', Math.max(0, page - 1))">
               Prev
             </button>
             <span class="min-w-14 text-center text-xs font-extrabold text-[var(--muted)]">{{ page + 1 }}/{{ pageCount }}</span>
-            <button class="inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] transition-[background-color,border-color,color] duration-100 hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45" type="button" :disabled="page >= pageCount - 1" @click="emit('update:page', Math.min(pageCount - 1, page + 1))">
+            <button class="motion-press inline-flex min-h-8 items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-extrabold text-[var(--soft)] motion-fast hover:border-[var(--line-strong)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45" type="button" :disabled="page >= pageCount - 1" @click="emit('update:page', Math.min(pageCount - 1, page + 1))">
               Next
             </button>
           </div>
@@ -505,7 +505,7 @@ function hasSpriteFlag(team: Team) {
               <p v-if="pickupError" class="m-0 text-xs font-bold text-[var(--danger)]">{{ pickupError }}</p>
 
               <button
-                class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
+                class="motion-press inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] disabled:cursor-wait disabled:opacity-65"
                 type="submit"
                 :disabled="pickupSubmitting || !adminPassword.trim()"
               >

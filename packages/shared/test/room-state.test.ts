@@ -56,6 +56,21 @@ describe('room state', () => {
     expect(effectiveRoomMatchStatus(liveRoom, { now: new Date('2026-06-19T15:00:00.000Z') })).toBe('live')
   })
 
+  test('kickoff window closes stale live scores', () => {
+    const staleLiveRoom = room({
+      currentScore: {
+        home: 1,
+        away: 0,
+        status: 'live',
+        clock: '90',
+        provider: 'test',
+        updatedAt: '2026-06-19T17:55:00.000Z',
+      },
+    })
+
+    expect(effectiveRoomMatchStatus(staleLiveRoom, { now: new Date('2026-06-19T18:01:00.000Z') })).toBe('finished')
+  })
+
   test('sorts live and upcoming rooms before locked rooms', () => {
     const rooms = [
       room({ id: 'finished', kickoffAt: '2026-06-18T16:00:00.000Z', matchStatus: 'finished' }),
@@ -77,5 +92,23 @@ describe('room state', () => {
     const scotland = scotlandMatch?.home.code === 'SCO' ? scotlandMatch.home : scotlandMatch?.away
 
     expect(scotland?.iso2).toBe('gb-sct')
+  })
+
+  test('resolves knockout room placeholders from known group results', () => {
+    const rooms = loadFixtures().filter((match) => match.date === '2026-06-29')
+
+    expect(rooms.map((match) => `${match.homeName} vs ${match.awayName}`)).toEqual([
+      'Germany vs Paraguay',
+      'Netherlands vs Morocco',
+      'Brazil vs Japan',
+    ])
+    expect(rooms.every((match) => !/^[123][A-L]/.test(match.homeName) && !/^[123][A-L]/.test(match.awayName))).toBe(true)
+  })
+
+  test('resolves later knockout winner slots when prior results exist', () => {
+    const roundOf16 = loadFixtures().find((match) => match.id === '2026-07-04-90-w73-w75')
+
+    expect(roundOf16?.homeName).toBe('Canada')
+    expect(roundOf16?.awayName).toBe('W75')
   })
 })

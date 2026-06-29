@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   buildMostBackedSummary,
   createFixtureKickoffLookup,
+  loadFixtures,
   matchStatusFromKickoff,
   seededResultForFixture,
   mockThemes,
@@ -26,6 +27,7 @@ import {
   type UpdateReplyInput,
 } from '@turntabl-score-room/shared'
 import { ApiError } from './errors.js'
+import { selectSyncMatches } from './room-sync.js'
 import type { RoomStore, WebSocketLike } from './store-contract.js'
 
 type RoomRow = {
@@ -105,6 +107,15 @@ export type SupabaseEnv = {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ROOM_WRITE_STATUSES = new Set<RoomInteractionStatus>(['open'])
 const ROOM_CACHE_TTL_MS = 2_000
+const publicBoardRoomSlugs = () => new Set(selectSyncMatches(loadFixtures(), new Date()).map((match) => match.id))
+
+function isHistoricalRoom(room: RoomRow) {
+  return room.status === 'archived' || room.status === 'closed' || room.match_status === 'finished'
+}
+
+function isPredictionWindowRoom(room: RoomRow) {
+  return publicBoardRoomSlugs().has(room.slug) && !isHistoricalRoom(room)
+}
 const ROOM_STATUS_ORDER: Record<RoomRow['status'], number> = {
   live: 0,
   draft: 1,
@@ -498,7 +509,9 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
       logSupabaseError('getRoomRows', response.error)
       throw new ApiError('INTERNAL_ERROR', 'Unable to load rooms.', 500)
     }
+    const boardSlugs = publicBoardRoomSlugs()
     return ((response.data ?? []) as RoomRow[])
+      .filter((room) => boardSlugs.has(room.slug) || isHistoricalRoom(room))
       .filter((room) => (room.room_status ?? legacyRoomStatus(room.status)) !== 'hidden')
       .sort((left, right) => {
         if ((left.is_featured ? 0 : 1) !== (right.is_featured ? 0 : 1)) {
@@ -712,6 +725,9 @@ export function createSupabaseStore(config: SupabaseStoreConfig): RoomStore {
   function assertRoomWritable(room: RoomRow) {
     if (effectiveMatchStatus(room) === 'finished' || !ROOM_WRITE_STATUSES.has(room.room_status ?? legacyRoomStatus(room.status))) {
       throw new ApiError('FORBIDDEN', 'This room is closed for edits.', 403)
+    }
+    if (!isPredictionWindowRoom(room)) {
+      throw new ApiError('FORBIDDEN', 'Predictions are only open for today and tomorrow matches.', 403)
     }
   }
 

@@ -1,9 +1,10 @@
 import { type SupabaseClient } from '@supabase/supabase-js'
 import {
+  currentOrNextCycleMatches,
   loadFixtures,
   matchKickoffUtc,
+  matchCycleWindowForKickoff,
   matchStatusAt,
-  selectRoomSlateMatches,
   type FixtureMatch,
   type MatchStatus,
   type RoomInteractionStatus,
@@ -61,6 +62,16 @@ export type RoomSyncResult = {
 }
 
 const LOCKED_ROOM_STATUSES = new Set<RoomInteractionStatus>(['closed', 'hidden'])
+
+const KNOCKOUT_ROUNDS = [
+  'Round of 32',
+  'Round of 16',
+  'Quarter-final',
+  'Semi-final',
+  'Match for third place',
+  'Final',
+]
+const MATCH_CYCLE_MS = 24 * 60 * 60 * 1000
 
 function isMissingColumnError(error?: { code?: string } | null) {
   return error?.code === 'PGRST204' || error?.code === '42703'
@@ -152,12 +163,29 @@ async function getExistingRooms(supabase: SupabaseClient, slugs: string[]) {
   return new Map(((response.data ?? []) as ExistingRoom[]).map((room) => [room.slug, room]))
 }
 
+function activeKnockoutRound(matches: FixtureMatch[], now: Date) {
+  const startedRounds = KNOCKOUT_ROUNDS.filter((round) =>
+    matches.some((match) => match.round === round && Date.parse(matchKickoffUtc(match)) <= now.getTime()),
+  )
+  return startedRounds.at(-1)
+}
+
+export function selectSyncMatches(matches: FixtureMatch[], now: Date) {
+  const knockoutRound = activeKnockoutRound(matches, now)
+  if (!knockoutRound) return currentOrNextCycleMatches(matches, now, undefined, 2)
+
+  const tomorrowCycleEndMs = Date.parse(matchCycleWindowForKickoff(new Date(now.getTime() + MATCH_CYCLE_MS)).endUtc)
+  return matches
+    .filter((match) => match.round === knockoutRound && Date.parse(matchKickoffUtc(match)) <= tomorrowCycleEndMs)
+    .sort((left, right) => Date.parse(matchKickoffUtc(left)) - Date.parse(matchKickoffUtc(right)))
+}
+
 export async function syncCurrentCycleRooms(
   supabase: SupabaseClient,
   options: { now?: Date; dryRun?: boolean } = {},
 ): Promise<RoomSyncResult> {
   const now = options.now ?? new Date()
-  const matches = selectRoomSlateMatches(loadFixtures(), { now })
+  const matches = selectSyncMatches(loadFixtures(), now)
   const existingRooms = await getExistingRooms(supabase, matches.map((match) => match.id))
   const featuredMatchId = matches.find((match) => matchStatusForMatch(match, now) === 'live')?.id ?? matches[0]?.id
   const rows = matches.map((match) => roomFromMatch(match, now, match.id === featuredMatchId, existingRooms.get(match.id)))

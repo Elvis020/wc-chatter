@@ -1,0 +1,6460 @@
+{
+  "matchOrder": [
+    79,
+    85,
+    81,
+    74,
+    82,
+    77,
+    87,
+    80
+  ],
+  "rows": {
+    "ABCDEFGH": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3E"
+      ],
+      "no": 495
+    },
+    "ABCDEFGI": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 494
+    },
+    "ABCDEFGJ": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3J"
+      ],
+      "no": 493
+    },
+    "ABCDEFGK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 492
+    },
+    "ABCDEFGL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 491
+    },
+    "ABCDEFHI": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 490
+    },
+    "ABCDEFHJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3E"
+      ],
+      "no": 489
+    },
+    "ABCDEFHK": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 488
+    },
+    "ABCDEFHL": {
+      "assignments": [
+        "3H",
+        "3F",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 487
+    },
+    "ABCDEFIJ": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 486
+    },
+    "ABCDEFIK": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 485
+    },
+    "ABCDEFIL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 484
+    },
+    "ABCDEFJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 483
+    },
+    "ABCDEFJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 482
+    },
+    "ABCDEFKL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 481
+    },
+    "ABCDEGHI": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3I"
+      ],
+      "no": 480
+    },
+    "ABCDEGHJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3J"
+      ],
+      "no": 479
+    },
+    "ABCDEGHK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3K"
+      ],
+      "no": 478
+    },
+    "ABCDEGHL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 477
+    },
+    "ABCDEGIJ": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3J"
+      ],
+      "no": 476
+    },
+    "ABCDEGIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 475
+    },
+    "ABCDEGIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 474
+    },
+    "ABCDEGJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3J",
+        "3K"
+      ],
+      "no": 473
+    },
+    "ABCDEGJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3J"
+      ],
+      "no": 472
+    },
+    "ABCDEGKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 471
+    },
+    "ABCDEHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3I"
+      ],
+      "no": 470
+    },
+    "ABCDEHIK": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 469
+    },
+    "ABCDEHIL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 468
+    },
+    "ABCDEHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3K"
+      ],
+      "no": 467
+    },
+    "ABCDEHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 466
+    },
+    "ABCDEHKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 465
+    },
+    "ABCDEIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 464
+    },
+    "ABCDEIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 463
+    },
+    "ABCDEIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 462
+    },
+    "ABCDEJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 461
+    },
+    "ABCDFGHI": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 460
+    },
+    "ABCDFGHJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3J"
+      ],
+      "no": 459
+    },
+    "ABCDFGHK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 458
+    },
+    "ABCDFGHL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3H"
+      ],
+      "no": 457
+    },
+    "ABCDFGIJ": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3J"
+      ],
+      "no": 456
+    },
+    "ABCDFGIK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 455
+    },
+    "ABCDFGIL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 454
+    },
+    "ABCDFGJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3J",
+        "3K"
+      ],
+      "no": 453
+    },
+    "ABCDFGJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3J"
+      ],
+      "no": 452
+    },
+    "ABCDFGKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 451
+    },
+    "ABCDFHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 450
+    },
+    "ABCDFHIK": {
+      "assignments": [
+        "3H",
+        "3F",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 449
+    },
+    "ABCDFHIL": {
+      "assignments": [
+        "3H",
+        "3F",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 448
+    },
+    "ABCDFHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 447
+    },
+    "ABCDFHJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3H"
+      ],
+      "no": 446
+    },
+    "ABCDFHKL": {
+      "assignments": [
+        "3H",
+        "3F",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 445
+    },
+    "ABCDFIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 444
+    },
+    "ABCDFIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 443
+    },
+    "ABCDFIKL": {
+      "assignments": [
+        "3C",
+        "3I",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 442
+    },
+    "ABCDFJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 441
+    },
+    "ABCDGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3J"
+      ],
+      "no": 440
+    },
+    "ABCDGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 439
+    },
+    "ABCDGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 438
+    },
+    "ABCDGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3J",
+        "3K"
+      ],
+      "no": 437
+    },
+    "ABCDGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3J"
+      ],
+      "no": 436
+    },
+    "ABCDGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 435
+    },
+    "ABCDGIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 434
+    },
+    "ABCDGIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 433
+    },
+    "ABCDGIKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 432
+    },
+    "ABCDGJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 431
+    },
+    "ABCDHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 430
+    },
+    "ABCDHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 429
+    },
+    "ABCDHIKL": {
+      "assignments": [
+        "3H",
+        "3I",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 428
+    },
+    "ABCDHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 427
+    },
+    "ABCDIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 426
+    },
+    "ABCEFGHI": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 425
+    },
+    "ABCEFGHJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3J"
+      ],
+      "no": 424
+    },
+    "ABCEFGHK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 423
+    },
+    "ABCEFGHL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 422
+    },
+    "ABCEFGIJ": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3J"
+      ],
+      "no": 421
+    },
+    "ABCEFGIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 420
+    },
+    "ABCEFGIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 419
+    },
+    "ABCEFGJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3J",
+        "3K"
+      ],
+      "no": 418
+    },
+    "ABCEFGJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3J"
+      ],
+      "no": 417
+    },
+    "ABCEFGKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 416
+    },
+    "ABCEFHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 415
+    },
+    "ABCEFHIK": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 414
+    },
+    "ABCEFHIL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 413
+    },
+    "ABCEFHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 412
+    },
+    "ABCEFHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 411
+    },
+    "ABCEFHKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 410
+    },
+    "ABCEFIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 409
+    },
+    "ABCEFIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 408
+    },
+    "ABCEFIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 407
+    },
+    "ABCEFJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 406
+    },
+    "ABCEGHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3E",
+        "3I"
+      ],
+      "no": 405
+    },
+    "ABCEGHIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 404
+    },
+    "ABCEGHIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 403
+    },
+    "ABCEGHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3E",
+        "3K"
+      ],
+      "no": 402
+    },
+    "ABCEGHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3E"
+      ],
+      "no": 401
+    },
+    "ABCEGHKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 400
+    },
+    "ABCEGIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 399
+    },
+    "ABCEGIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 398
+    },
+    "ABCEGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3A",
+        "3I",
+        "3C",
+        "3L",
+        "3K"
+      ],
+      "no": 397
+    },
+    "ABCEGJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 396
+    },
+    "ABCEHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 395
+    },
+    "ABCEHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 394
+    },
+    "ABCEHIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 393
+    },
+    "ABCEHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 392
+    },
+    "ABCEIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3C",
+        "3L",
+        "3K"
+      ],
+      "no": 391
+    },
+    "ABCFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3J"
+      ],
+      "no": 390
+    },
+    "ABCFGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 389
+    },
+    "ABCFGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 388
+    },
+    "ABCFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3J",
+        "3K"
+      ],
+      "no": 387
+    },
+    "ABCFGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3J"
+      ],
+      "no": 386
+    },
+    "ABCFGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 385
+    },
+    "ABCFGIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 384
+    },
+    "ABCFGIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 383
+    },
+    "ABCFGIKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 382
+    },
+    "ABCFGJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 381
+    },
+    "ABCFHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 380
+    },
+    "ABCFHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 379
+    },
+    "ABCFHIKL": {
+      "assignments": [
+        "3H",
+        "3I",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 378
+    },
+    "ABCFHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 377
+    },
+    "ABCFIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 376
+    },
+    "ABCGHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 375
+    },
+    "ABCGHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 374
+    },
+    "ABCGHIKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 373
+    },
+    "ABCGHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 372
+    },
+    "ABCGIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 371
+    },
+    "ABCHIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 370
+    },
+    "ABDEFGHI": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 369
+    },
+    "ABDEFGHJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3J"
+      ],
+      "no": 368
+    },
+    "ABDEFGHK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 367
+    },
+    "ABDEFGHL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 366
+    },
+    "ABDEFGIJ": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3J"
+      ],
+      "no": 365
+    },
+    "ABDEFGIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 364
+    },
+    "ABDEFGIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 363
+    },
+    "ABDEFGJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3J",
+        "3K"
+      ],
+      "no": 362
+    },
+    "ABDEFGJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3J"
+      ],
+      "no": 361
+    },
+    "ABDEFGKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 360
+    },
+    "ABDEFHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 359
+    },
+    "ABDEFHIK": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 358
+    },
+    "ABDEFHIL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 357
+    },
+    "ABDEFHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 356
+    },
+    "ABDEFHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 355
+    },
+    "ABDEFHKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 354
+    },
+    "ABDEFIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 353
+    },
+    "ABDEFIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 352
+    },
+    "ABDEFIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 351
+    },
+    "ABDEFJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 350
+    },
+    "ABDEGHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3E",
+        "3I"
+      ],
+      "no": 349
+    },
+    "ABDEGHIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 348
+    },
+    "ABDEGHIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 347
+    },
+    "ABDEGHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3E",
+        "3K"
+      ],
+      "no": 346
+    },
+    "ABDEGHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3E"
+      ],
+      "no": 345
+    },
+    "ABDEGHKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 344
+    },
+    "ABDEGIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 343
+    },
+    "ABDEGIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 342
+    },
+    "ABDEGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3A",
+        "3I",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 341
+    },
+    "ABDEGJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 340
+    },
+    "ABDEHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 339
+    },
+    "ABDEHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 338
+    },
+    "ABDEHIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 337
+    },
+    "ABDEHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 336
+    },
+    "ABDEIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 335
+    },
+    "ABDFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3J"
+      ],
+      "no": 334
+    },
+    "ABDFGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 333
+    },
+    "ABDFGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 332
+    },
+    "ABDFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3J",
+        "3K"
+      ],
+      "no": 331
+    },
+    "ABDFGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3J"
+      ],
+      "no": 330
+    },
+    "ABDFGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 329
+    },
+    "ABDFGIJK": {
+      "assignments": [
+        "3F",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 328
+    },
+    "ABDFGIJL": {
+      "assignments": [
+        "3F",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 327
+    },
+    "ABDFGIKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 326
+    },
+    "ABDFGJKL": {
+      "assignments": [
+        "3F",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 325
+    },
+    "ABDFHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 324
+    },
+    "ABDFHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 323
+    },
+    "ABDFHIKL": {
+      "assignments": [
+        "3H",
+        "3I",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 322
+    },
+    "ABDFHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 321
+    },
+    "ABDFIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 320
+    },
+    "ABDGHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 319
+    },
+    "ABDGHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 318
+    },
+    "ABDGHIKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 317
+    },
+    "ABDGHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 316
+    },
+    "ABDGIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 315
+    },
+    "ABDHIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 314
+    },
+    "ABEFGHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3E",
+        "3I"
+      ],
+      "no": 313
+    },
+    "ABEFGHIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 312
+    },
+    "ABEFGHIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 311
+    },
+    "ABEFGHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3E",
+        "3K"
+      ],
+      "no": 310
+    },
+    "ABEFGHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3E"
+      ],
+      "no": 309
+    },
+    "ABEFGHKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 308
+    },
+    "ABEFGIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 307
+    },
+    "ABEFGIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 306
+    },
+    "ABEFGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3A",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 305
+    },
+    "ABEFGJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 304
+    },
+    "ABEFHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 303
+    },
+    "ABEFHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 302
+    },
+    "ABEFHIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 301
+    },
+    "ABEFHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 300
+    },
+    "ABEFIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 299
+    },
+    "ABEGHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3H",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 298
+    },
+    "ABEGHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3H",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 297
+    },
+    "ABEGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3A",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 296
+    },
+    "ABEGHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 295
+    },
+    "ABEGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 294
+    },
+    "ABEHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 293
+    },
+    "ABFGHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 292
+    },
+    "ABFGHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 291
+    },
+    "ABFGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3A",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 290
+    },
+    "ABFGHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 289
+    },
+    "ABFGIJKL": {
+      "assignments": [
+        "3I",
+        "3J",
+        "3B",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 288
+    },
+    "ABFHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 287
+    },
+    "ABGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3A",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 286
+    },
+    "ACDEFGHI": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 285
+    },
+    "ACDEFGHJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3E"
+      ],
+      "no": 284
+    },
+    "ACDEFGHK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 283
+    },
+    "ACDEFGHL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 282
+    },
+    "ACDEFGIJ": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 281
+    },
+    "ACDEFGIK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 280
+    },
+    "ACDEFGIL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 279
+    },
+    "ACDEFGJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 278
+    },
+    "ACDEFGJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 277
+    },
+    "ACDEFGKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 276
+    },
+    "ACDEFHIJ": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 275
+    },
+    "ACDEFHIK": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 274
+    },
+    "ACDEFHIL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 273
+    },
+    "ACDEFHJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 272
+    },
+    "ACDEFHJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 271
+    },
+    "ACDEFHKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 270
+    },
+    "ACDEFIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 269
+    },
+    "ACDEFIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 268
+    },
+    "ACDEFIKL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 267
+    },
+    "ACDEFJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 266
+    },
+    "ACDEGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3I"
+      ],
+      "no": 265
+    },
+    "ACDEGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 264
+    },
+    "ACDEGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 263
+    },
+    "ACDEGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3E",
+        "3K"
+      ],
+      "no": 262
+    },
+    "ACDEGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 261
+    },
+    "ACDEGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 260
+    },
+    "ACDEGIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 259
+    },
+    "ACDEGIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 258
+    },
+    "ACDEGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 257
+    },
+    "ACDEGJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 256
+    },
+    "ACDEHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 255
+    },
+    "ACDEHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 254
+    },
+    "ACDEHIKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3I",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 253
+    },
+    "ACDEHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 252
+    },
+    "ACDEIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 251
+    },
+    "ACDFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 250
+    },
+    "ACDFGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 249
+    },
+    "ACDFGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 248
+    },
+    "ACDFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 247
+    },
+    "ACDFGHJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3H"
+      ],
+      "no": 246
+    },
+    "ACDFGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 245
+    },
+    "ACDFGIJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 244
+    },
+    "ACDFGIJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 243
+    },
+    "ACDFGIKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 242
+    },
+    "ACDFGJKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 241
+    },
+    "ACDFHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 240
+    },
+    "ACDFHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 239
+    },
+    "ACDFHIKL": {
+      "assignments": [
+        "3H",
+        "3F",
+        "3I",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 238
+    },
+    "ACDFHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3F",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 237
+    },
+    "ACDFIJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 236
+    },
+    "ACDGHIJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 235
+    },
+    "ACDGHIJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 234
+    },
+    "ACDGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3I",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 233
+    },
+    "ACDGHJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 232
+    },
+    "ACDGIJKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 231
+    },
+    "ACDHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 230
+    },
+    "ACEFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 229
+    },
+    "ACEFGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 228
+    },
+    "ACEFGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 227
+    },
+    "ACEFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 226
+    },
+    "ACEFGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 225
+    },
+    "ACEFGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 224
+    },
+    "ACEFGIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 223
+    },
+    "ACEFGIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 222
+    },
+    "ACEFGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 221
+    },
+    "ACEFGJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 220
+    },
+    "ACEFHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 219
+    },
+    "ACEFHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 218
+    },
+    "ACEFHIKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3I",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 217
+    },
+    "ACEFHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 216
+    },
+    "ACEFIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 215
+    },
+    "ACEGHIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 214
+    },
+    "ACEGHIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 213
+    },
+    "ACEGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 212
+    },
+    "ACEGHJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 211
+    },
+    "ACEGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 210
+    },
+    "ACEHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 209
+    },
+    "ACFGHIJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 208
+    },
+    "ACFGHIJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 207
+    },
+    "ACFGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3I",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 206
+    },
+    "ACFGHJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 205
+    },
+    "ACFGIJKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3J",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 204
+    },
+    "ACFHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 203
+    },
+    "ACGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3I",
+        "3C",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 202
+    },
+    "ADEFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 201
+    },
+    "ADEFGHIK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 200
+    },
+    "ADEFGHIL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 199
+    },
+    "ADEFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 198
+    },
+    "ADEFGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 197
+    },
+    "ADEFGHKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 196
+    },
+    "ADEFGIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 195
+    },
+    "ADEFGIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 194
+    },
+    "ADEFGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 193
+    },
+    "ADEFGJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 192
+    },
+    "ADEFHIJK": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 191
+    },
+    "ADEFHIJL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 190
+    },
+    "ADEFHIKL": {
+      "assignments": [
+        "3H",
+        "3E",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 189
+    },
+    "ADEFHJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3E",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 188
+    },
+    "ADEFIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 187
+    },
+    "ADEGHIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 186
+    },
+    "ADEGHIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 185
+    },
+    "ADEGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 184
+    },
+    "ADEGHJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 183
+    },
+    "ADEGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 182
+    },
+    "ADEHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3D",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 181
+    },
+    "ADFGHIJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 180
+    },
+    "ADFGHIJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 179
+    },
+    "ADFGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 178
+    },
+    "ADFGHJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 177
+    },
+    "ADFGIJKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3J",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 176
+    },
+    "ADFHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3I",
+        "3D",
+        "3A",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 175
+    },
+    "ADGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3I",
+        "3D",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 174
+    },
+    "AEFGHIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3F",
+        "3A",
+        "3H",
+        "3I",
+        "3K"
+      ],
+      "no": 173
+    },
+    "AEFGHIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3I"
+      ],
+      "no": 172
+    },
+    "AEFGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 171
+    },
+    "AEFGHJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 170
+    },
+    "AEFGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 169
+    },
+    "AEFHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3F",
+        "3A",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 168
+    },
+    "AEGHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3A",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 167
+    },
+    "AFGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3I",
+        "3F",
+        "3A",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 166
+    },
+    "BCDEFGHI": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 165
+    },
+    "BCDEFGHJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3D",
+        "3E"
+      ],
+      "no": 164
+    },
+    "BCDEFGHK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 163
+    },
+    "BCDEFGHL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 162
+    },
+    "BCDEFGIJ": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 161
+    },
+    "BCDEFGIK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3E",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 160
+    },
+    "BCDEFGIL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3E",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 159
+    },
+    "BCDEFGJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 158
+    },
+    "BCDEFGJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 157
+    },
+    "BCDEFGKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3E",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 156
+    },
+    "BCDEFHIJ": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 155
+    },
+    "BCDEFHIK": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 154
+    },
+    "BCDEFHIL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 153
+    },
+    "BCDEFHJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 152
+    },
+    "BCDEFHJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 151
+    },
+    "BCDEFHKL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 150
+    },
+    "BCDEFIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3E",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 149
+    },
+    "BCDEFIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3E",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 148
+    },
+    "BCDEFIKL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 147
+    },
+    "BCDEFJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3E",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 146
+    },
+    "BCDEGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3E",
+        "3I"
+      ],
+      "no": 145
+    },
+    "BCDEGHIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 144
+    },
+    "BCDEGHIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 143
+    },
+    "BCDEGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3E",
+        "3K"
+      ],
+      "no": 142
+    },
+    "BCDEGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3E"
+      ],
+      "no": 141
+    },
+    "BCDEGHKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 140
+    },
+    "BCDEGIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 139
+    },
+    "BCDEGIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 138
+    },
+    "BCDEGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3I",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 137
+    },
+    "BCDEGJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 136
+    },
+    "BCDEHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 135
+    },
+    "BCDEHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 134
+    },
+    "BCDEHIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 133
+    },
+    "BCDEHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 132
+    },
+    "BCDEIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 131
+    },
+    "BCDFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3D",
+        "3I"
+      ],
+      "no": 130
+    },
+    "BCDFGHIK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 129
+    },
+    "BCDFGHIL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 128
+    },
+    "BCDFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3D",
+        "3K"
+      ],
+      "no": 127
+    },
+    "BCDFGHJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3J"
+      ],
+      "no": 126
+    },
+    "BCDFGHKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 125
+    },
+    "BCDFGIJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 124
+    },
+    "BCDFGIJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 123
+    },
+    "BCDFGIKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 122
+    },
+    "BCDFGJKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 121
+    },
+    "BCDFHIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 120
+    },
+    "BCDFHIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 119
+    },
+    "BCDFHIKL": {
+      "assignments": [
+        "3C",
+        "3I",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 118
+    },
+    "BCDFHJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 117
+    },
+    "BCDFIJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 116
+    },
+    "BCDGHIJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 115
+    },
+    "BCDGHIJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 114
+    },
+    "BCDGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3I",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 113
+    },
+    "BCDGHJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 112
+    },
+    "BCDGIJKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 111
+    },
+    "BCDHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 110
+    },
+    "BCEFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 109
+    },
+    "BCEFGHIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 108
+    },
+    "BCEFGHIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 107
+    },
+    "BCEFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 106
+    },
+    "BCEFGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 105
+    },
+    "BCEFGHKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 104
+    },
+    "BCEFGIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 103
+    },
+    "BCEFGIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 102
+    },
+    "BCEFGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 101
+    },
+    "BCEFGJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 100
+    },
+    "BCEFHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 99
+    },
+    "BCEFHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 98
+    },
+    "BCEFHIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 97
+    },
+    "BCEFHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 96
+    },
+    "BCEFIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 95
+    },
+    "BCEGHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 94
+    },
+    "BCEGHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 93
+    },
+    "BCEGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3C",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 92
+    },
+    "BCEGHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 91
+    },
+    "BCEGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 90
+    },
+    "BCEHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 89
+    },
+    "BCFGHIJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 88
+    },
+    "BCFGHIJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 87
+    },
+    "BCFGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 86
+    },
+    "BCFGHJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 85
+    },
+    "BCFGIJKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 84
+    },
+    "BCFHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 83
+    },
+    "BCGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3C",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 82
+    },
+    "BDEFGHIJ": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 81
+    },
+    "BDEFGHIK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 80
+    },
+    "BDEFGHIL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 79
+    },
+    "BDEFGHJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 78
+    },
+    "BDEFGHJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 77
+    },
+    "BDEFGHKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 76
+    },
+    "BDEFGIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 75
+    },
+    "BDEFGIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 74
+    },
+    "BDEFGIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 73
+    },
+    "BDEFGJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 72
+    },
+    "BDEFHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 71
+    },
+    "BDEFHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 70
+    },
+    "BDEFHIKL": {
+      "assignments": [
+        "3E",
+        "3I",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 69
+    },
+    "BDEFHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 68
+    },
+    "BDEFIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 67
+    },
+    "BDEGHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 66
+    },
+    "BDEGHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 65
+    },
+    "BDEGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3D",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 64
+    },
+    "BDEGHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 63
+    },
+    "BDEGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 62
+    },
+    "BDEHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3D",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 61
+    },
+    "BDFGHIJK": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 60
+    },
+    "BDFGHIJL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 59
+    },
+    "BDFGHIKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 58
+    },
+    "BDFGHJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 57
+    },
+    "BDFGIJKL": {
+      "assignments": [
+        "3I",
+        "3G",
+        "3B",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 56
+    },
+    "BDFHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 55
+    },
+    "BDGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3D",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 54
+    },
+    "BEFGHIJK": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3H",
+        "3G",
+        "3I",
+        "3K"
+      ],
+      "no": 53
+    },
+    "BEFGHIJL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3H",
+        "3G",
+        "3L",
+        "3I"
+      ],
+      "no": 52
+    },
+    "BEFGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3B",
+        "3F",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 51
+    },
+    "BEFGHJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 50
+    },
+    "BEFGIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 49
+    },
+    "BEFHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3B",
+        "3F",
+        "3I",
+        "3H",
+        "3L",
+        "3K"
+      ],
+      "no": 48
+    },
+    "BEGHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3B",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 47
+    },
+    "BFGHIJKL": {
+      "assignments": [
+        "3H",
+        "3J",
+        "3B",
+        "3F",
+        "3I",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 46
+    },
+    "CDEFGHIJ": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3E",
+        "3I"
+      ],
+      "no": 45
+    },
+    "CDEFGHIK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 44
+    },
+    "CDEFGHIL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 43
+    },
+    "CDEFGHJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3E",
+        "3K"
+      ],
+      "no": 42
+    },
+    "CDEFGHJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3E"
+      ],
+      "no": 41
+    },
+    "CDEFGHKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 40
+    },
+    "CDEFGIJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3J",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 39
+    },
+    "CDEFGIJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 38
+    },
+    "CDEFGIKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 37
+    },
+    "CDEFGJKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3E",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 36
+    },
+    "CDEFHIJK": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 35
+    },
+    "CDEFHIJL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 34
+    },
+    "CDEFHIKL": {
+      "assignments": [
+        "3C",
+        "3E",
+        "3I",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 33
+    },
+    "CDEFHJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 32
+    },
+    "CDEFIJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3E",
+        "3D",
+        "3I",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 31
+    },
+    "CDEGHIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3H",
+        "3D",
+        "3I",
+        "3K"
+      ],
+      "no": 30
+    },
+    "CDEGHIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3I"
+      ],
+      "no": 29
+    },
+    "CDEGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 28
+    },
+    "CDEGHJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 27
+    },
+    "CDEGIJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 26
+    },
+    "CDEHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3H",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 25
+    },
+    "CDFGHIJK": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 24
+    },
+    "CDFGHIJL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 23
+    },
+    "CDFGHIKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3I",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 22
+    },
+    "CDFGHJKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 21
+    },
+    "CDFGIJKL": {
+      "assignments": [
+        "3C",
+        "3G",
+        "3I",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 20
+    },
+    "CDFHIJKL": {
+      "assignments": [
+        "3C",
+        "3J",
+        "3I",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 19
+    },
+    "CDGHIJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3I",
+        "3C",
+        "3J",
+        "3D",
+        "3L",
+        "3K"
+      ],
+      "no": 18
+    },
+    "CEFGHIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 17
+    },
+    "CEFGHIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 16
+    },
+    "CEFGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 15
+    },
+    "CEFGHJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 14
+    },
+    "CEFGIJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 13
+    },
+    "CEFHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 12
+    },
+    "CEGHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3C",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 11
+    },
+    "CFGHIJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3I",
+        "3C",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 10
+    },
+    "DEFGHIJK": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3I",
+        "3K"
+      ],
+      "no": 9
+    },
+    "DEFGHIJL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3I"
+      ],
+      "no": 8
+    },
+    "DEFGHIKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 7
+    },
+    "DEFGHJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3J",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 6
+    },
+    "DEFGIJKL": {
+      "assignments": [
+        "3E",
+        "3G",
+        "3I",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 5
+    },
+    "DEFHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3D",
+        "3H",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 4
+    },
+    "DEGHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3D",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 3
+    },
+    "DFGHIJKL": {
+      "assignments": [
+        "3H",
+        "3G",
+        "3I",
+        "3D",
+        "3J",
+        "3F",
+        "3L",
+        "3K"
+      ],
+      "no": 2
+    },
+    "EFGHIJKL": {
+      "assignments": [
+        "3E",
+        "3J",
+        "3I",
+        "3F",
+        "3H",
+        "3G",
+        "3L",
+        "3K"
+      ],
+      "no": 1
+    }
+  },
+  "slotOrder": [
+    "1A",
+    "1B",
+    "1D",
+    "1E",
+    "1G",
+    "1I",
+    "1K",
+    "1L"
+  ],
+  "source": "FIFA World Cup 2026 Regulations Annex C via Wikipedia Template:2026 FIFA World Cup third-place table raw markup fetched 2026-06-12"
+}

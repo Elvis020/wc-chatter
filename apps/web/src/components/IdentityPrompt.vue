@@ -138,7 +138,7 @@ defineExpose({ focus })
             <h2 id="identity-title" class="m-0 text-lg font-extrabold leading-tight text-[var(--text)]">Pick your room name</h2>
             <p class="m-0 text-xs leading-snug text-[var(--muted)]">Used for comments, likes, and prize pickup.</p>
           </div>
-          <button class="inline-flex h-11 min-h-11 w-11 min-w-11 flex-none items-center justify-center rounded-lg bg-white/[0.06] p-0 text-[var(--text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-white/[0.1] active:translate-y-px" type="button" aria-label="Set username later" @click="emit('close')">
+          <button class="motion-press inline-flex h-11 min-h-11 w-11 min-w-11 flex-none items-center justify-center rounded-lg bg-white/[0.06] p-0 text-[var(--text)] motion-fast hover:bg-white/[0.1]" type="button" aria-label="Set username later" @click="emit('close')">
             <svg class="ph-icon h-5 w-5" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
               <path d="M200 56 56 200"></path>
               <path d="M56 56l144 144"></path>
@@ -196,14 +196,14 @@ defineExpose({ focus })
               </div>
               <p
                 id="identity-prompt-help"
-                class="m-0 text-xs leading-[1.35] transition-colors duration-150"
+                class="m-0 text-xs leading-[1.35] motion-color"
                 :class="fieldHintClass(usernameValidation.valid, touched.username)"
               >{{ usernameValidation.message }}</p>
               <input
                 id="prompt-username"
                 ref="input"
                 v-model="usernameDraft"
-                class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
                 :class="fieldInputClass(usernameValidation.valid, touched.username)"
                 autocomplete="nickname"
                 maxlength="24"
@@ -219,14 +219,14 @@ defineExpose({ focus })
                 <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-question">Pickup question</label>
                 <p
                   id="pickup-question-help"
-                  class="m-0 text-xs leading-[1.35] transition-colors duration-150"
+                  class="m-0 text-xs leading-[1.35] motion-color"
                   :class="fieldHintClass(prizeQuestionValidation.valid, touched.question)"
                 >{{ prizeQuestionValidation.message }}</p>
                 <input
                   id="prompt-prize-question"
                   ref="prizeQuestionInput"
                   v-model="prizeQuestionDraft"
-                  class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                  class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
                   :class="fieldInputClass(prizeQuestionValidation.valid, touched.question)"
                   maxlength="280"
                   placeholder="Example: What are my last three digits?"
@@ -240,13 +240,13 @@ defineExpose({ focus })
                 <label class="text-[11px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-answer">Pickup answer</label>
                 <p
                   id="pickup-answer-help"
-                  class="m-0 text-xs leading-[1.35] transition-colors duration-150"
+                  class="m-0 text-xs leading-[1.35] motion-color"
                   :class="fieldHintClass(prizeAnswerValidation.valid, touched.answer)"
                 >{{ prizeAnswerValidation.message }}</p>
                 <input
                   id="prompt-prize-answer"
                   v-model="prizeAnswerDraft"
-                  class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                  class="min-h-11 w-full rounded-lg border px-3 text-base font-medium outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
                   :class="fieldInputClass(prizeAnswerValidation.valid, touched.answer)"
                   maxlength="280"
                   placeholder="Example: 184"
@@ -266,14 +266,14 @@ defineExpose({ focus })
               </div>
               <p
                 id="identity-prompt-help"
-                class="m-0 text-[11px] leading-[1.3] transition-colors duration-150"
+                class="m-0 text-[11px] leading-[1.3] motion-color"
                 :class="fieldHintClass(usernameValidation.valid, touched.username)"
               >{{ usernameValidation.message }}</p>
               <input
                 id="prompt-username"
                 ref="input"
                 v-model="usernameDraft"
-                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
                 :class="fieldInputClass(usernameValidation.valid, touched.username)"
                 autocomplete="nickname"
                 maxlength="24"
@@ -288,14 +288,14 @@ defineExpose({ focus })
               <label class="text-[10px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-question">Pickup question</label>
               <p
                 id="pickup-question-help"
-                class="m-0 text-[11px] leading-[1.3] transition-colors duration-150"
+                class="m-0 text-[11px] leading-[1.3] motion-color"
                 :class="fieldHintClass(prizeQuestionValidation.valid, touched.question)"
               >{{ prizeQuestionValidation.message }}</p>
               <input
                 id="prompt-prize-question"
                 ref="prizeQuestionInput"
                 v-model="prizeQuestionDraft"
-                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
                 :class="fieldInputClass(prizeQuestionValidation.valid, touched.question)"
                 maxlength="280"
                 placeholder="Example: What are my last three digits?"
@@ -309,13 +309,13 @@ defineExpose({ focus })
               <label class="text-[10px] font-extrabold uppercase text-[var(--muted)]" for="prompt-prize-answer">Pickup answer</label>
               <p
                 id="pickup-answer-help"
-                class="m-0 text-[11px] leading-[1.3] transition-colors duration-150"
+                class="m-0 text-[11px] leading-[1.3] motion-color"
                 :class="fieldHintClass(prizeAnswerValidation.valid, touched.answer)"
               >{{ prizeAnswerValidation.message }}</p>
               <input
                 id="prompt-prize-answer"
                 v-model="prizeAnswerDraft"
-                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow,background-color,color] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
+                class="min-h-10 w-full rounded-lg border px-2.5 text-sm font-medium outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)]"
                 :class="fieldInputClass(prizeAnswerValidation.valid, touched.answer)"
                 maxlength="280"
                 placeholder="Example: 184"
@@ -331,20 +331,20 @@ defineExpose({ focus })
             <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 v-if="isMobile && mobileStep === 2"
-                class="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--line)] bg-transparent px-3.5 text-xs font-[760] leading-none text-[var(--muted)] transition-[background-color,color,transform] duration-150 ease-[var(--ease)] hover:bg-[color:color-mix(in_srgb,var(--panel)_58%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:w-full"
+                class="motion-press inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--line)] bg-transparent px-3.5 text-xs font-[760] leading-none text-[var(--muted)] motion-snappy hover:bg-[color:color-mix(in_srgb,var(--panel)_58%,transparent)] hover:text-[var(--text)] max-sm:w-full"
                 type="button"
                 @click="previousStep"
               >Back</button>
               <button
                 v-if="isMobile && mobileStep === 1"
-                class="inline-flex min-h-10 min-w-[118px] items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_72%,black)] bg-[var(--accent)] px-3.5 text-xs font-[760] leading-none text-[var(--accent-text)] shadow-[0_6px_16px_color-mix(in_srgb,var(--accent)_16%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[transform,background-color,border-color,box-shadow,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--accent)_88%,black)] hover:shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_18%,transparent),inset_0_1px_0_rgba(255,255,255,0.18)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0 max-sm:w-full"
+                class="motion-press inline-flex min-h-10 min-w-[118px] items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_72%,black)] bg-[var(--accent)] px-3.5 text-xs font-[760] leading-none text-[var(--accent-text)] shadow-[0_6px_16px_color-mix(in_srgb,var(--accent)_16%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] motion-snappy hover:border-[color:color-mix(in_srgb,var(--accent)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--accent)_88%,black)] hover:shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_18%,transparent),inset_0_1px_0_rgba(255,255,255,0.18)] disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none max-sm:w-full"
                 type="button"
                 :disabled="!usernameReady"
                 @click="nextStep"
               >Continue</button>
               <button
                 v-else
-                class="inline-flex min-h-10 min-w-[118px] items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_72%,black)] bg-[var(--accent)] px-3.5 text-xs font-[760] leading-none text-[var(--accent-text)] shadow-[0_6px_16px_color-mix(in_srgb,var(--accent)_16%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[transform,background-color,border-color,box-shadow,opacity] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--accent)_88%,black)] hover:shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_18%,transparent),inset_0_1px_0_rgba(255,255,255,0.18)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0 max-sm:w-full"
+                class="motion-press inline-flex min-h-10 min-w-[118px] items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_72%,black)] bg-[var(--accent)] px-3.5 text-xs font-[760] leading-none text-[var(--accent-text)] shadow-[0_6px_16px_color-mix(in_srgb,var(--accent)_16%,transparent),inset_0_1px_0_rgba(255,255,255,0.16)] motion-snappy hover:border-[color:color-mix(in_srgb,var(--accent)_82%,black)] hover:bg-[color:color-mix(in_srgb,var(--accent)_88%,black)] hover:shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_18%,transparent),inset_0_1px_0_rgba(255,255,255,0.18)] disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_70%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-100 disabled:shadow-none max-sm:w-full"
                 type="submit"
                 :disabled="!props.canSave"
                 aria-label="Save room name and pickup check"

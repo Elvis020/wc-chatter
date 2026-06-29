@@ -1,5 +1,7 @@
 import fixtureJson from './data/worldcup.json' with { type: 'json' }
 import teamJson from './data/worldcup.teams.json' with { type: 'json' }
+import annexCJson from './data/third-place-annex-c.json' with { type: 'json' }
+import resultJson from './data/wc2026-results.json' with { type: 'json' }
 import type { MatchStatus, Team } from './index.js'
 
 type RawFixture = {
@@ -17,6 +19,56 @@ type RawTeam = {
   name: string
   fifa_code: string
   flag_unicode?: string
+  group?: string
+}
+
+type SeedResult = {
+  date: string
+  round: string
+  group?: string
+  team1: string
+  team2: string
+  g1: number
+  g2: number
+  status: 'FT'
+  winner?: string | null
+}
+
+type GroupLetter = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L'
+
+type StandingRow = {
+  name: string
+  group: GroupLetter
+  played: number
+  points: number
+  goalsFor: number
+  goalsAgainst: number
+}
+
+type QualifiedTeam = {
+  name: string
+  group: GroupLetter
+  position: 1 | 2 | 3
+  points: number
+  goalDifference: number
+  goalsFor: number
+}
+
+type SlotRef =
+  | { kind: 'winner'; matchNo: number }
+  | { kind: 'loser'; matchNo: number }
+  | { kind: 'groupRank'; position: 1 | 2; group: GroupLetter }
+  | { kind: 'thirdPlace'; groups: GroupLetter[] }
+
+type ResolvedMatch = {
+  homeName: string
+  awayName: string
+  result?: FixtureMatch['result']
+}
+
+type AnnexCTable = {
+  matchOrder: number[]
+  rows: Record<string, { assignments: string[]; no: number }>
 }
 
 export type FixtureMatch = {
@@ -123,7 +175,24 @@ const seededResultsByFixture = new Map(
   SEEDED_RESULTS.map((result) => [resultKey(result.date, result.team1, result.team2), result]),
 )
 
+const liveResultsByFixture = new Map(
+  ((resultJson as { matches?: SeedResult[] }).matches ?? [])
+    .filter((result) => result.status === 'FT')
+    .map((result) => [resultKey(result.date, result.team1, result.team2), result]),
+)
+
+const ANNEX_C = annexCJson as AnnexCTable
+
 export function seededResultForFixture(date: string, homeName: string, awayName: string) {
+  const liveResult = liveResultsByFixture.get(resultKey(date, homeName, awayName))
+  if (liveResult) {
+    return {
+      homeGoals: liveResult.g1,
+      awayGoals: liveResult.g2,
+      status: 'FT' as const,
+    }
+  }
+
   const seed = seededResultsByFixture.get(resultKey(date, homeName, awayName))
   if (!seed) return undefined
   return {
@@ -192,6 +261,12 @@ function buildKnownTeams(): Map<string, Team> {
 
 const knownTeams = buildKnownTeams()
 
+const teamGroups = new Map(
+  (teamJson as RawTeam[])
+    .map((raw) => [raw.name, raw.group?.replace(/^Group\s+/, '')])
+    .filter((entry): entry is [string, GroupLetter] => /^[A-L]$/.test(entry[1] ?? '')),
+)
+
 function toTeam(name: string): Team {
   return (
     knownTeams.get(name) ?? {
@@ -216,20 +291,194 @@ function parseResult(raw: RawFixture): FixtureMatch['result'] | undefined {
   }
 }
 
+function parseSlotRef(label: string): SlotRef | null {
+  const winner = label.match(/^W(\d+)$/)
+  if (winner) return { kind: 'winner', matchNo: Number(winner[1]) }
+
+  const loser = label.match(/^L(\d+)$/)
+  if (loser) return { kind: 'loser', matchNo: Number(loser[1]) }
+
+  const rank = label.match(/^([12])([A-L])$/)
+  if (rank) return { kind: 'groupRank', position: Number(rank[1]) as 1 | 2, group: rank[2] as GroupLetter }
+
+  const third = label.match(/^3([A-L](?:\/[A-L])*)$/)
+  if (third) return { kind: 'thirdPlace', groups: third[1].split('/') as GroupLetter[] }
+
+  return null
+}
+
+function emptyStanding(name: string, group: GroupLetter): StandingRow {
+  return {
+    name,
+    group,
+    played: 0,
+    points: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+  }
+}
+
+function applyResult(
+  standings: Map<string, StandingRow>,
+  homeName: string,
+  awayName: string,
+  result: NonNullable<FixtureMatch['result']>,
+) {
+  const homeGroup = teamGroups.get(homeName)
+  const awayGroup = teamGroups.get(awayName)
+  if (!homeGroup || homeGroup !== awayGroup) return
+
+  const home = standings.get(homeName) ?? emptyStanding(homeName, homeGroup)
+  const away = standings.get(awayName) ?? emptyStanding(awayName, awayGroup)
+  standings.set(homeName, home)
+  standings.set(awayName, away)
+
+  home.played += 1
+  away.played += 1
+  home.goalsFor += result.homeGoals
+  home.goalsAgainst += result.awayGoals
+  away.goalsFor += result.awayGoals
+  away.goalsAgainst += result.homeGoals
+
+  if (result.homeGoals > result.awayGoals) {
+    home.points += 3
+  } else if (result.homeGoals < result.awayGoals) {
+    away.points += 3
+  } else {
+    home.points += 1
+    away.points += 1
+  }
+}
+
+function compareStanding(left: StandingRow, right: StandingRow) {
+  const leftGoalDifference = left.goalsFor - left.goalsAgainst
+  const rightGoalDifference = right.goalsFor - right.goalsAgainst
+  return (
+    right.points - left.points ||
+    rightGoalDifference - leftGoalDifference ||
+    right.goalsFor - left.goalsFor ||
+    left.name.localeCompare(right.name)
+  )
+}
+
+function groupQualifiers(rawFixtures: RawFixture[]) {
+  const standings = new Map<string, StandingRow>()
+  for (const raw of rawFixtures) {
+    if (!raw.group) continue
+    const result = parseResult(raw)
+    if (!result) continue
+    applyResult(standings, raw.team1, raw.team2, result)
+  }
+
+  const qualifiers: QualifiedTeam[] = []
+  const thirdPlaceRows: QualifiedTeam[] = []
+
+  for (const group of 'ABCDEFGHIJKL'.split('') as GroupLetter[]) {
+    const ranked = [...standings.values()]
+      .filter((row) => row.group === group)
+      .sort(compareStanding)
+
+    ranked.slice(0, 3).forEach((row, index) => {
+      const qualifier = {
+        name: row.name,
+        group,
+        position: (index + 1) as 1 | 2 | 3,
+        points: row.points,
+        goalDifference: row.goalsFor - row.goalsAgainst,
+        goalsFor: row.goalsFor,
+      }
+      if (index < 2) qualifiers.push(qualifier)
+      if (index === 2) thirdPlaceRows.push(qualifier)
+    })
+  }
+
+  return [
+    ...qualifiers,
+    ...thirdPlaceRows
+      .sort((left, right) =>
+        right.points - left.points ||
+        right.goalDifference - left.goalDifference ||
+        right.goalsFor - left.goalsFor ||
+        left.name.localeCompare(right.name),
+      )
+      .slice(0, 8),
+  ]
+}
+
+function annexCKey(groups: Iterable<GroupLetter>) {
+  return [...groups].sort().join('')
+}
+
+function thirdPlaceAssignments(qualifiers: QualifiedTeam[]) {
+  const thirds = new Map(
+    qualifiers
+      .filter((qualifier) => qualifier.position === 3)
+      .map((qualifier) => [qualifier.group, qualifier]),
+  )
+  const row = ANNEX_C.rows[annexCKey(thirds.keys())]
+  if (!row) return new Map<number, QualifiedTeam>()
+
+  return new Map(
+    row.assignments.flatMap((assignment, index) => {
+      const group = assignment.replace(/^3/, '') as GroupLetter
+      const qualifier = thirds.get(group)
+      return qualifier ? [[ANNEX_C.matchOrder[index], qualifier] as const] : []
+    }),
+  )
+}
+
+function resolveKnockoutSlots(rawFixtures: RawFixture[]) {
+  const qualifiers = groupQualifiers(rawFixtures)
+  const byRank = new Map(qualifiers.map((qualifier) => [`${qualifier.position}${qualifier.group}`, qualifier]))
+  const byThirdSlot = thirdPlaceAssignments(qualifiers)
+  const byNumber = new Map<number, ResolvedMatch>()
+
+  function resolveName(label: string, matchNo: number): string {
+    const ref = parseSlotRef(label)
+    if (!ref) return label
+
+    if (ref.kind === 'groupRank') return byRank.get(`${ref.position}${ref.group}`)?.name ?? label
+    if (ref.kind === 'thirdPlace') return byThirdSlot.get(matchNo)?.name ?? label
+
+    const previous = byNumber.get(ref.matchNo)
+    if (!previous?.result) return label
+    if (previous.result.homeGoals === previous.result.awayGoals) return label
+    const homeWon = previous.result.homeGoals > previous.result.awayGoals
+    if (ref.kind === 'winner') return homeWon ? previous.homeName : previous.awayName
+    return homeWon ? previous.awayName : previous.homeName
+  }
+
+  return rawFixtures.map((raw, index) => {
+    const matchNo = index + 1
+    const homeName = resolveName(raw.team1, matchNo)
+    const awayName = resolveName(raw.team2, matchNo)
+    const result = seededResultForFixture(raw.date, homeName, awayName) ?? parseResult(raw)
+    const resolved = { homeName, awayName, result }
+    byNumber.set(matchNo, resolved)
+    return resolved
+  })
+}
+
 export function loadFixtures(): FixtureMatch[] {
-  return ((fixtureJson as { matches: RawFixture[] }).matches ?? []).map((raw, index) => ({
-    id: toMatchId(raw, index),
-    date: raw.date,
-    time: raw.time,
-    round: raw.round,
-    group: raw.group?.replace(/^Group\s+/, '') ?? 'Knockout',
-    venue: raw.ground ?? 'TBD',
-    homeName: raw.team1,
-    awayName: raw.team2,
-    home: toTeam(raw.team1),
-    away: toTeam(raw.team2),
-    result: parseResult(raw),
-  }))
+  const rawFixtures = (fixtureJson as { matches: RawFixture[] }).matches ?? []
+  const resolvedSlots = resolveKnockoutSlots(rawFixtures)
+
+  return rawFixtures.map((raw, index) => {
+    const resolved = resolvedSlots[index]
+    return {
+      id: toMatchId(raw, index),
+      date: raw.date,
+      time: raw.time,
+      round: raw.round,
+      group: raw.group?.replace(/^Group\s+/, '') ?? 'Knockout',
+      venue: raw.ground ?? 'TBD',
+      homeName: resolved.homeName,
+      awayName: resolved.awayName,
+      home: toTeam(resolved.homeName),
+      away: toTeam(resolved.awayName),
+      result: resolved.result,
+    }
+  })
 }
 
 export function createFixtureKickoffLookup(matches: FixtureMatch[] = loadFixtures()): Map<string, string> {

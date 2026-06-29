@@ -28,10 +28,11 @@ export function roomKickoffMs(room: Room, fixtureKickoffs?: FixtureKickoffLookup
 }
 
 export function effectiveRoomMatchStatus(room: Room, options: { now?: Date; fixtureKickoffs?: FixtureKickoffLookup } = {}): MatchStatus {
+  const kickoffStatus = matchStatusFromKickoff(roomKickoffIso(room, options.fixtureKickoffs), options.now)
   if (room.currentScore?.status === 'finished') return 'finished'
-  if (room.currentScore?.status === 'live') return 'live'
+  if (room.currentScore?.status === 'live' && kickoffStatus !== 'finished') return 'live'
 
-  return matchStatusFromKickoff(roomKickoffIso(room, options.fixtureKickoffs), options.now) ?? room.matchStatus
+  return kickoffStatus ?? room.matchStatus
 }
 
 export function isRoomLocked(room: Room, options: { now?: Date; fixtureKickoffs?: FixtureKickoffLookup } = {}) {

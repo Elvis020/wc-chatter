@@ -32,6 +32,8 @@
   --grain-haze: rgba(255, 249, 236, 0.018);
   --layer-dropdown: 1000;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snappy: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
@@ -427,7 +429,80 @@ textarea:focus {
 }
 
 .reaction-count {
-  animation: reaction-count-rise 180ms var(--ease);
+  display: inline-block;
+  transform-origin: 50% 62%;
+  animation: reaction-count-rise 180ms var(--ease-spring);
+}
+
+.motion-press {
+  transform: translateZ(0);
+  transform-origin: center;
+}
+
+.motion-press:disabled,
+.motion-press[disabled] {
+  transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .motion-press:not(:disabled):not([disabled]):hover {
+    transform: translateY(-1px);
+  }
+}
+
+.motion-press:not(:disabled):not([disabled]):active {
+  transform: translateY(0) scale(0.985);
+}
+
+.motion-fast {
+  transition-duration: 100ms;
+  transition-property: background-color, border-color, color, opacity, transform;
+  transition-timing-function: var(--ease-snappy);
+}
+
+.motion-snappy {
+  transition-duration: 150ms;
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  transition-timing-function: var(--ease-snappy);
+}
+
+.motion-field {
+  transition-duration: 200ms;
+  transition-property: background-color, border-color, box-shadow, color, opacity;
+  transition-timing-function: var(--ease);
+}
+
+.motion-card {
+  transition-duration: 260ms;
+  transition-property: background-color, border-color, box-shadow;
+  transition-timing-function: var(--ease);
+}
+
+.motion-color {
+  transition-duration: 150ms;
+  transition-property: color;
+  transition-timing-function: var(--ease-snappy);
+}
+
+.stat-ticker {
+  display: inline-block;
+  min-width: 1ch;
+  font-variant-numeric: tabular-nums;
+  transform-origin: 50% 70%;
+}
+
+.stat-ticker-pop {
+  animation: stat-ticker-pop 180ms var(--ease-spring);
+}
+
+.room-list-card {
+  animation: item-rise 190ms var(--ease) both;
+  animation-delay: var(--room-delay, 0ms);
+}
+
+.prediction-list-card {
+  animation: item-rise 210ms var(--ease) both;
+  animation-delay: var(--feed-delay, 0ms);
 }
 
 .live-pulse-dot {
@@ -496,14 +571,15 @@ textarea:focus {
 }
 
 .prediction-list-move {
-  transition: transform 160ms var(--ease);
+  transition: transform 170ms var(--ease);
 }
 
 .prediction-list-enter-active,
 .prediction-list-leave-active {
   transition:
-    opacity 180ms var(--ease),
-    transform 180ms var(--ease);
+    opacity 190ms var(--ease),
+    transform 190ms var(--ease);
+  transition-delay: var(--feed-delay, 0ms);
 }
 
 .prediction-list-enter-from,
@@ -514,8 +590,8 @@ textarea:focus {
 
 .room-surface-enter-active {
   transition:
-    opacity 260ms var(--ease),
-    transform 260ms var(--ease);
+    opacity 230ms var(--ease),
+    transform 230ms var(--ease);
 }
 
 .room-surface-leave-active {
@@ -527,13 +603,13 @@ textarea:focus {
 .room-switch-forward .room-surface-enter-from,
 .room-switch-backward .room-surface-leave-to {
   opacity: 0;
-  transform: translateX(12px);
+  transform: translateX(10px) scale(0.995);
 }
 
 .room-switch-backward .room-surface-enter-from,
 .room-switch-forward .room-surface-leave-to {
   opacity: 0;
-  transform: translateX(-12px);
+  transform: translateX(-10px) scale(0.995);
 }
 
 .room-surface-enter-to,
@@ -990,24 +1066,24 @@ body[data-theme='pub'] .pitch-stat text:first-child {
 .top-pick-fade-enter-active,
 .top-pick-fade-leave-active {
   transition:
-    opacity 180ms var(--ease),
-    transform 180ms var(--ease);
+    opacity 190ms var(--ease),
+    transform 190ms var(--ease);
 }
 
 .top-pick-fade-enter-from {
   opacity: 0;
-  transform: translateY(6px) scale(0.99);
+  transform: translateY(5px) scale(0.992);
 }
 
 .top-pick-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px) scale(0.99);
+  transform: translateY(-5px) scale(0.992);
 }
 
 .room-feed-enter-active {
   transition:
-    opacity 260ms var(--ease),
-    transform 260ms var(--ease);
+    opacity 230ms var(--ease),
+    transform 230ms var(--ease);
 }
 
 .room-feed-leave-active {
@@ -1019,13 +1095,13 @@ body[data-theme='pub'] .pitch-stat text:first-child {
 .room-switch-forward .room-feed-enter-from,
 .room-switch-backward .room-feed-leave-to {
   opacity: 0;
-  transform: translateX(10px) translateY(4px);
+  transform: translateX(8px) translateY(3px) scale(0.997);
 }
 
 .room-switch-backward .room-feed-enter-from,
 .room-switch-forward .room-feed-leave-to {
   opacity: 0;
-  transform: translateX(-10px) translateY(4px);
+  transform: translateX(-8px) translateY(3px) scale(0.997);
 }
 
 .room-feed-enter-to,
@@ -1141,11 +1217,40 @@ body[data-theme='pub'] .pitch-stat text:first-child {
 @keyframes reaction-count-rise {
   0% {
     opacity: 0;
-    transform: translateY(3px);
+    transform: translateY(3px) scale(0.96);
+  }
+  62% {
+    transform: translateY(0) scale(1.08);
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes stat-ticker-pop {
+  0% {
+    opacity: 0.76;
+    transform: translateY(4px) scale(0.96);
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(0) scale(1.035);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes item-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(7px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1283,6 +1388,9 @@ body[data-theme='pub'] .pitch-stat text:first-child {
 
   .reaction-pop,
   .reaction-count,
+  .stat-ticker-pop,
+  .room-list-card,
+  .prediction-list-card,
   .room-update-pulse,
   .live-pulse-dot,
   .top-pick-emoji,

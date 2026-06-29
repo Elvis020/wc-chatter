@@ -15,7 +15,7 @@
 ### Frontend App
 - **Entry point:** `apps/web/src/App.vue`
 - **Key functions:** `submitPrediction`, `submitLike`, `submitReply`, `submitPredictionEdit`, `submitReplyEdit`, `buildTopPickInsights`, `roomSplitPercentages`, `connectActiveRoomEvents`, `updateLocalPrediction`, `updateLocalReplyThread`
-- **Initialization:** On mount, loads stored theme/identity, fetches bootstrap data, connects WebSocket for active room, installs global click/resize/scroll listeners, and starts room refresh/readout carousel timers.
+- **Initialization:** On mount, loads stored theme/identity, fetches bootstrap data, connects WebSocket for active room, installs global click/resize/scroll listeners, and starts room refresh, room clock, active-room poll, and readout carousel timers.
 - **Non-obvious logic:** Prediction comments are optional on create but edits require minimum comment text. The room readout carousel is JS-driven via `activeTopPickIndex`; the room-split slide uses a compact inline pitch SVG and dot pills.
 
 ### Frontend Components
@@ -35,7 +35,7 @@
 ### Persistence Stores
 - **Entry points:** `apps/api/src/store.ts`, `apps/api/src/supabase-store.ts`
 - **Key behavior:** Fallback store keeps rooms, likes, clients, and prize claims in memory. Supabase store maps normalized DB rows to shared `Room`/`Prediction`/`Reply` shapes and writes predictions, likes, edits, replies, and prize claims.
-- **Non-obvious logic:** Supabase queries include fallback select shapes for older schema states. Rooms hidden by room status are filtered out. Finished/closed rooms reject prediction and edit mutations.
+- **Non-obvious logic:** Supabase queries include fallback select shapes for older schema states. Rooms hidden by room status are filtered out. Finished/closed rooms reject prediction and edit mutations, and prediction creation is also restricted to the today/tomorrow public match window.
 
 ### Realtime
 - **Entry point:** `apps/api/src/room-hub.ts`
@@ -43,11 +43,11 @@
 
 ### Sync Jobs
 - **Entry points:** `apps/api/src/room-sync.ts`, `apps/api/src/live-score-sync.ts`, `apps/api/src/live-score-providers.ts`
-- **Key behavior:** Room sync upserts current-cycle rooms from fixture data. Live score sync merges provider scorelines and updates current score/match status fields for candidate rooms.
+- **Key behavior:** Room sync upserts the active knockout round through the today/tomorrow match-cycle window once knockout play has started, while the public board always keeps historical finished rooms visible. Before knockout play starts it uses the current/next cycle fallback. Live score sync merges provider scorelines and updates current score/match status fields for candidate rooms.
 
 ### Shared Package
 - **Entry points:** `packages/shared/src/index.ts`, `packages/shared/src/fixtures.ts`, `packages/shared/src/room-state.ts`, `packages/shared/src/mock-data.ts`
-- **Key behavior:** Shared types keep frontend/API contracts aligned. Fixture helpers derive teams, FIFA codes, subdivision flag IDs, kickoff windows, and room ordering.
+- **Key behavior:** Shared types keep frontend/API contracts aligned. Fixture helpers derive teams, FIFA codes, subdivision flag IDs, kickoff windows, and room ordering. Fixture loading overlays finished-result seeds, resolves group-rank and Annex C third-place Round-of-32 slots, and can resolve later `Wxx`/`Lxx` knockout slots when prior knockout results exist, though the public board only exposes the active round. Room-state helpers use kickoff timing as a fallback to close stale live score states after the local match window ends.
 
 ## Configuration
 | Variable / Property | Default | Purpose |
@@ -71,7 +71,7 @@
 | `apps/api/src/store.ts:createStore` prize claim path | `apps/api/test/store.test.ts` |
 | `apps/api/src/supabase-store.ts:mapPredictions` | `apps/api/test/supabase-store.test.ts` |
 | `packages/shared/src/room-state.ts` status/sorting helpers | `packages/shared/test/room-state.test.ts` |
-| `packages/shared/src/fixtures.ts` subdivision flag mapping | `packages/shared/test/room-state.test.ts` |
+| `packages/shared/src/fixtures.ts` subdivision flag mapping and knockout slot resolution | `packages/shared/test/room-state.test.ts` |
 | `apps/api/src/server.ts` route validation/rate limits | — no direct route test found |
 | `apps/api/src/room-hub.ts` WebSocket/typing fanout | — no direct test found |
 | `apps/api/src/live-score-sync.ts` live score sync | — no direct test found |
@@ -79,4 +79,3 @@
 | `apps/web/src/App.vue` UI interactions/readout carousel | — no direct component test found |
 | `apps/web/src/components/ScoreDrawer.vue` | — no test found |
 | `apps/web/src/components/IdentityPrompt.vue` | — no test found |
-

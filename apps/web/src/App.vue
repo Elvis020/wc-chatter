@@ -34,6 +34,7 @@ const INITIAL_FEED_RENDER_LIMIT = 24
 const FEED_RENDER_STEP = 24
 const ACTIVE_ROOM_POLL_MS = 3_500
 const ROOM_REFRESH_MS = 60_000
+const ROOM_CLOCK_MS = 60_000
 const ADMIN_PRIZE_PAGE_SIZE = 6
 const TYPING_IDLE_MS = 1800
 const TYPING_THROTTLE_MS = 1400
@@ -80,6 +81,7 @@ const prizeAnswer = ref(getStoredPrizeAnswer())
 const prizeAnswerDraft = ref(prizeAnswer.value)
 const usernameError = ref('')
 const rooms = ref<Room[]>([])
+const roomClock = ref(new Date())
 const adminEntries = ref<PrizeDeskEntry[]>([])
 const adminPrizeFilter = ref<AdminPrizeFilter>('all')
 const adminPrizePage = ref(0)
@@ -136,6 +138,7 @@ let mutationErrorTimer: ReturnType<typeof window.setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
 let activeRoomPollTimer: ReturnType<typeof window.setInterval> | null = null
 let roomRefreshTimer: ReturnType<typeof window.setInterval> | null = null
+let roomClockTimer: ReturnType<typeof window.setInterval> | null = null
 let topPickCarouselTimer: ReturnType<typeof window.setInterval> | null = null
 let themePreviewTimer: ReturnType<typeof window.setTimeout> | null = null
 let themeTransitionTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -255,7 +258,7 @@ const canSaveUsername = computed(() =>
   (!username.value || !hasPrizeVerification.value),
 )
 const canSortPredictions = computed(() => (activeRoom.value?.predictions.length ?? 0) > 0)
-const activeRoomPredictionsClosed = computed(() => !!activeRoom.value && isRoomLockedByState(activeRoom.value, { fixtureKickoffs }))
+const activeRoomPredictionsClosed = computed(() => !!activeRoom.value && isRoomLockedByState(activeRoom.value, { now: roomClock.value, fixtureKickoffs }))
 const canSubmitPrediction = computed(() => !activeRoomPredictionsClosed.value)
 const userPrediction = computed(() => activeRoom.value?.predictions.find((prediction) => prediction.authorId === userId) ?? null)
 const hasUserPredicted = computed(() => !!userPrediction.value)
@@ -280,9 +283,9 @@ const shouldAutoPromptUsername = computed(() =>
   !isMobileViewportState.value,
 )
 const orderedRooms = computed(() =>
-  [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { fixtureKickoffs })),
+  [...rooms.value].sort((left, right) => compareRoomsForSwitcherByState(left, right, { now: roomClock.value, fixtureKickoffs })),
 )
-const currentRoomCycleKey = computed(() => roomCycleDateKey(Date.now()))
+const currentRoomCycleKey = computed(() => roomCycleDateKey(roomClock.value.getTime()))
 const roomDayBuckets = computed<RoomDayBucket[]>(() =>
   groupRoomsByCycle(orderedRooms.value, {
     kickoffMsForRoom: roomKickoffMs,
@@ -767,7 +770,7 @@ function roomKickoffMs(room: Room) {
 }
 
 function effectiveRoomMatchStatus(room: Room) {
-  return effectiveRoomMatchStatusByState(room, { fixtureKickoffs })
+  return effectiveRoomMatchStatusByState(room, { now: roomClock.value, fixtureKickoffs })
 }
 
 function isExactPick(prediction: Prediction, score = activeRoomFinalScore.value) {
@@ -1778,6 +1781,7 @@ function handleRouteChange() {
 
 function handleResumeRealtime() {
   if (document.hidden || isNotFound.value || isAdminRoute.value) return
+  roomClock.value = new Date()
   void refreshActiveRoom()
 }
 
@@ -2012,6 +2016,9 @@ onMounted(async () => {
     if (isNotFound.value || isAdminRoute.value || document.hidden) return
     void refreshRooms({ preserveActiveRoom: true, silent: true })
   }, ROOM_REFRESH_MS)
+  roomClockTimer = window.setInterval(() => {
+    roomClock.value = new Date()
+  }, ROOM_CLOCK_MS)
   activeRoomPollTimer = window.setInterval(() => {
     void refreshActiveRoom()
   }, ACTIVE_ROOM_POLL_MS)
@@ -2037,6 +2044,9 @@ onBeforeUnmount(() => {
   }
   if (roomRefreshTimer) {
     window.clearInterval(roomRefreshTimer)
+  }
+  if (roomClockTimer) {
+    window.clearInterval(roomClockTimer)
   }
   if (topPickCarouselTimer) {
     window.clearInterval(topPickCarouselTimer)
@@ -2116,7 +2126,7 @@ onBeforeUnmount(() => {
       <div class="ui-select relative z-[var(--layer-dropdown)] w-[46px]" :class="{ open: themeMenuOpen }">
         <button
           ref="themeTrigger"
-          class="inline-grid min-h-[46px] w-[46px] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] p-0 text-[var(--text)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line-strong)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] active:translate-y-px"
+          class="motion-press inline-grid min-h-[46px] w-[46px] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] p-0 text-[var(--text)] motion-fast hover:border-[var(--line-strong)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))]"
           type="button"
           aria-label="Choose theme"
           :aria-expanded="String(themeMenuOpen)"
@@ -2147,7 +2157,7 @@ onBeforeUnmount(() => {
             v-for="(theme, index) in mockThemes"
             :key="theme.id"
             :ref="(element) => setThemeOptionRef(element as HTMLButtonElement | null, index)"
-            class="grid min-h-11 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-2.5 rounded-lg bg-transparent px-3 text-left text-[13px] font-[750] text-[var(--text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] active:translate-y-px aria-selected:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))]"
+            class="motion-press grid min-h-11 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-2.5 rounded-lg bg-transparent px-3 text-left text-[13px] font-[750] text-[var(--text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--panel))] aria-selected:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--panel))]"
             type="button"
             role="option"
             :id="themeOptionId(index)"
@@ -2198,7 +2208,7 @@ onBeforeUnmount(() => {
           <p class="m-0 text-sm leading-[1.55] text-[var(--soft)]">This admin area is desktop-only for now. Open the same link on a laptop or larger screen to review winners and pickup details comfortably.</p>
         </div>
         <button
-          class="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px"
+          class="motion-press mx-auto inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)]"
           type="button"
           @click="showHome"
         >Back to rooms</button>
@@ -2287,7 +2297,7 @@ onBeforeUnmount(() => {
           </div>
 
           <button
-            class="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px"
+            class="motion-press inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)]"
             type="button"
             @click="showHome"
           >
@@ -2447,7 +2457,7 @@ onBeforeUnmount(() => {
           </div>
 
           <button
-            class="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-75 disabled:active:translate-y-0"
+            class="motion-press inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] disabled:cursor-wait disabled:opacity-75"
             type="button"
             :disabled="loading || refreshingRooms"
             @click="bootstrap"
@@ -2479,7 +2489,7 @@ onBeforeUnmount(() => {
         <h1 class="m-0 text-3xl font-black leading-tight text-[var(--text)]">No rooms yet</h1>
         <p class="m-0 text-sm leading-[1.55] text-[var(--muted)]">There are no fixtures in this cycle right now. Refresh when the next room slate is ready.</p>
         <button
-          class="mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-4 text-sm font-extrabold text-[var(--accent)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] active:translate-y-px disabled:cursor-wait disabled:opacity-70 disabled:active:translate-y-0"
+          class="motion-press mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_28%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_7%,var(--panel))] px-4 text-sm font-extrabold text-[var(--accent)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--panel))] disabled:cursor-wait disabled:opacity-70"
           type="button"
           :disabled="refreshingRooms"
           @click="bootstrap"
@@ -2502,7 +2512,7 @@ onBeforeUnmount(() => {
       <div class="grid gap-[18px] max-md:gap-3">
         <button
           v-if="sortedPredictions.length"
-          class="hidden items-center justify-center gap-2 transition-[background-color,border-color,color,transform] duration-150 ease-[var(--ease)] active:translate-y-px disabled:cursor-default disabled:active:translate-y-0 max-md:inline-flex"
+          class="motion-press hidden items-center justify-center gap-2 motion-snappy disabled:cursor-default max-md:inline-flex"
           :class="scoreCtaDisabled
             ? 'mx-auto min-h-9 w-fit rounded-full border border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line))] bg-[color:color-mix(in_srgb,var(--panel)_82%,var(--accent)_8%)] px-3.5 text-[11px] font-black uppercase text-[color:color-mix(in_srgb,var(--accent)_82%,var(--text))] shadow-none'
             : 'min-h-12 w-full rounded-xl bg-[var(--accent)] px-4 text-[15px] font-extrabold text-[var(--accent-text)]'"
@@ -2568,7 +2578,7 @@ onBeforeUnmount(() => {
                   </div>
 
                   <div v-if="exactPickPredictions.length > 0" class="grid justify-items-center gap-1.5">
-                    <strong class="block text-[clamp(28px,3vw,44px)] leading-none text-[var(--text)] max-md:text-[24px]">{{ exactPickPredictions.length }}</strong>
+                    <strong :key="`exact-picks-${exactPickPredictions.length}`" class="stat-ticker stat-ticker-pop block text-[clamp(28px,3vw,44px)] leading-none text-[var(--text)] max-md:text-[24px]">{{ exactPickPredictions.length }}</strong>
                     <span class="text-[13px] font-[750] text-[var(--muted)] max-md:text-[11px]">
                       {{ exactPickPredictions.length === 1 ? 'exact pick' : 'exact picks' }}
                     </span>
@@ -2580,17 +2590,17 @@ onBeforeUnmount(() => {
 
                 <div v-else class="mt-0.5 grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 border-t border-[var(--line)] pt-4 max-md:pt-3" aria-label="Event stats">
                   <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
-                    <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ activeRoom.predictions.length }}</strong>
+                    <strong :key="`stat-predictions-${activeRoom.predictions.length}`" class="stat-ticker stat-ticker-pop block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ activeRoom.predictions.length }}</strong>
                     <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Predictions</span>
                   </div>
                   <span class="h-1.5 w-1.5 self-center rounded-full bg-[color:color-mix(in_srgb,var(--muted)_38%,transparent)]" aria-hidden="true"></span>
                   <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
-                    <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalLikes }}</strong>
+                    <strong :key="`stat-likes-${totalLikes}`" class="stat-ticker stat-ticker-pop block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalLikes }}</strong>
                     <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Likes</span>
                   </div>
                   <span class="h-1.5 w-1.5 self-center rounded-full bg-[color:color-mix(in_srgb,var(--muted)_38%,transparent)]" aria-hidden="true"></span>
                   <div class="grid min-h-[58px] justify-items-center px-4 text-center max-md:min-h-[46px] max-md:px-2">
-                    <strong class="block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalComments }}</strong>
+                    <strong :key="`stat-replies-${totalComments}`" class="stat-ticker stat-ticker-pop block text-[clamp(30px,3vw,44px)] leading-[0.95] text-[var(--text)] max-md:text-[26px]">{{ totalComments }}</strong>
                     <span class="mt-2 block text-[13px] font-[650] text-[var(--muted)] max-md:mt-1 max-md:text-[11px]">Replies</span>
                   </div>
                 </div>
@@ -2663,7 +2673,7 @@ onBeforeUnmount(() => {
             </div>
             <div v-if="roomDayBuckets.length > 1" class="flex items-center justify-between gap-2 text-[var(--muted)]" aria-label="Room pages">
                 <button
-                  class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                  class="motion-press inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] disabled:pointer-events-none disabled:opacity-25"
                   type="button"
                   aria-label="Previous rooms"
                   :disabled="!leftRoomBucket"
@@ -2675,7 +2685,7 @@ onBeforeUnmount(() => {
                 </button>
                 <span class="text-[11px] font-bold text-[var(--muted)]">{{ roomPageLabel }}</span>
                 <button
-                  class="inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                  class="motion-press inline-grid h-7 w-7 place-items-center rounded-md border border-transparent text-[var(--muted)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] hover:text-[var(--accent)] disabled:pointer-events-none disabled:opacity-25"
                   type="button"
                   aria-label="Next rooms"
                   :disabled="!rightRoomBucket"
@@ -2691,14 +2701,15 @@ onBeforeUnmount(() => {
 
           <div class="grid grid-cols-2 gap-2" aria-label="Match rooms for the current cycle">
             <button
-              v-for="room in visibleRooms"
+              v-for="(room, roomIndex) in visibleRooms"
               :key="room.id"
-              class="grid min-h-[82px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-2 text-left transition-[background-color,border-color,transform] duration-150 ease-[var(--ease)] active:translate-y-px"
+              class="room-list-card motion-press grid min-h-[82px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-2 text-left motion-snappy"
               :class="[
                 room.id === activeRoomId ? 'border-[color:color-mix(in_srgb,var(--accent)_34%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))]' : 'border-[var(--line)] bg-[color:color-mix(in_srgb,var(--chip-bg)_46%,transparent)]',
                 effectiveRoomMatchStatus(room) === 'finished' ? 'opacity-80' : '',
                 isRoomRecentlyUpdated(room.id) ? 'room-update-pulse' : '',
               ]"
+              :style="{ '--room-delay': `${Math.min(roomIndex * 24, 120)}ms` }"
               type="button"
               @click="setActiveRoom(room.id)"
             >
@@ -2753,7 +2764,7 @@ onBeforeUnmount(() => {
               <span class="text-[15px] font-medium text-[var(--muted)] max-sm:text-[11px]">Sorted by room energy</span>
             </h2>
             <button
-              class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_84%,transparent)] px-3 text-[13px] font-[760] text-[var(--soft)] transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--text)] active:translate-y-px disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:text-[var(--muted)] disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:active:translate-y-0 max-sm:ml-auto max-sm:h-8 max-sm:min-h-8 max-sm:w-[66px] max-sm:gap-1 max-sm:self-baseline max-sm:rounded-md max-sm:border-[var(--line)] max-sm:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] max-sm:px-2 max-sm:py-0 max-sm:text-[11px] max-sm:font-[780] max-sm:leading-none max-sm:text-[var(--soft)] md:min-h-9"
+              class="motion-press inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--chip-bg)_84%,transparent)] px-3 text-[13px] font-[760] text-[var(--soft)] motion-snappy hover:border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] disabled:text-[var(--muted)] disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_44%,transparent)] max-sm:ml-auto max-sm:h-8 max-sm:min-h-8 max-sm:w-[66px] max-sm:gap-1 max-sm:self-baseline max-sm:rounded-md max-sm:border-[var(--line)] max-sm:bg-[color:color-mix(in_srgb,var(--chip-bg)_72%,transparent)] max-sm:px-2 max-sm:py-0 max-sm:text-[11px] max-sm:font-[780] max-sm:leading-none max-sm:text-[var(--soft)] md:min-h-9"
               type="button"
               :aria-label="nextFeedSortLabel"
               :aria-pressed="feedSortMode === 'comments'"
@@ -2798,7 +2809,7 @@ onBeforeUnmount(() => {
               <p class="m-0 max-w-[38ch] text-sm leading-[1.5] text-[var(--muted)]">Be first in the room with a score people can argue with.</p>
             </div>
             <button
-              class="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0"
+              class="motion-press inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80"
               type="button"
               :disabled="scoreCtaDisabled"
               @click="openPredictionModal"
@@ -2810,15 +2821,16 @@ onBeforeUnmount(() => {
             <div v-else :key="`feed-list-${activeRoom.id}`" ref="predictionFeedList">
             <TransitionGroup :key="activeRoom.id" name="prediction-list" tag="div" class="grid gap-2.5 max-md:gap-3">
               <article
-                v-for="feedItem in visiblePredictionFeedItems"
+                v-for="(feedItem, feedIndex) in visiblePredictionFeedItems"
                 :key="feedItem.prediction.id"
                 data-prediction-card
-                class="prediction relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 transition-[background-color,border-color] duration-300 ease-[var(--ease)] max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
+                class="prediction prediction-list-card relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 motion-card max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
                 :class="[
                   feedItem.isReplying || isCommentsExpanded(feedItem.prediction.id) ? 'border-[color:color-mix(in_srgb,var(--accent)_30%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_4%,var(--panel))]' : '',
                   isPredictionRecentlyUpdated(feedItem.prediction.id) ? 'room-update-pulse' : '',
                   isOptimisticPrediction(feedItem.prediction.id) ? 'opacity-80' : '',
                 ]"
+                :style="{ '--feed-delay': `${Math.min(feedIndex * 22, 132)}ms` }"
               >
               <div class="pt-0.5 max-md:pt-0">
                 <div class="prediction-avatar-wrap">
@@ -2892,14 +2904,14 @@ onBeforeUnmount(() => {
                           :disabled="isEditSubmitting(entry.id)"
                         />
                         <button
-                          class="inline-flex min-h-8 items-center justify-center rounded-md bg-[var(--accent)] px-2 text-[10px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0"
+                          class="motion-press inline-flex min-h-8 items-center justify-center rounded-md bg-[var(--accent)] px-2 text-[10px] font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] disabled:cursor-wait disabled:opacity-65"
                           type="submit"
                           :disabled="!canSubmitEdit(entry.id)"
                         >
                           {{ isEditSubmitting(entry.id) ? 'Saving' : 'Save' }}
                         </button>
                         <button
-                          class="inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] active:translate-y-px max-sm:col-span-2 max-sm:w-fit"
+                          class="motion-press inline-flex min-h-8 items-center justify-center rounded-md px-2 text-[10px] font-bold text-[var(--muted)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--text)] max-sm:col-span-2 max-sm:w-fit"
                           type="button"
                           :disabled="isEditSubmitting(entry.id)"
                           @click="cancelEdit(entry.id)"
@@ -2915,7 +2927,7 @@ onBeforeUnmount(() => {
                         <span v-if="entry.editedAt" class="ml-2 text-[9px] font-bold text-[color:color-mix(in_srgb,var(--muted)_82%,var(--text))]">Edited</span>
                         <button
                           v-if="entry.type === 'reply' && replyById(feedItem.prediction, entry.id) && canEditReply(replyById(feedItem.prediction, entry.id)!)"
-                          class="ml-3 inline-flex rounded px-1 text-[9px] font-black uppercase tracking-[0.08em] text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)] active:translate-y-px"
+                          class="motion-press ml-3 inline-flex rounded px-1 text-[9px] font-black uppercase tracking-[0.08em] text-[var(--muted)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] hover:text-[var(--accent)]"
                           type="button"
                           @click="startEditingReply(replyById(feedItem.prediction, entry.id)!)"
                         >
@@ -2926,7 +2938,7 @@ onBeforeUnmount(() => {
                   </TransitionGroup>
                   <button
                     v-if="feedItem.showToggle"
-                    class="ml-3 inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--accent)_62%,var(--muted))] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--muted))] active:translate-y-px"
+                    class="motion-press ml-3 inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-[650] leading-tight text-[color:color-mix(in_srgb,var(--accent)_62%,var(--muted))] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--muted))]"
                     type="button"
                     :aria-expanded="String(isCommentsExpanded(feedItem.prediction.id))"
                     @click="toggleComments(feedItem.prediction.id)"
@@ -2964,7 +2976,7 @@ onBeforeUnmount(() => {
                       @blur="stopTyping('reply', feedItem.replyTargetId)"
                     />
                     <button
-                      class="hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--control-border)] bg-[color:color-mix(in_srgb,var(--control-bg)_76%,transparent)] text-[var(--muted)] transition-[background-color,border-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] active:translate-y-px max-md:inline-flex"
+                      class="motion-press hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--control-border)] bg-[color:color-mix(in_srgb,var(--control-bg)_76%,transparent)] text-[var(--muted)] motion-fast max-md:inline-flex"
                       type="button"
                       aria-label="Close reply input"
                       :disabled="isReplySubmitting(feedItem.replyTargetId)"
@@ -2976,7 +2988,7 @@ onBeforeUnmount(() => {
                       </svg>
                     </button>
                     <button
-                      class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-wait disabled:opacity-65 disabled:active:translate-y-0 max-md:col-span-2"
+                      class="motion-press inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] disabled:cursor-wait disabled:opacity-65 max-md:col-span-2"
                       type="submit"
                       :disabled="!canSubmitReply(feedItem.replyTargetId)"
                     >
@@ -2994,7 +3006,7 @@ onBeforeUnmount(() => {
 
               <div class="grid w-[54px] flex-none content-start gap-1.5 justify-self-end max-md:w-[38px] max-md:gap-1">
                 <button
-                  class="group inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_70%,var(--muted))] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-[0.55] disabled:active:translate-y-0 max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
+                  class="motion-press group inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] motion-fast hover:border-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--accent)_7%,transparent)] hover:text-[color:color-mix(in_srgb,var(--accent)_70%,var(--muted))] disabled:cursor-not-allowed disabled:opacity-[0.55] max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
                   :class="likedPredictions.has(feedItem.prediction.id) ? 'text-[var(--accent)]' : ''"
                   type="button"
                   :aria-label="`Like prediction from ${feedItem.prediction.name}`"
@@ -3003,11 +3015,11 @@ onBeforeUnmount(() => {
                   <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" :class="likedPredictions.has(feedItem.prediction.id) ? 'reaction-pop fill-current text-[var(--accent)]' : ''" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <path d="M128 216S28 160 28 92a52 52 0 0 1 92-33.2L128 68l8-9.2A52 52 0 0 1 228 92c0 68-100 124-100 124Z"></path>
                   </svg>
-                  <span :key="feedItem.prediction.likes" class="reaction-count [font-variant-numeric:tabular-nums]">{{ feedItem.prediction.likes }}</span>
+                  <span :key="feedItem.prediction.likes" class="reaction-count stat-ticker">{{ feedItem.prediction.likes }}</span>
                 </button>
 
                 <button
-                  class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] transition-[border-color,background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] active:translate-y-px max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
+                  class="motion-press inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-[720] text-[var(--muted)] motion-fast hover:border-[var(--line)] hover:bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--chip-bg))] hover:text-[var(--accent)] max-md:min-h-8 max-md:min-w-8 max-md:gap-0.5 max-md:px-0 max-md:text-[11px] md:min-h-8 md:min-w-[54px]"
                   :class="isReplying(feedItem.prediction.id, feedItem.replyTargetId) ? 'border-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_9%,var(--chip-bg))] text-[var(--accent)]' : ''"
                   type="button"
                   :aria-expanded="String(isReplying(feedItem.prediction.id, feedItem.replyTargetId))"
@@ -3017,7 +3029,7 @@ onBeforeUnmount(() => {
                   <svg class="ph-icon h-5 w-5 max-md:h-4 max-md:w-4" viewBox="0 0 256 256" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="18">
                     <path d="M45.2 188.7A88 88 0 1 1 76 219.5L36 228Z"></path>
                   </svg>
-                  <span :key="feedItem.commentTotal" class="reaction-count [font-variant-numeric:tabular-nums]">{{ feedItem.commentTotal }}</span>
+                  <span :key="feedItem.commentTotal" class="reaction-count stat-ticker">{{ feedItem.commentTotal }}</span>
                   <span
                     v-if="hasReplyDraft(feedItem.replyTargetId)"
                     class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
@@ -3029,7 +3041,7 @@ onBeforeUnmount(() => {
             </TransitionGroup>
             <button
               v-if="hiddenPredictionFeedCount > 0"
-              class="mx-auto mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))] px-4 text-xs font-extrabold text-[var(--accent)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[color:color-mix(in_srgb,var(--accent)_38%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--panel))] active:translate-y-px"
+              class="motion-press mx-auto mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_26%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--panel))] px-4 text-xs font-extrabold text-[var(--accent)] motion-fast hover:border-[color:color-mix(in_srgb,var(--accent)_38%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--panel))]"
               type="button"
               @click="showMorePredictions"
             >
@@ -3041,7 +3053,7 @@ onBeforeUnmount(() => {
 
         <button
           v-if="feedNavMode !== 'hidden'"
-          class="fixed right-4 bottom-[calc(82px+env(safe-area-inset-bottom))] z-[720] hidden h-11 w-11 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--line)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] text-[var(--text)] backdrop-blur-md transition-[background-color,border-color,color,transform,opacity] duration-150 ease-[var(--ease)] active:translate-y-px max-md:grid"
+          class="motion-press fixed right-4 bottom-[calc(82px+env(safe-area-inset-bottom))] z-[720] hidden h-11 w-11 place-items-center rounded-full border border-[color:color-mix(in_srgb,var(--line)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] text-[var(--text)] backdrop-blur-md motion-snappy max-md:grid"
           type="button"
           :aria-label="feedNavMode === 'up' ? 'Jump to top of comments' : 'Jump to latest comments'"
           @click="handleFeedNavClick"
@@ -3222,7 +3234,7 @@ onBeforeUnmount(() => {
               <span class="min-w-0 overflow-hidden text-right text-ellipsis whitespace-nowrap text-xs font-extrabold uppercase text-[var(--muted)]">{{ activeRoom.away.name }}</span>
             </div>
 
-            <button class="mt-2 inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] transition-[background-color,opacity,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] active:translate-y-px disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80 disabled:active:translate-y-0" type="button" :disabled="scoreCtaDisabled" @click="openPredictionModal">{{ scoreCtaLabel }}</button>
+            <button class="motion-press mt-2 inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-[14px] text-[13px] font-extrabold text-[var(--accent-text)] motion-fast hover:bg-[color:color-mix(in_srgb,var(--accent)_86%,black)] disabled:cursor-default disabled:bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--chip-bg))] disabled:text-[color:color-mix(in_srgb,var(--accent)_72%,var(--text))] disabled:opacity-80" type="button" :disabled="scoreCtaDisabled" @click="openPredictionModal">{{ scoreCtaLabel }}</button>
           </div>
         </section>
 
@@ -3233,19 +3245,20 @@ onBeforeUnmount(() => {
               <path d="M84 96h88"></path>
               <path d="M84 128h56"></path>
             </svg>
-            <h2 class="m-0">Chat rooms</h2>
+            <h2 class="m-0 text-[var(--text)]">Chat rooms</h2>
           </div>
 
           <div class="grid gap-2.5 max-md:gap-3" aria-label="Match rooms for the current cycle">
             <button
-              v-for="room in visibleRooms"
+              v-for="(room, roomIndex) in visibleRooms"
               :key="room.id"
-              class="grid min-h-[62px] w-full items-center gap-3 rounded-lg border-0 border-t border-t-[color:color-mix(in_srgb,var(--line)_86%,transparent)] bg-transparent p-3 text-left text-[var(--text)] transition-[background-color,border-color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] first:border-t-0 first:pt-0.5 hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] active:translate-y-px max-md:grid-cols-1 max-md:items-start"
+              class="room-list-card motion-press grid min-h-[62px] w-full items-center gap-3 rounded-lg border-0 border-t border-t-[color:color-mix(in_srgb,var(--line)_86%,transparent)] bg-transparent p-3 text-left text-[var(--text)] motion-fast first:border-t-0 first:pt-0.5 hover:bg-[color:color-mix(in_srgb,var(--chip-bg)_70%,transparent)] max-md:grid-cols-1 max-md:items-start"
               :class="[
                 room.id === activeRoomId ? 'grid-cols-[minmax(0,1fr)_auto] border-t-transparent bg-[color:color-mix(in_srgb,var(--accent)_5%,transparent)] outline outline-1 outline-[color:color-mix(in_srgb,var(--accent)_24%,var(--line))] hover:bg-[color:color-mix(in_srgb,var(--accent)_8%,black)]' : 'grid-cols-[minmax(0,1fr)_auto]',
                 effectiveRoomMatchStatus(room) === 'finished' ? 'text-[var(--muted)]' : '',
                 isRoomRecentlyUpdated(room.id) ? 'room-update-pulse' : '',
               ]"
+              :style="{ '--room-delay': `${Math.min(roomIndex * 24, 120)}ms` }"
               type="button"
               @click="setActiveRoom(room.id)"
             >
@@ -3299,7 +3312,7 @@ onBeforeUnmount(() => {
 
           <div v-if="roomDayBuckets.length > 1" class="flex items-center justify-between border-t border-[var(--line)] pt-2 text-[var(--muted)]" aria-label="Room pages">
               <button
-                class="inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                class="motion-press inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] motion-fast hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] disabled:pointer-events-none disabled:opacity-25"
                 type="button"
                 aria-label="Previous rooms"
                 :disabled="!leftRoomBucket"
@@ -3311,7 +3324,7 @@ onBeforeUnmount(() => {
               </button>
               <span class="text-[11px] font-bold text-[var(--muted)]">{{ roomPageLabel }}</span>
               <button
-                class="inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-[background-color,color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] active:translate-y-px disabled:pointer-events-none disabled:opacity-25"
+                class="motion-press inline-grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] motion-fast hover:bg-[var(--chip-bg)] hover:text-[var(--accent)] disabled:pointer-events-none disabled:opacity-25"
                 type="button"
                 aria-label="Next rooms"
                 :disabled="!rightRoomBucket"
@@ -3329,7 +3342,7 @@ onBeforeUnmount(() => {
               <input
                 id="username"
                 v-model="usernameDraft"
-                class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3.5 text-base font-medium text-[var(--text)] outline-none transition-[border-color,box-shadow,opacity] duration-200 ease-[var(--ease)] placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)] disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_72%,var(--panel))] disabled:text-[var(--soft)] disabled:opacity-100 disabled:focus:shadow-none"
+                class="min-h-11 w-full rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-3.5 text-base font-medium text-[var(--text)] outline-none motion-field placeholder:text-[color:color-mix(in_srgb,var(--muted)_88%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_46%,var(--control-border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_10%,transparent)] disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_72%,var(--panel))] disabled:text-[var(--soft)] disabled:opacity-100 disabled:focus:shadow-none"
                 autocomplete="nickname"
                 maxlength="24"
                 placeholder="Your name"
@@ -3337,7 +3350,7 @@ onBeforeUnmount(() => {
               />
               <button
                 v-if="!username"
-                class="inline-flex h-11 min-w-[82px] flex-none items-center justify-center gap-1.5 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_30%,var(--control-border))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--control-bg))] px-3.5 text-sm font-[750] leading-none text-[var(--accent)] transition-[border-color,background-color,color,box-shadow,opacity,transform] duration-150 ease-[var(--ease)] hover:border-[color:color-mix(in_srgb,var(--accent)_44%,var(--control-border))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--control-bg))] active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_76%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-[0.58] disabled:shadow-none disabled:active:translate-y-0"
+                class="motion-press inline-flex h-11 min-w-[82px] flex-none items-center justify-center gap-1.5 rounded-lg border border-[color:color-mix(in_srgb,var(--accent)_30%,var(--control-border))] bg-[color:color-mix(in_srgb,var(--accent)_6%,var(--control-bg))] px-3.5 text-sm font-[750] leading-none text-[var(--accent)] motion-snappy hover:border-[color:color-mix(in_srgb,var(--accent)_44%,var(--control-border))] hover:bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--control-bg))] disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-[var(--line)] disabled:bg-[color:color-mix(in_srgb,var(--control-bg)_76%,var(--panel))] disabled:text-[var(--muted)] disabled:opacity-[0.58] disabled:shadow-none"
                 type="submit"
                 :disabled="usernameDraft.trim().length === 0"
                 :aria-label="usernameDraft.trim().length > 0 ? 'Set up username' : 'Enter username to set up'"
@@ -3364,7 +3377,7 @@ onBeforeUnmount(() => {
               <span>{{ usernameError || usernameConflictMessage || (username ? 'Saved locally for this browser' : '') }}</span>
               <button
                 v-if="username && showUsernameReset"
-                class="text-[11px] font-bold text-[var(--accent)] transition-[color,transform] duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[color:color-mix(in_srgb,var(--accent)_78%,black)] active:translate-y-px"
+                class="motion-press text-[11px] font-bold text-[var(--accent)] motion-fast hover:text-[color:color-mix(in_srgb,var(--accent)_78%,black)]"
                 type="button"
                 @click="resetUsername"
               >Reset</button>
