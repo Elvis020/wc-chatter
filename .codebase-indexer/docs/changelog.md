@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-30 — Prediction card submit motion fix
+- Stabilized the current user's prediction card key across the optimistic-to-persisted submit flow so Vue updates the card in place instead of briefly rendering duplicate cards.
+- Preserved pending optimistic predictions when bootstrap or active-room refreshes return stale room payloads before the prediction POST resolves, preventing the card from disappearing and reappearing.
+- Verified with a Playwright frame-sampling repro against an in-memory local API: the target card had no duplicate frames and no missing-after-appear frames while `sending` changed to the persisted prediction.
+
 ## 2026-06-29 — Internal room status updater
 - Added a frontend room clock so live/upcoming/finished labels, room ordering, and prediction locking re-evaluate every minute even when no new API payload arrives.
 - Hardened shared room-state derivation so stale provider `live` score states close after the fixture kickoff window has elapsed.

@@ -739,6 +739,14 @@ function isOptimisticPrediction(predictionId: string) {
   return predictionId.startsWith('optimistic-prediction-')
 }
 
+function predictionCardKey(prediction: Prediction) {
+  if (prediction.authorId === userId || isOptimisticPrediction(prediction.id)) {
+    return `author-${prediction.authorId}`
+  }
+
+  return prediction.id
+}
+
 function showsFullThread(prediction: Prediction) {
   return isCommentsExpanded(prediction.id)
 }
@@ -1470,24 +1478,44 @@ async function submitReplyEdit(reply: Reply) {
   }
 }
 
+function retainPendingPredictions(nextRoom: Room, previousRoom?: Room) {
+  if (!previousRoom) return nextRoom
+
+  const incomingIds = new Set(nextRoom.predictions.map((prediction) => prediction.id))
+  const incomingAuthorIds = new Set(nextRoom.predictions.map((prediction) => prediction.authorId))
+  const pendingPredictions = previousRoom.predictions.filter((prediction) =>
+    isOptimisticPrediction(prediction.id) &&
+    !incomingIds.has(prediction.id) &&
+    !incomingAuthorIds.has(prediction.authorId),
+  )
+
+  if (!pendingPredictions.length) return nextRoom
+
+  return pendingPredictions.reduceRight(
+    (room, prediction) => addRoomPrediction([room], room.id, prediction)[0] ?? room,
+    nextRoom,
+  )
+}
+
 function patchRoom(nextRoom: Room) {
   const previousRoom = rooms.value.find((room) => room.id === nextRoom.id)
-  if (previousRoom && roomPulseSignature(previousRoom) !== roomPulseSignature(nextRoom)) {
+  const roomToPatch = retainPendingPredictions(nextRoom, previousRoom)
+  if (previousRoom && roomPulseSignature(previousRoom) !== roomPulseSignature(roomToPatch)) {
     const previousPredictions = predictionPulseSignatures(previousRoom)
-    const nextPredictions = predictionPulseSignatures(nextRoom)
-    const changedPredictionIds = nextRoom.predictions
+    const nextPredictions = predictionPulseSignatures(roomToPatch)
+    const changedPredictionIds = roomToPatch.predictions
       .filter((prediction) => previousPredictions.get(prediction.id) !== nextPredictions.get(prediction.id))
       .map((prediction) => prediction.id)
-    markRoomUpdated(nextRoom.id, changedPredictionIds)
+    markRoomUpdated(roomToPatch.id, changedPredictionIds)
   }
 
-  const existing = rooms.value.some((room) => room.id === nextRoom.id)
+  const existing = rooms.value.some((room) => room.id === roomToPatch.id)
   rooms.value = existing
-    ? rooms.value.map((room) => (room.id === nextRoom.id ? nextRoom : room))
-    : [nextRoom, ...rooms.value]
+    ? rooms.value.map((room) => (room.id === roomToPatch.id ? roomToPatch : room))
+    : [roomToPatch, ...rooms.value]
 
   if (!activeRoomId.value) {
-    activeRoomId.value = nextRoom.id
+    activeRoomId.value = roomToPatch.id
   }
 }
 
@@ -1930,16 +1958,19 @@ async function refreshRooms(options: { preserveActiveRoom?: boolean; silent?: bo
 
   try {
     const response = await fetchBootstrap()
-    rooms.value = response.rooms
-    const currentRoomExists = response.rooms.some((room) => room.id === activeRoomId.value)
+    const mergedRooms = response.rooms.map((room) =>
+      retainPendingPredictions(room, rooms.value.find((previousRoom) => previousRoom.id === room.id)),
+    )
+    rooms.value = mergedRooms
+    const currentRoomExists = mergedRooms.some((room) => room.id === activeRoomId.value)
     const storedRoomId = getStoredActiveRoomId()
-    const storedRoomExists = response.rooms.some((room) => room.id === storedRoomId)
+    const storedRoomExists = mergedRooms.some((room) => room.id === storedRoomId)
     if (!options.preserveActiveRoom || !currentRoomExists) {
       activeRoomId.value = currentRoomExists
         ? activeRoomId.value
         : storedRoomExists
           ? storedRoomId
-          : response.rooms.find((room) => room.isFeatured)?.id ?? response.rooms[0]?.id ?? ''
+          : mergedRooms.find((room) => room.isFeatured)?.id ?? mergedRooms[0]?.id ?? ''
     }
     errorMessage.value = ''
     return true
@@ -2822,7 +2853,7 @@ onBeforeUnmount(() => {
             <TransitionGroup :key="activeRoom.id" name="prediction-list" tag="div" class="grid gap-2.5 max-md:gap-3">
               <article
                 v-for="(feedItem, feedIndex) in visiblePredictionFeedItems"
-                :key="feedItem.prediction.id"
+                :key="predictionCardKey(feedItem.prediction)"
                 data-prediction-card
                 class="prediction prediction-list-card relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_88%,transparent)] p-4 motion-card max-md:grid-cols-[40px_minmax(0,1fr)_38px] max-md:gap-2.5 max-md:rounded-[10px] max-md:p-3"
                 :class="[

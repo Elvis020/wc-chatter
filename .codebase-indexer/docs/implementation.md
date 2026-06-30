@@ -14,9 +14,9 @@
 
 ### Frontend App
 - **Entry point:** `apps/web/src/App.vue`
-- **Key functions:** `submitPrediction`, `submitLike`, `submitReply`, `submitPredictionEdit`, `submitReplyEdit`, `buildTopPickInsights`, `roomSplitPercentages`, `connectActiveRoomEvents`, `updateLocalPrediction`, `updateLocalReplyThread`
+- **Key functions:** `submitPrediction`, `submitLike`, `submitReply`, `submitPredictionEdit`, `submitReplyEdit`, `buildTopPickInsights`, `roomSplitPercentages`, `connectActiveRoomEvents`, `retainPendingPredictions`, `predictionCardKey`, `updateLocalPrediction`, `updateLocalReplyThread`
 - **Initialization:** On mount, loads stored theme/identity, fetches bootstrap data, connects WebSocket for active room, installs global click/resize/scroll listeners, and starts room refresh, room clock, active-room poll, and readout carousel timers.
-- **Non-obvious logic:** Prediction comments are optional on create but edits require minimum comment text. The room readout carousel is JS-driven via `activeTopPickIndex`; the room-split slide uses a compact inline pitch SVG and dot pills.
+- **Non-obvious logic:** Prediction comments are optional on create but edits require minimum comment text. The room readout carousel is JS-driven via `activeTopPickIndex`; the room-split slide uses a compact inline pitch SVG and dot pills. Pending optimistic predictions are retained during room refreshes and keyed by author during the local-user optimistic-to-persisted swap so prediction cards do not leave/re-enter after submit.
 
 ### Frontend Components
 - **Entry points:** `apps/web/src/components/ScoreDrawer.vue`, `apps/web/src/components/IdentityPrompt.vue`
