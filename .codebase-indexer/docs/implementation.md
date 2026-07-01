@@ -35,7 +35,7 @@
 ### Persistence Stores
 - **Entry points:** `apps/api/src/store.ts`, `apps/api/src/supabase-store.ts`
 - **Key behavior:** Fallback store keeps rooms, likes, clients, and prize claims in memory. Supabase store maps normalized DB rows to shared `Room`/`Prediction`/`Reply` shapes and writes predictions, likes, edits, replies, and prize claims.
-- **Non-obvious logic:** Supabase queries include fallback select shapes for older schema states. Rooms hidden by room status are filtered out. Finished/closed rooms reject prediction and edit mutations, and prediction creation is also restricted to the today/tomorrow public match window.
+- **Non-obvious logic:** Supabase queries include fallback select shapes for older schema states. Rooms hidden by room status are filtered out. Finished/closed rooms reject prediction and edit mutations, and prediction creation is also restricted to the today/tomorrow public match window. Room hydration overlays resolved fixture teams by room slug so stale persisted knockout placeholder names do not leak into the public board when scheduled local sync has not run.
 
 ### Realtime
 - **Entry point:** `apps/api/src/room-hub.ts`
@@ -69,7 +69,7 @@
 | Module / Function | Test File |
 |---|---|
 | `apps/api/src/store.ts:createStore` prize claim path | `apps/api/test/store.test.ts` |
-| `apps/api/src/supabase-store.ts:mapPredictions` | `apps/api/test/supabase-store.test.ts` |
+| `apps/api/src/supabase-store.ts:mapPredictions`, `apps/api/src/supabase-store.ts:mapRoom` fixture team overlay | `apps/api/test/supabase-store.test.ts` |
 | `packages/shared/src/room-state.ts` status/sorting helpers | `packages/shared/test/room-state.test.ts` |
 | `packages/shared/src/fixtures.ts` subdivision flag mapping and knockout slot resolution | `packages/shared/test/room-state.test.ts` |
 | `apps/api/src/server.ts` route validation/rate limits | — no direct route test found |

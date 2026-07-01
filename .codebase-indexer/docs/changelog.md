@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-01 — Resolved fixture teams during Supabase hydration
+- Added a Supabase hydration guard that overlays resolved fixture teams by room slug, preventing stale knockout placeholder names such as `1L` and `3E/H/I/J/K` from appearing in the public board when scheduled sync has not run locally.
+- Added API regression coverage for stale persisted knockout room rows resolving to England vs DR Congo.
+- Verified the local `/api/bootstrap` payload now returns resolved July 1 rooms: England vs DR Congo, Belgium vs Senegal, and USA vs Bosnia & Herzegovina.
+
 ## 2026-06-30 — Prediction card submit motion fix
 - Stabilized the current user's prediction card key across the optimistic-to-persisted submit flow so Vue updates the card in place instead of briefly rendering duplicate cards.
 - Preserved pending optimistic predictions when bootstrap or active-room refreshes return stale room payloads before the prediction POST resolves, preventing the card from disappearing and reappearing.

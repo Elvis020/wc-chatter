@@ -107,7 +107,9 @@ export type SupabaseEnv = {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ROOM_WRITE_STATUSES = new Set<RoomInteractionStatus>(['open'])
 const ROOM_CACHE_TTL_MS = 2_000
-const publicBoardRoomSlugs = () => new Set(selectSyncMatches(loadFixtures(), new Date()).map((match) => match.id))
+const fixtures = loadFixtures()
+const fixtureBySlug = new Map(fixtures.map((match) => [match.id, match]))
+const publicBoardRoomSlugs = () => new Set(selectSyncMatches(fixtures, new Date()).map((match) => match.id))
 
 function isHistoricalRoom(room: RoomRow) {
   return room.status === 'archived' || room.status === 'closed' || room.match_status === 'finished'
@@ -133,7 +135,7 @@ const ROOM_STATE_NO_KICKOFF_SELECT =
 const LEGACY_ROOM_SELECT =
   'id, slug, title, home_name, home_code, home_iso2, home_flag, away_name, away_code, away_iso2, away_flag, status, event_date, created_at'
 const SUPABASE_IN_BATCH_SIZE = 100
-const fixtureKickoffs = createFixtureKickoffLookup()
+const fixtureKickoffs = createFixtureKickoffLookup(fixtures)
 
 type PredictionOwnerRow = {
   id: string
@@ -197,6 +199,14 @@ function toTeam(name: string, code: string, iso2?: string | null, flag?: string 
     code,
     iso2: iso2 || subdivisionFlagIso2(name, code),
     flag: flag ?? '',
+  }
+}
+
+function teamsForRoom(room: RoomRow) {
+  const fixture = fixtureBySlug.get(room.slug)
+  return {
+    home: fixture?.home ?? toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag),
+    away: fixture?.away ?? toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag),
   }
 }
 
@@ -268,7 +278,9 @@ function actualScoreForRoom(room: RoomRow): RoomCurrentScore | undefined {
   const eventDate = room.event_date
   if (!eventDate) return undefined
 
-  const seed = seededResultForFixture(eventDate, room.home_name, room.away_name)
+  const fixtureResult = fixtureBySlug.get(room.slug)?.result
+  const { home, away } = teamsForRoom(room)
+  const seed = fixtureResult ?? seededResultForFixture(eventDate, home.name, away.name)
   if (!seed) return undefined
 
   return {
@@ -291,13 +303,14 @@ function mapPrizeDeskEntry(
   room: RoomRow | undefined,
   claim: PrizeClaimRow | undefined,
 ): PrizeDeskEntry {
+  const teams = room ? teamsForRoom(room) : undefined
   return {
     id: prediction.id,
     roomId: room?.slug ?? prediction.room_id,
     roomTitle: room?.title ?? 'Unknown room',
     matchStatus: room ? effectiveMatchStatus(room) : 'upcoming',
-    home: room ? toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag) : toTeam('Home', 'HOME'),
-    away: room ? toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag) : toTeam('Away', 'AWAY'),
+    home: teams?.home ?? toTeam('Home', 'HOME'),
+    away: teams?.away ?? toTeam('Away', 'AWAY'),
     finalScore: room ? actualScoreForRoom(room) : undefined,
     predictionId: prediction.id,
     authorId: prediction.author_id,
@@ -318,13 +331,14 @@ function mapPrizeDeskEntry(
   }
 }
 
-function mapRoom(
+export function mapRoom(
   room: RoomRow,
   predictionsByRoom: Map<string, Prediction[]>,
 ): Room {
   const predictions = predictionsByRoom.get(room.id) ?? []
   const matchStatus = effectiveMatchStatus(room)
   const kickoffAt = kickoffForRoom(room) ?? undefined
+  const { home, away } = teamsForRoom(room)
 
   return {
     id: room.id,
@@ -334,10 +348,10 @@ function mapRoom(
     kickoffAt,
     isFeatured: matchStatus === 'live',
     currentScore: currentScoreForRoom(room),
-    home: toTeam(room.home_name, room.home_code, room.home_iso2, room.home_flag),
-    away: toTeam(room.away_name, room.away_code, room.away_iso2, room.away_flag),
+    home,
+    away,
     mostBacked: buildMostBackedSummary(
-      { homeName: room.home_name, awayName: room.away_name },
+      { homeName: home.name, awayName: away.name },
       predictions,
     ),
     predictions,

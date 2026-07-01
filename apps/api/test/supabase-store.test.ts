@@ -1,7 +1,45 @@
 import { describe, expect, test } from 'bun:test'
-import { mapPredictions } from '../src/supabase-store'
+import { mapPredictions, mapRoom } from '../src/supabase-store'
 
 describe('supabase store hydration', () => {
+  test('overlays resolved fixture teams when persisted knockout room rows are stale', () => {
+    const room = mapRoom(
+      {
+        id: 'room-1',
+        slug: '2026-07-01-80-1l-3e-h-i-j-k',
+        title: '1L vs 3E/H/I/J/K',
+        home_name: '1L',
+        home_code: '1L',
+        home_iso2: '',
+        home_flag: '',
+        away_name: '3E/H/I/J/K',
+        away_code: '3HI',
+        away_iso2: '',
+        away_flag: '',
+        status: 'live',
+        match_status: 'live',
+        room_status: 'open',
+        is_featured: true,
+        event_date: '2026-07-01',
+        kickoff_at: '2026-07-01T16:00:00.000Z',
+        created_at: '2026-06-01T00:00:00.000Z',
+      },
+      new Map(),
+    )
+
+    expect(room.home).toMatchObject({
+      name: 'England',
+      code: 'ENG',
+      iso2: 'gb-eng',
+    })
+    expect(room.away).toMatchObject({
+      name: 'DR Congo',
+      code: 'COD',
+      iso2: 'CD',
+    })
+    expect(room.mostBacked.margin).toBe('No picks yet')
+  })
+
   test('hydrates predictions with likes, comments, and replies grouped by room', () => {
     const byRoom = mapPredictions(
       [
